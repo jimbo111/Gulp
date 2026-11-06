@@ -1,0 +1,247 @@
+# 04 — Data model and storage
+
+## 1. Principles
+
+1. **Raw bytes are canonical.** Request and response bytes are stored exactly as sent and received
+   on the wire (for HTTP/2: the HTTP/1-style text representation in §3, plus the original frames
+   when "keep frames" is on).
+2. **Parsing is lazy and range-based.** A parsed message is a set of byte ranges into the raw
+   buffer. Editing one part (for example a header value) splices bytes, so the formatting of
+   everything else is preserved.
+3. **Derived data is rebuildable.** The site map, FTS index and statistics can be rebuilt from the
+   `exchanges` table (`Project → Rebuild indexes`).
+
+## 2. Core Swift types (GulpCore)
+
+```swift
+public struct Bytes: Sendable, Hashable, RandomAccessCollection { /* [UInt8] storage, cheap slices */ }
+
+public struct RawRequest: Sendable, Hashable {
+    public var bytes: Bytes
+    public var parsed: ParsedRequest { get }      // cached lazily; invalidated on mutation
+}
+
+public struct ParsedRequest: Sendable {
+    public var method: Range<Int>                 // byte ranges into RawRequest.bytes
+    public var target: Range<Int>                 // request-target (origin/absolute/authority/asterisk form)
+    public var version: Range<Int>
+    public var headers: [HeaderField]             // in order, duplicates allowed
+    public var headerBlockEnd: Int                // index after CRLFCRLF (or LFLF, tolerated)
+    public var body: Range<Int>
+    public var lineEnding: LineEnding             // .crlf / .lf / .mixed (preserved)
+    public var warnings: [ParseWarning]           // e.g. obsolete line folding, bare LF, invalid chars
+}
+
+public struct HeaderField: Sendable { public var name: Range<Int>; public var value: Range<Int>; public var line: Range<Int> }
+
+public struct RawResponse: Sendable, Hashable { public var bytes: Bytes; public var parsed: ParsedResponse { get } }
+
+public struct HTTPTarget: Sendable, Hashable, Codable {
+    public var scheme: Scheme            // .http / .https
+    public var host: String              // as used for Host/SNI by default
+    public var port: Int
+    public var sniOverride: String?
+    public var ipOverride: String?       // connect to this IP instead of resolving host
+}
+
+public typealias ExchangeID = Int64
+
+public struct Exchange: Sendable, Identifiable {
+    public var id: ExchangeID
+    public var source: ToolSource
+    public var target: HTTPTarget
+    public var httpVersion: HTTPVersion            // .http1_0, .http1_1, .http2
+    public var request: RawRequest
+    public var response: RawResponse?              // nil while pending or failed
+    public var state: ExchangeState                // .pending, .complete, .failed(GulpNetworkError), .dropped, .intercepted
+    public var timing: Timing                      // start, dnsMs, connectMs, tlsMs, ttfbMs, totalMs
+    public var clientAddress: String?              // for proxy traffic
+    public var connectionID: UInt64                // groups requests on the same connection
+    public var tls: TLSInfo?                       // negotiated version, cipher, ALPN, server cert chain fingerprint
+    public var edited: EditInfo?                   // original request/response if modified by intercept or match&replace
+    public var annotation: Annotation              // comment, highlight, tags
+    public var derived: DerivedFields              // host, path, query, mime, status, lengths, title, param count, cookies set…
+}
+```
+
+> **Concept: why byte ranges instead of a dictionary of headers?** A dictionary loses order,
+> duplicates, case, whitespace and malformed lines, and those details are exactly what you test
+> (for example duplicate `Content-Length` for request smuggling). Ranges keep the parse "view" while
+> the bytes stay intact.
+
+### Parser tolerance rules (HTTP/1)
+
+- Accept both CRLF and bare LF; record which was used.
+- Accept obsolete line folding (whitespace-prefixed continuation lines); flag a warning.
+- Never reject a message in the editor. If parsing fails, show the raw text with a warning banner,
+  and the user can still send it.
+- Body framing for *display* uses the headers; *sending* never re-frames unless "Update
+  Content-Length" or "Normalize framing" is on.
+
+## 3. HTTP/2 representation
+
+HTTP/2 messages are shown and edited as HTTP/1-style text:
+
+```
+GET /path?q=1 HTTP/2
+Host: example.com            ← maps to :authority
+User-Agent: …
+```
+
+- Pseudo-headers (`:method`, `:path`, `:authority`, `:scheme`) are derived from the request line and
+  `Host`. They can be edited individually in the Inspector ("HTTP/2 pseudo-headers" section) to
+  create values that can't be expressed in HTTP/1 (for example a `:path` containing a space, or a
+  header value containing CRLF).
+- When the Inspector holds values like that, the message is marked **non-representable**: the
+  editor shows a banner, and the engine sends from the structured form (`H2RequestSpec`) instead of
+  re-parsing the text.
+
+```swift
+public struct H2RequestSpec: Sendable, Codable {
+    public var pseudoHeaders: [(name: String, value: Bytes)]   // ordered
+    public var headers: [(name: Bytes, value: Bytes)]          // ordered, case preserved (lowercased on wire unless "raw case" option)
+    public var body: Bytes
+    public var dataFrameSplit: [Int]?                          // optional: split body into DATA frames of these sizes
+}
+```
+
+## 4. SQLite schema (GulpStore, schema version 1)
+
+A project is **one SQLite file** with the extension `.gulp`, opened in WAL mode
+(`PRAGMA journal_mode=WAL; synchronous=NORMAL; foreign_keys=ON`).
+
+```sql
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);       -- schema_version, project_uuid, created_at, app_version
+
+CREATE TABLE blobs (                                                  -- message bodies and raw bytes
+  id INTEGER PRIMARY KEY,
+  sha256 BLOB NOT NULL UNIQUE,                                        -- dedup identical blobs
+  size INTEGER NOT NULL,
+  compression INTEGER NOT NULL DEFAULT 0,                             -- 0 none, 1 zlib (used when size > 4 KB and it saves ≥ 10 %)
+  data BLOB NOT NULL
+);
+
+CREATE TABLE exchanges (
+  id INTEGER PRIMARY KEY,                                             -- ExchangeID, monotonic = proxy history "#"
+  source TEXT NOT NULL,                                               -- ToolSource raw value
+  created_at REAL NOT NULL,                                           -- unix seconds
+  scheme TEXT NOT NULL, host TEXT NOT NULL, port INTEGER NOT NULL,
+  ip TEXT, sni TEXT,
+  http_version TEXT NOT NULL,
+  method TEXT, path TEXT, query TEXT,                                 -- derived, for indexing/filtering
+  request_blob INTEGER NOT NULL REFERENCES blobs(id),
+  response_blob INTEGER REFERENCES blobs(id),
+  original_request_blob INTEGER REFERENCES blobs(id),                 -- set if edited
+  original_response_blob INTEGER REFERENCES blobs(id),
+  status INTEGER, response_length INTEGER, mime TEXT, title TEXT,
+  state TEXT NOT NULL, error TEXT,
+  timing_json TEXT, tls_json TEXT,
+  connection_id INTEGER, client_address TEXT,
+  in_scope INTEGER NOT NULL DEFAULT 0,                                -- cached; recomputed on scope change
+  highlight TEXT, comment TEXT,
+  param_count INTEGER, has_cookies INTEGER, sets_cookies INTEGER,
+  extension TEXT                                                      -- file extension of the path, for filters
+);
+CREATE INDEX ix_ex_source_id ON exchanges(source, id);
+CREATE INDEX ix_ex_host ON exchanges(host, port, scheme);
+CREATE INDEX ix_ex_status ON exchanges(status);
+CREATE INDEX ix_ex_scope ON exchanges(in_scope, id);
+
+CREATE TABLE exchange_tags (exchange_id INTEGER REFERENCES exchanges(id) ON DELETE CASCADE, tag TEXT, PRIMARY KEY(exchange_id, tag));
+
+CREATE TABLE ws_connections (id INTEGER PRIMARY KEY, upgrade_exchange_id INTEGER REFERENCES exchanges(id), url TEXT, opened_at REAL, closed_at REAL, close_code INTEGER);
+CREATE TABLE ws_messages (
+  id INTEGER PRIMARY KEY, connection_id INTEGER REFERENCES ws_connections(id) ON DELETE CASCADE,
+  direction INTEGER NOT NULL,              -- 0 client→server, 1 server→client
+  opcode INTEGER NOT NULL, created_at REAL NOT NULL,
+  payload_blob INTEGER REFERENCES blobs(id), original_payload_blob INTEGER REFERENCES blobs(id),
+  length INTEGER, highlight TEXT, comment TEXT
+);
+
+CREATE VIRTUAL TABLE fts_exchanges USING fts5(request_text, response_text, content='', tokenize='trigram');
+-- contentless; rowid = exchanges.id; bodies truncated to the first 256 KB per message for indexing
+
+CREATE TABLE scope_rules (id INTEGER PRIMARY KEY, kind TEXT CHECK(kind IN ('include','exclude')), enabled INTEGER, protocol TEXT, host_regex TEXT, port TEXT, path_regex TEXT, ordinal INTEGER);
+
+CREATE TABLE issues (
+  id INTEGER PRIMARY KEY, type_id TEXT NOT NULL, name TEXT NOT NULL,
+  severity TEXT NOT NULL, confidence TEXT NOT NULL,
+  host TEXT NOT NULL, path TEXT NOT NULL, insertion_point TEXT,
+  dedup_key TEXT NOT NULL UNIQUE,
+  detail_md TEXT, background_md TEXT, remediation_md TEXT,
+  status TEXT NOT NULL DEFAULT 'open',      -- open | false_positive | accepted_risk | fixed
+  source_task_id INTEGER, created_at REAL, updated_at REAL
+);
+CREATE TABLE issue_evidence (id INTEGER PRIMARY KEY, issue_id INTEGER REFERENCES issues(id) ON DELETE CASCADE, exchange_id INTEGER REFERENCES exchanges(id), request_markers_json TEXT, response_markers_json TEXT, oast_interaction_id INTEGER, note TEXT);
+
+CREATE TABLE tasks (id INTEGER PRIMARY KEY, kind TEXT, name TEXT, config_json TEXT, state TEXT, progress_json TEXT, created_at REAL, finished_at REAL);
+CREATE TABLE task_log (id INTEGER PRIMARY KEY, task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE, at REAL, level TEXT, message TEXT);
+
+CREATE TABLE repeater_tabs (id INTEGER PRIMARY KEY, title TEXT, group_id INTEGER, ordinal INTEGER, target_json TEXT, options_json TEXT, draft_blob INTEGER REFERENCES blobs(id));
+CREATE TABLE repeater_groups (id INTEGER PRIMARY KEY, name TEXT, color TEXT, send_mode TEXT);
+CREATE TABLE repeater_history (id INTEGER PRIMARY KEY, tab_id INTEGER REFERENCES repeater_tabs(id) ON DELETE CASCADE, exchange_id INTEGER REFERENCES exchanges(id), ordinal INTEGER);
+
+CREATE TABLE fuzzer_attacks (id INTEGER PRIMARY KEY, name TEXT, config_json TEXT, base_request_blob INTEGER, state TEXT, created_at REAL);
+CREATE TABLE fuzzer_results (attack_id INTEGER REFERENCES fuzzer_attacks(id) ON DELETE CASCADE, seq INTEGER, payloads_json TEXT, exchange_id INTEGER, status INTEGER, length INTEGER, time_ms INTEGER, grep_json TEXT, PRIMARY KEY(attack_id, seq));
+
+CREATE TABLE oast_payloads (id INTEGER PRIMARY KEY, correlation_id TEXT UNIQUE, created_at REAL, context_json TEXT);   -- which tool, exchange and insertion point used it
+CREATE TABLE oast_interactions (id INTEGER PRIMARY KEY, payload_id INTEGER REFERENCES oast_payloads(id), protocol TEXT, remote_address TEXT, at REAL, raw_blob INTEGER, summary TEXT);
+
+CREATE TABLE notebook_items (id INTEGER PRIMARY KEY, kind TEXT, exchange_id INTEGER, title TEXT, status TEXT, body_md TEXT, created_at REAL, updated_at REAL, ordinal INTEGER);
+
+CREATE TABLE cookie_jar (domain TEXT, path TEXT, name TEXT, value TEXT, expires REAL, secure INTEGER, http_only INTEGER, same_site TEXT, identity_id INTEGER, PRIMARY KEY(domain, path, name, identity_id));
+CREATE TABLE identities (id INTEGER PRIMARY KEY, name TEXT, color TEXT, config_json TEXT);       -- Authz Matrix, sessions
+CREATE TABLE macros (id INTEGER PRIMARY KEY, name TEXT, steps_json TEXT);
+CREATE TABLE session_rules (id INTEGER PRIMARY KEY, name TEXT, enabled INTEGER, ordinal INTEGER, config_json TEXT);
+
+CREATE TABLE sequencer_runs (id INTEGER PRIMARY KEY, name TEXT, config_json TEXT, tokens_blob INTEGER, results_json TEXT, created_at REAL);
+
+CREATE TABLE settings (scope TEXT, key TEXT, value_json TEXT, PRIMARY KEY(scope, key));      -- project-level settings
+CREATE TABLE extension_state (extension_id TEXT, key TEXT, value BLOB, PRIMARY KEY(extension_id, key));
+```
+
+### Notes
+
+- **Migrations**: use GRDB's `DatabaseMigrator`, one registered migration per schema change, named
+  `vN_description`. Never edit a migration that has shipped.
+- **Blob dedup**: identical responses (static assets) are stored once. A periodic vacuum task
+  (`Project → Compact`) removes unreferenced blobs.
+- **Write coalescer**: `StoreWriter` actor gathers `PendingWrite`s and flushes them in one
+  transaction every 50 ms or 500 items. A crash loses at most the last 50 ms of traffic; for proxy
+  traffic that is acceptable, and the Settings "Durable mode" flushes on every write.
+- **FTS**: the trigram tokenizer gives substring search (`LIKE '%abc%'` semantics) in milliseconds.
+  Index only text-like MIME types. Indexing runs on a background queue after the insert. Create the
+  table with `contentless_delete=1` (SQLite ≥ 3.43) so rows can be deleted when exchanges are
+  deleted. If the system SQLite is older, use an external-content table instead.
+- **Temporary projects** use a file in `~/Library/Caches/Gulp/temp-<uuid>.gulp`, which is deleted on
+  close unless the user saves it.
+
+## 5. User-level storage (outside projects)
+
+| What | Where |
+|---|---|
+| User settings | `~/Library/Application Support/Gulp/user-settings.json` (Codable, versioned) |
+| CA certificate and key | Keychain (label `Gulp CA`); a cert copy in `~/Library/Application Support/Gulp/ca/gulp-ca.pem` |
+| Leaf certificate cache | In memory (LRU, 2,000 entries); optional on-disk cache in `…/Gulp/certs/` |
+| Installed extensions | `~/Library/Application Support/Gulp/extensions/<id>/` |
+| Wordlists | `~/Library/Application Support/Gulp/wordlists/` (bundled lists are copied here on first run) |
+| Check Recipes | `~/Library/Application Support/Gulp/recipes/` |
+| Managed browser | `~/Library/Application Support/Gulp/browser/` (Chrome for Testing) and `…/browser-profile/` |
+| API keys (AI, Beacon) | Keychain |
+| Logs | `~/Library/Logs/Gulp/` |
+
+## 6. Settings model
+
+```swift
+public protocol SettingsGroup: Codable, Sendable { static var key: String { get }; static var defaultValue: Self { get } }
+// Examples: ProxySettings, TLSSettings, HTTPEngineSettings, ScannerDefaults, UISettings, AISettings…
+
+public final class LayeredSettings: Sendable {
+    // Lookup order: project override → user setting → default
+    public func get<G: SettingsGroup>(_: G.Type) -> G
+    public func set<G: SettingsGroup>(_ value: G, scope: SettingsScope)   // .user or .project
+}
+```
+
+Settings can be exported and imported as JSON (`Settings → Export…`). Every settings group carries
+a `version`, with a decoding fallback to defaults for unknown or missing keys.

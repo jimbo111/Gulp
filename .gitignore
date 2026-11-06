@@ -1,0 +1,17 @@
+# Build
+.build/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+
+# macOS
+.DS_Store
+
+# User
+*.gulp
+.swiftpm/
+Package.resolved.user
+
+# Secrets / local
+*.p12
+Secrets.local*
