@@ -42,14 +42,21 @@ re-run them after any doc edit:
 - **Tables**: all Markdown tables are well-formed (literal `|` in cells escaped as `\|`).
 - **Spelling**: aspell over the prose (code/URLs stripped) shows only legitimate technical terms.
 
-**Independent build-readiness verdict (2026-11-07).** A fresh reviewer (no prior context) verified the
-Phase F schema fully backs F30/F31 and rendered a go/no-go verdict on the whole 32-spec set, with
-"build-ready" defined as *no Blockers and no Majors (Minors acceptable)*. It found one Major — the
-F29/F31 fold-in P0 work was announced in Phase F prose but missing from the M9/M11/M16 task
-lists/DoDs and this tracker, so a per-milestone builder would skip it. That is now wired in (roadmap
-M9/M11/M16 + the checklist above), clearing the Major. The remaining items were Minors, addressed in
-the same pass (Phase F schema: `new`-endpoint identity, multi-step/identity proof columns, split
-migrations, blob-GC walk; plus doc cross-refs). With the Major fixed, the independent bar is met.
+**Independent build-readiness verdict (2026-11-07).** Multiple fresh-eyes reviewers (no prior context)
+checked the set, with "build-ready" defined as *no Blockers and no Majors (Minors acceptable)*. The
+Majors they found were fixed and re-verified:
+- F29/F31 fold-in P0 work was missing from the M9/M11/M16 task lists/DoDs and this tracker → wired in;
+  an independent re-verification then confirmed each milestone carries both a task bullet and a DoD.
+- A **final two-reviewer panel** over the whole set converged: the holistic reviewer returned
+  BUILD-READY; the adversarial reviewer found v1 (M0–M20) clean and one Phase-F-only Major — the
+  F25/F27/F28/F32 acceptance tests referenced VulnLab OIDC/SAML, source-map/`/api/internal`,
+  cache-poisoning and LLM fixtures that doc 06 §3 didn't define → added doc 06 §3.1 "Phase F fixtures".
+- Phase F schema Minors (new-endpoint identity, multi-step/identity proof columns, split migrations,
+  blob-GC walk) and assorted cross-refs were cleared along the way.
+
+With those fixed, both final reviewers' criterion — no Blockers, no Majors — is satisfied across
+F01–F32. "Nearly perfect" is a subjective bar; this is the strongest objective evidence available
+here (independent agreement + all automated consistency checks green).
 
 What is **not** verified here: the Swift code compiles/tests (no toolchain in the authoring
 container — CI is the gate, see the caveat above), and spec implementation-note API hints are
