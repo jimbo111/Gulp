@@ -16,9 +16,11 @@ public enum LineEnding: Sendable, Hashable { case crlf, lf, mixed, none }
 
 public enum BodyFraming: Sendable, Hashable { case contentLength, chunked, closeDelimited, none }
 
-public enum ParseWarning: Sendable, Hashable {
+public enum ParseWarning: Sendable, Equatable, Hashable {
     case bareLF, obsoleteLineFolding, missingFinalCRLF, invalidCharInName
-    case duplicateContentLength, conflictingFraming, malformedStartLine, nonUTF8Header
+    case duplicateContentLength, conflictingFraming, malformedStartLine
+    case oversizedHeaders   // emitted by the engine's header-size guard, not the pure parser
+    case nonUTF8Header
 }
 
 // MARK: - Header field
@@ -201,15 +203,22 @@ public enum HTTP1 {
         let (fields, hWarn) = parseHeaders(a, lineRanges.dropFirst())
         warnings.append(contentsOf: hWarn)
 
-        // Framing (HTTP-002): chunked wins over Content-Length; flag the conflict.
+        // Framing (HTTP-002, RFC 9112 §6.3). Precedence:
+        //   1. A bodyless status (1xx/204/304) is ALWAYS terminated at the header block, regardless of
+        //      any Content-Length/Transfer-Encoding present (a 304 echoes the cached body's length but
+        //      carries no body). HEAD is also bodyless but needs the request method, so it is decided at
+        //      the engine layer, not here (F03 §4).
+        //   2. Otherwise chunked wins over Content-Length (and the conflict is flagged).
+        //   3. Otherwise Content-Length, else read-until-close.
         let teChunked = headerContains(a, fields, name: "transfer-encoding", token: "chunked")
         let clValues = headerValues("content-length", fields, a)
         if clValues.count > 1 { warnings.append(.duplicateContentLength) }
         let contentLength = clValues.last.flatMap { Int(Bytes(Array(a[$0])).string().trimmedASCII()) }
         if teChunked && contentLength != nil { warnings.append(.conflictingFraming) }
         let bodyless = status == 204 || status == 304 || (status >= 100 && status < 200)
-        let framing: BodyFraming = teChunked ? .chunked
-            : (contentLength != nil ? .contentLength : (bodyless ? .none : .closeDelimited))
+        let framing: BodyFraming = bodyless ? .none
+            : (teChunked ? .chunked
+            : (contentLength != nil ? .contentLength : .closeDelimited))
         let body = end..<a.count
         var incomplete = false
         if framing == .contentLength, let cl = contentLength { incomplete = (a.count - end) < cl }

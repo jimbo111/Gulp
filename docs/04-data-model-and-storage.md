@@ -52,6 +52,9 @@ public struct ParsedRequest: Sendable, Hashable {  // Hashable so the enclosing 
     public var warnings: [ParseWarning]           // e.g. obsolete line folding, bare LF, invalid chars
 }
 
+// `value` is trimmed of surrounding optional whitespace (OWS) but still points at the real body
+// bytes; `line` is the whole field line (terminator excluded). Obsolete line folding extends the
+// previous field's `value`/`line` to cover the continuation.
 public struct HeaderField: Sendable, Hashable { public var name: Range<Int>; public var value: Range<Int>; public var line: Range<Int> }
 
 public struct ParsedResponse: Sendable, Hashable {  // Hashable so RawResponse can be; mirror of ParsedRequest
@@ -61,14 +64,21 @@ public struct ParsedResponse: Sendable, Hashable {  // Hashable so RawResponse c
     public var headers: [HeaderField]             // in order, duplicates allowed
     public var headerBlockEnd: Int                // index after CRLFCRLF (or LFLF, tolerated)
     public var body: Range<Int>                   // the body as framed (raw; chunked stays chunked)
-    public var dechunkedBody: Bytes?              // de-chunked view when Transfer-Encoding: chunked
+    public var dechunkedBody: Bytes?              // decoded payload when framing == .chunked AND !incomplete;
+                                                  // nil otherwise. Chunk extensions and trailers are dropped from
+                                                  // this view (the raw bytes still hold them in `body`).
     public var transferEncodingChunked: Bool
     public var contentLength: Int?
     public var bodyFraming: BodyFraming           // .contentLength / .chunked / .closeDelimited / .none
-    public var interimResponses: [ParsedResponse] // recorded 1xx responses that preceded this one (HTTP-002)
+    public var interimResponses: [ParsedResponse] // 1xx responses that preceded this final one (HTTP-002). The
+                                                  // single-message parser always leaves this []; the HTTP engine
+                                                  // accumulates it across the exchange and attaches it to the final.
     public var lineEnding: LineEnding
     public var warnings: [ParseWarning]
-    public var incomplete: Bool                   // true if the connection closed before the declared body finished
+    public var incomplete: Bool                   // declared body not fully present. Decidable from bytes for
+                                                  // Content-Length (short body) and chunked (no terminal chunk);
+                                                  // for .closeDelimited completeness is a connection fact, so the
+                                                  // stateless parser leaves this false and the engine sets it on close.
 }
 
 public struct RawResponse: Sendable, Hashable {
@@ -107,10 +117,12 @@ public struct Exchange: Sendable, Identifiable {
 }
 
 // ---- Supporting value types (all in GulpCore) ----
-public enum Scheme: String, Sendable, Codable { case http, https }
-public enum HTTPVersion: String, Sendable, Codable { case http1_0 = "HTTP/1.0", http1_1 = "HTTP/1.1", http2 = "HTTP/2" }
-public enum LineEnding: Sendable { case crlf, lf, mixed }
-public enum BodyFraming: Sendable { case contentLength, chunked, closeDelimited, none }
+// These are Hashable because ParsedRequest/ParsedResponse/HTTPTarget are (a type can only be
+// Hashable if every stored property is), so changing a conformance here is a breaking change.
+public enum Scheme: String, Sendable, Codable, Hashable { case http, https }
+public enum HTTPVersion: String, Sendable, Codable, Hashable { case http1_0 = "HTTP/1.0", http1_1 = "HTTP/1.1", http2 = "HTTP/2" }
+public enum LineEnding: Sendable, Hashable { case crlf, lf, mixed, none }  // .none = no line ending seen (empty header block)
+public enum BodyFraming: Sendable, Hashable { case contentLength, chunked, closeDelimited, none }
 public enum ExchangeState: Sendable, Equatable {  // Exchange.state
     case pending, complete, dropped, intercepted
     case failed(GulpNetworkError)
@@ -118,9 +130,11 @@ public enum ExchangeState: Sendable, Equatable {  // Exchange.state
 public enum Highlight: String, Sendable, Codable, CaseIterable {  // Annotation.highlight / `exchanges.highlight`
     case red, orange, yellow, green, cyan, blue, purple, pink, gray
 }
-public enum ParseWarning: Sendable, Equatable {
+// The full warning set, defined once. The single-message parser emits the framing/line warnings;
+// `oversizedHeaders` is emitted by the engine's header-size guard (not the pure parser).
+public enum ParseWarning: Sendable, Equatable, Hashable {
     case bareLF, obsoleteLineFolding, missingFinalCRLF, invalidCharInName, duplicateContentLength,
-         conflictingFraming, oversizedHeaders, nonUTF8
+         conflictingFraming, malformedStartLine, oversizedHeaders, nonUTF8Header
 }
 
 public struct Timing: Sendable, Codable {         // milliseconds per phase; all of HTTP-010

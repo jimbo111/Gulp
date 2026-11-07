@@ -121,6 +121,13 @@ chain if one was followed, and timing.
 
 - Channel pipeline for an HTTP/1 client connection: `[TLS?] → RawResponseFramer → EngineConnectionHandler`.
   Write the request with `channel.writeAndFlush(ByteBuffer(bytes: request))` (no NIOHTTP1 encoder).
+- **HEAD framing is an engine-layer decision, not a parser one.** `GulpCore`'s stateless
+  `HTTP1.parseResponse` frames a response from the response bytes alone and so can only recognize the
+  self-evident bodyless cases (1xx, 204, 304). A HEAD response carries body-framing headers
+  (`Content-Length`/`Transfer-Encoding`) describing the body the GET *would* have had, but there is
+  no body — only the engine, which knows the request method, may override the framing to "no body"
+  and must **not** wait for `Content-Length` bytes. The `RawResponseFramer` is told the method when it
+  is created; it treats a HEAD response as framed-complete at the header block.
 - Use `NIOAsyncChannel` to bridge to async/await, or write the handlers directly with promises
   where performance matters (Turbo mode).
 - HTTP/2: `NIOHTTP2Handler(mode: .client)` with the inline stream multiplexer

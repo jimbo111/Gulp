@@ -117,6 +117,15 @@ struct FramingTests {
         #expect(r.bodyFraming == .none)
     }
 
+    @Test("304 is bodyless even with a Content-Length present")
+    func bodyless304() {
+        // 304 carries header metadata (incl. a Content-Length echoing the cached body) but no body.
+        let r = resp("HTTP/1.1 304 Not Modified\r\nContent-Length: 42\r\n\r\n")
+        #expect(r.statusCode == 304)
+        #expect(r.bodyFraming == .none)
+        #expect(r.incomplete == false)
+    }
+
     @Test("no framing headers on a 200 means close-delimited")
     func closeDelimited() {
         let r = resp("HTTP/1.1 200 OK\r\nServer: x\r\n\r\nraw bytes, length unknown")
