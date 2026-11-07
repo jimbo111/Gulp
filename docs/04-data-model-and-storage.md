@@ -158,8 +158,10 @@ CREATE TABLE ws_messages (
   length INTEGER, highlight TEXT, comment TEXT
 );
 
-CREATE VIRTUAL TABLE fts_exchanges USING fts5(request_text, response_text, content='', tokenize='trigram');
--- contentless; rowid = exchanges.id; bodies truncated to the first 256 KB per message for indexing
+CREATE VIRTUAL TABLE fts_exchanges USING fts5(request_text, response_text, content='', contentless_delete=1, tokenize='trigram');
+-- contentless with delete support (SQLite >= 3.43); rowid = exchanges.id, supplied on insert.
+-- Bodies truncated to the first 256 KB per message for indexing. On older SQLite, drop
+-- contentless_delete and rebuild the index instead of deleting rows (see the FTS note below).
 
 CREATE TABLE scope_rules (id INTEGER PRIMARY KEY, kind TEXT CHECK(kind IN ('include','exclude')), enabled INTEGER, protocol TEXT, host_regex TEXT, port TEXT, path_regex TEXT, ordinal INTEGER);
 
@@ -214,9 +216,11 @@ CREATE TABLE extension_state (extension_id TEXT, key TEXT, value BLOB, PRIMARY K
   back to a bounded `LIKE`/scan with progress (F05 HIS-052). Index only text-like MIME types.
   Indexing runs on a background queue after the insert. Bodies are indexed to the first 256 KB (this
   is deliberately smaller than the 2 MB cap used for in-memory body regex in F05 — the index favors
-  breadth over completeness; full-fidelity matching uses the regex/scan path). Create the
-  table with `contentless_delete=1` (SQLite ≥ 3.43) so rows can be deleted when exchanges are
-  deleted. If the system SQLite is older, use an external-content table instead.
+  breadth over completeness; full-fidelity matching uses the regex/scan path). The table uses
+  `contentless_delete=1` (SQLite ≥ 3.43) so rows can be deleted when exchanges are deleted — both the
+  macOS 14 system SQLite and the Linux CI image (`swift:6.0-noble`) satisfy that, so it is the
+  baseline, not a special case. Only if a build ever targets an older SQLite, drop the option and
+  rebuild the index after deletes.
 - **Temporary projects** use a file in `~/Library/Caches/Gulp/temp-<uuid>.gulp`, which is deleted on
   close unless the user saves it.
 

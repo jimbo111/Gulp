@@ -53,6 +53,14 @@ Every `Fxx` file has the same sections, so it is easy to scan:
    and commits.
 4. **UI**: layout and interactions.
 5. **Implementation notes**: algorithms, libraries, pitfalls, and the concepts you need.
-6. **Data**: tables and types it adds (detailed in doc 04).
-7. **Edge cases**.
-8. **Acceptance tests**: concrete checks that prove the feature works.
+6. **Edge cases**.
+7. **Acceptance tests**: concrete checks that prove the feature works.
+
+Notes on the format:
+
+- **Data/storage**: the tables and columns every feature persists live centrally in
+  [`04-data-model-and-storage.md`](04-data-model-and-storage.md), not in a per-feature "Data"
+  section, so the schema stays consistent. A spec calls out its data inline only where it helps.
+- **Grouped specs**: a few specs cover several related tools and are organized by sub-tool, each with
+  its own requirements table, then shared Implementation notes and Acceptance tests. `F23`
+  (advanced tools) is the main example.

@@ -37,7 +37,7 @@ tests can measure false positives.
 
 | Area | Vulnerable endpoint(s) | Safe twin | Used by |
 |---|---|---|---|
-| Basics | `/echo` (reflects the request), `/redirect?to=`, `/chunked`, `/gzip`, `/slow?ms=`, `/large?mb=`, `/status/{code}`, `/h2` (HTTPS listener on :8443 with ALPN h2) | — | F01, F03 |
+| Basics | `/echo` (reflects the request as a readable response), **`/echo-raw`** (a raw TCP listener on :8089 that writes back the exact bytes it received, verbatim — used for byte-fidelity tests with malformed/duplicate headers and bare LF), `/redirect?to=`, `/chunked`, `/gzip`, `/slow?ms=`, `/large?mb=`, `/status/{code}`, `/h2` (HTTPS listener on :8443 with ALPN h2) | — | F01, F03 |
 | Auth | `/login` (form + CSRF token), `/account` (session cookie), `/api/me` (Bearer JWT), session expires after N requests (configurable) | — | F15, F07 |
 | Reflected XSS | `/xss/html?q=`, `/xss/attr?q=`, `/xss/js?q=`, `/xss/url?q=` (into href) | `/safe/xss/...` (encoded per context) | SCN |
 | Stored XSS | `/guestbook` (POST, then rendered on GET) | `/safe/guestbook` | SCN |

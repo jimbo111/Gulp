@@ -129,7 +129,27 @@ Each entry = one or more issue definitions. Mark the P0 set that the VulnLab acc
 - Determinism for tests: seed any randomness (canaries) from an injectable RNG; VulnLab timing is
   stable enough for the time-based checks in CI (use generous thresholds).
 
-## 6. Acceptance tests
+## 6. Edge cases
+
+- **Dynamic / non-deterministic pages**: responses that change every request (timestamps, CSRF
+  tokens, ads) break length/diff comparisons. Use the per-insertion-point canary (SCN-031) to detect
+  volatility and fall back to content-independent signals (reflection, OAST, timing) or widen
+  thresholds; never report solely on a length delta for a page flagged volatile.
+- **Rate limiting / WAF**: on 429/503 or a block page, back off (shared throttle), mark the host
+  throttled, and surface it in the task log rather than emitting false "fixed/absent" verdicts.
+- **Auth expiry mid-scan**: a session that drops mid-audit yields login redirects that look like
+  "not vulnerable". Detect via the session-validity check (F15) and re-auth before continuing;
+  single-flight the re-auth under concurrency.
+- **Stored-XSS timing**: the inject and the detect can be on different endpoints/requests, and the
+  render may be delayed — coordinate with the Crawler and allow a re-check pass before concluding.
+- **OAST asynchrony**: blind checks (OS command, SSRF, XXE) may see interactions arrive after the
+  request completes; the scan must honor the OAST grace period (SCN-033) before declaring "done".
+- **Insertion-point explosion**: deeply nested/decoded values (SCN-022) can multiply points without
+  bound; cap depth and per-request point count, and respect the per-insertion-point request budget.
+- **Destructive payloads**: anything that could modify or delete data stays behind the "unsafe
+  checks" gate (SCN-038); default configs never send it.
+
+## 7. Acceptance tests
 
 - Passive: browsing VulnLab yields exactly the planted passive issues (doc 06 §3), deduped, and none
   on `/safe/*`.

@@ -59,7 +59,7 @@ SQLite FTS for substring matching across millions of messages.
   summary chip. A "⌘⇧F" global search opens a sheet with grouped results.
 - GulpQL field: monospace, autocomplete popover, red underline on parse errors with a tooltip.
 
-## 4. GulpQL grammar (EBNF, implement in `GulpQuery`)
+## 4. Implementation notes — GulpQL grammar (EBNF, implement in `GulpQuery`)
 
 ```
 expr      := orExpr
