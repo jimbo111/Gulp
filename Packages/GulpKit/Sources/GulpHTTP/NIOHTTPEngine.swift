@@ -410,9 +410,12 @@ public final class NIOHTTPEngine: HTTPEngine {
         // If the write never reaches the handler (channel already closed), fail the response here;
         // a second completion of the promise is ignored.
         written.futureResult.whenFailure { promise.fail($0) }
+        // Stamp the write's completion on the event loop, at the moment it happens: the task resumes
+        // later, by which time (on loopback) the first response byte may already have arrived, which
+        // made time-to-first-byte negative (HTTP-010).
+        let writeDone = written.futureResult.map { NIODeadline.now() }
         channel.writeAndFlush(command, promise: written)
-        _ = try? await written.futureResult.get()
-        let writeEnd = NIODeadline.now()
+        let writeEnd = (try? await writeDone.get()) ?? NIODeadline.now()
         let wire: WireResponse
         do {
             wire = try await promise.futureResult.get()
