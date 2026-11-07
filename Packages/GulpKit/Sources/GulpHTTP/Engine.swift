@@ -2,6 +2,7 @@
 // writes exactly the bytes it is given (HTTP-001).
 
 import GulpCore
+import GulpTLS
 
 // MARK: - Options
 
@@ -64,17 +65,6 @@ public struct Timeouts: Sendable, Hashable {
 
     /// Default timeouts.
     public init() {}
-}
-
-/// A named TLS client configuration (cipher suites, versions, client certificate) — M3.
-public struct TLSProfile: Sendable, Hashable {
-    /// Profile name; part of the pool key.
-    public var name: String
-
-    /// Create a profile.
-    public init(name: String) {
-        self.name = name
-    }
 }
 
 /// An upstream proxy (HTTP-006).
@@ -202,8 +192,8 @@ public struct SendOptions: Sendable {
     public var maxResponseBytes = 50 * 1024 * 1024
     /// Decompress bodies for hooks and views (HTTP-007); the raw response stays as received.
     public var decompressForHooks = true
-    /// TLS client profile (M3).
-    public var tlsProfile: TLSProfile?
+    /// Upstream TLS: versions, ciphers, ALPN, whether to enforce certificate validation (TLS-008/009).
+    public var tls = UpstreamTLSSettings()
     /// Upstream proxy override (HTTP-006).
     public var upstreamProxy: UpstreamProxyOverride = .useRules
     /// Which hooks run.

@@ -331,3 +331,31 @@ final class HandshakeWaiter: ChannelInboundHandler {
         context.fireChannelInactive()
     }
 }
+
+@Suite("GulpTLS — upstream validation (TLS-008)")
+struct UpstreamValidationTests {
+    @Test("a leaf chaining to a trusted root for the right host validates; other cases name the reason")
+    func validation() async throws {
+        let authority = try CertificateAuthority.generate(keyType: .p256)
+        let leaf = try authority.mintLeaf(for: .dns("good.test"), key: SigningKey.generate(.p256))
+        let roots = CertificateStore([authority.certificate])
+        let none = CertificateStore()
+        let later = Date().addingTimeInterval(500 * 86_400)
+        let ca = try authority.certificateDER()
+        let good = await UpstreamTLS.validate(chain: [leaf.der], host: "good.test", roots: roots)
+        let wrongName = await UpstreamTLS.validate(chain: [leaf.der], host: "other.test", roots: roots)
+        let noRoot = await UpstreamTLS.validate(chain: [leaf.der], host: "good.test", roots: none)
+        let expired = await UpstreamTLS.validate(
+            chain: [leaf.der], host: "good.test", roots: roots, now: later)
+        let selfSigned = await UpstreamTLS.validate(chain: [ca], host: "good.test", roots: none)
+        let garbage = await UpstreamTLS.validate(chain: [[1, 2, 3]], host: "x")
+        #expect(good == .ok)
+        #expect(wrongName == .failed("untrusted"))
+        #expect(noRoot == .failed("untrusted"))
+        #expect(expired == .failed("expired"))
+        #expect(selfSigned == .failed("selfSigned"))
+        #expect(garbage == .failed("unparsable"))
+        #expect(UpstreamTLS.serverName(for: "10.0.0.1") == nil)
+        #expect(UpstreamTLS.serverName(for: "example.com") == "example.com")
+    }
+}

@@ -2,6 +2,7 @@ import GulpCore
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
+import NIOSSL
 
 @testable import GulpHTTP
 
@@ -84,7 +85,10 @@ final class TestServer: Sendable {
         log.withLockedValue { index < $0.count ? $0[index] : [] }
     }
 
-    static func start(_ script: @escaping ServerScript) async throws -> TestServer {
+    /// Start a server; with `tls`, connections are TLS (the script sees decrypted bytes).
+    static func start(
+        tls: NIOSSLContext? = nil, _ script: @escaping ServerScript
+    ) async throws -> TestServer {
         let log = NIOLockedValueBox<[[UInt8]]>([])
         let channel = try await ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
@@ -94,6 +98,9 @@ final class TestServer: Sendable {
                     return list.count - 1
                 }
                 return channel.eventLoop.makeCompletedFuture(withResultOf: {
+                    if let tls {
+                        try channel.pipeline.syncOperations.addHandler(NIOSSLServerHandler(context: tls))
+                    }
                     let handler = ScriptHandler(script: script, log: log, index: index)
                     try channel.pipeline.syncOperations.addHandler(handler)
                 })

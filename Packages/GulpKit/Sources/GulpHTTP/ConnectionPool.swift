@@ -3,6 +3,7 @@
 // before reuse.
 
 import GulpCore
+import GulpTLS
 import NIOCore
 
 /// Everything that makes two connections interchangeable (HTTP-003).
@@ -12,7 +13,7 @@ struct PoolKey: Hashable, Sendable {
     let port: Int
     let sni: String?
     let ip: String?
-    let tlsProfile: String?
+    let tls: UpstreamTLSSettings?
     /// The proxy actually used after rules are applied (nil = direct).
     let route: UpstreamProxy?
 
@@ -22,7 +23,7 @@ struct PoolKey: Hashable, Sendable {
         port = target.port
         sni = target.sniOverride
         ip = target.ipOverride
-        tlsProfile = options.tlsProfile?.name
+        tls = target.scheme == .https ? options.tls : nil
         self.route = route
     }
 }
@@ -35,6 +36,8 @@ actor ConnectionPool {
         let since: NIODeadline
         /// The server's own keep-alive deadline (`Keep-Alive: timeout=N`), if it announced one.
         var expires: NIODeadline?
+        /// The TLS session this connection carries (reported again for every reuse).
+        var tls: TLSInfo?
     }
 
     private var idle: [PoolKey: [Idle]] = [:]
@@ -90,14 +93,18 @@ actor ConnectionPool {
     }
 
     /// Park a reusable connection. `serverTimeout` is the server's announced keep-alive timeout.
-    func putIdle(_ key: PoolKey, channel: any Channel, id: UInt64, serverTimeout: TimeAmount? = nil) {
+    func putIdle(
+        _ key: PoolKey, channel: any Channel, id: UInt64, serverTimeout: TimeAmount? = nil,
+        tls: TLSInfo? = nil
+    ) {
         var list = idle[key, default: []]
         guard list.count < maxPerKey, channel.isActive else {
             channel.close(promise: nil)
             return
         }
         let now = NIODeadline.now()
-        list.append(Idle(channel: channel, id: id, since: now, expires: serverTimeout.map { now + $0 }))
+        let expires = serverTimeout.map { now + $0 }
+        list.append(Idle(channel: channel, id: id, since: now, expires: expires, tls: tls))
         idle[key] = list
     }
 

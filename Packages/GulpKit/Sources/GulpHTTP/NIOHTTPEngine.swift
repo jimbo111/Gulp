@@ -4,9 +4,13 @@
 
 import Foundation
 import GulpCore
+import GulpTLS
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
 import NIOSOCKS
+import NIOSSL
+import NIOTLS
 
 /// Convert a Swift `Duration` to NIO's `TimeAmount`.
 func timeAmount(_ duration: Duration) -> TimeAmount {
@@ -39,6 +43,7 @@ public final class NIOHTTPEngine: HTTPEngine {
     private let group: any EventLoopGroup
     private let configuration: Configuration
     private let pool: ConnectionPool
+    private let tlsContexts = TLSContextCache()
     private let requestHooks: [any RequestHook]
     private let responseHooks: [any ResponseHook]
     private let recorder: (any ExchangeRecorder)?
@@ -79,7 +84,7 @@ public final class NIOHTTPEngine: HTTPEngine {
     ) async -> ExchangeResult {
         let outgoing = OutgoingRequest(request: RawRequest(Bytes()), target: target)
         return await finish(
-            outgoing, options: options, wire: nil, error: .other("HTTP/2 is implemented in M3"),
+            outgoing, options: options, wire: nil, error: .other("HTTP/2 is implemented in M3b"),
             connectionID: 0, timing: Timing())
     }
 
@@ -186,7 +191,7 @@ public final class NIOHTTPEngine: HTTPEngine {
         timing.totalMs = milliseconds(from: start, to: .now())
         return await finish(
             outgoing, options: options, wire: attempt.wire, error: attempt.error,
-            connectionID: attempt.connectionID, timing: timing)
+            connectionID: attempt.connectionID, timing: timing, tls: attempt.tls)
     }
 
     /// The upstream proxy for `target` (HTTP-006): the per-send override, else the first matching
@@ -202,11 +207,8 @@ public final class NIOHTTPEngine: HTTPEngine {
     private func unsupported(
         _ target: HTTPTarget, _ options: SendOptions, route: UpstreamProxy?
     ) -> GulpNetworkError? {
-        if target.scheme == .https {
-            return .tlsFailure("HTTPS is implemented in M3 (GulpTLS); M1 sends plaintext HTTP/1 only")
-        }
         switch options.httpVersion {
-        case .http2, .http2PriorKnowledge: return .other("HTTP/2 is implemented in M3")
+        case .http2, .http2PriorKnowledge: return .other("HTTP/2 is implemented in M3b")
         case .auto, .http1_1: break
         }
         if let route, route.kind == .socks5, route.username != nil {
@@ -221,6 +223,7 @@ public final class NIOHTTPEngine: HTTPEngine {
         var connectionID: UInt64 = 0
         var writeStart = NIODeadline.now()
         var writeEnd = NIODeadline.now()
+        var tls: TLSInfo?
     }
 
     /// Get a connection, write, read; retry once on a stale pooled connection (HTTP-003).
@@ -243,16 +246,19 @@ public final class NIOHTTPEngine: HTTPEngine {
             }
             let channel: any Channel
             let connectionID: UInt64
+            let tls: TLSInfo?
             var reused = false
             if policy == .reuse, let idle = await pool.takeIdle(key) {
                 channel = idle.channel
                 connectionID = idle.id
+                tls = idle.tls
                 reused = true
                 timing.dnsMs = nil
                 timing.connectMs = nil
+                timing.tlsMs = nil
             } else {
                 do {
-                    channel = try await connect(
+                    (channel, tls) = try await connect(
                         outgoing.target, route: route, options: options, deadline: totalDeadline,
                         timing: &timing)
                 } catch {
@@ -285,14 +291,14 @@ public final class NIOHTTPEngine: HTTPEngine {
                 && KeepAlive.requestAllowsReuse(request) && !Task.isCancelled
             if keep {
                 let timeout = KeepAlive.serverTimeout(wire.bytes)
-                await pool.putIdle(key, channel: channel, id: connectionID, serverTimeout: timeout)
+                await pool.putIdle(key, channel: channel, id: connectionID, serverTimeout: timeout, tls: tls)
             } else {
                 channel.close(promise: nil)
             }
             await pool.releaseSlot(key)
             return Attempt(
                 wire: wire, error: Task.isCancelled ? .cancelled : wire.error, connectionID: connectionID,
-                writeStart: result.writeStart, writeEnd: result.writeEnd)
+                writeStart: result.writeStart, writeEnd: result.writeEnd, tls: tls)
         }
         await pool.releaseSlot(key)
         return Attempt(error: .connectionReset)
@@ -308,7 +314,7 @@ public final class NIOHTTPEngine: HTTPEngine {
     private func connect(
         _ target: HTTPTarget, route: UpstreamProxy?, options: SendOptions, deadline: NIODeadline,
         timing: inout Timing
-    ) async throws -> any Channel {
+    ) async throws -> (any Channel, TLSInfo?) {
         let proxyHost = route.map { configuration.hostOverrides[$0.host.lowercased()] ?? $0.host }
         let host = proxyHost ?? effectiveHost(target)
         let port = route?.port ?? target.port
@@ -356,7 +362,74 @@ public final class NIOHTTPEngine: HTTPEngine {
                 on: channel, to: target, via: route, options: options, deadline: deadline)
         }
         timing.connectMs = milliseconds(from: connectStart, to: .now())
-        return channel
+        guard target.scheme == .https else { return (channel, nil) }
+        let tlsStart = NIODeadline.now()
+        do {
+            let tls = try await startTLS(on: channel, target: target, options: options, deadline: deadline)
+            timing.tlsMs = milliseconds(from: tlsStart, to: .now())
+            return (channel, tls)
+        } catch {
+            channel.close(promise: nil)
+            throw error
+        }
+    }
+
+    /// TLS to the server (TLS-008/009), inserted under the HTTP handler on an open connection (direct,
+    /// SOCKS, or inside a CONNECT tunnel). The chain is always captured and validated; validation
+    /// is enforced only when `options.tls.validateCertificates` is on.
+    private func startTLS(
+        on channel: any Channel, target: HTTPTarget, options: SendOptions, deadline: NIODeadline
+    ) async throws -> TLSInfo {
+        let settings = options.tls
+        let context: NIOSSLContext
+        do {
+            context = try await tlsContexts.context(for: settings)
+        } catch {
+            throw GulpNetworkError.tlsFailure("TLS settings rejected: \(error)")
+        }
+        let nameForChecks = target.sniOverride ?? target.host
+        let serverName = UpstreamTLS.serverName(for: nameForChecks)
+        let capture = HandshakeCapture()
+        let done = channel.eventLoop.makePromise(of: String?.self)
+        let budget = min(deadline, .now() + timeAmount(options.timeouts.tlsHandshake))
+        try await channel.eventLoop.submit {
+            let tls = try NIOSSLClientHandler(
+                context: context, serverHostname: serverName,
+                customVerificationCallback: { certificates, verdict in
+                    let chain = certificates.compactMap { try? $0.toDERBytes() }
+                    Task {
+                        let validation = await UpstreamTLS.validate(chain: chain, host: nameForChecks)
+                        capture.set(chain: chain, validation: validation)
+                        let enforce = settings.validateCertificates && validation != .ok
+                        verdict.succeed(enforce ? .failed : .certificateVerified)
+                    }
+                })
+            let operations = channel.pipeline.syncOperations
+            let http = try operations.handler(type: HTTP1ClientHandler.self)
+            try operations.addHandler(tls, position: .before(http))
+            try operations.addHandler(TLSHandshakeWaiter(done: done), position: .before(http))
+        }.get()
+        let timeout = channel.eventLoop.scheduleTask(deadline: budget) {
+            done.fail(GulpNetworkError.tlsHandshakeTimeout)
+            channel.close(promise: nil)
+        }
+        defer { timeout.cancel() }
+        let negotiated: String?
+        do {
+            negotiated = try await done.futureResult.get()
+        } catch let error as GulpNetworkError {
+            throw error
+        } catch {
+            if case .failed(let reason) = capture.validation, settings.validateCertificates {
+                throw GulpNetworkError.tlsFailure("certificate validation failed: \(reason)")
+            }
+            throw GulpNetworkError.tlsFailure("TLS handshake with \(target.host) failed: \(error)")
+        }
+        let version = try? await channel.nioSSL_tlsVersion().get()
+        return TLSInfo(
+            version: version.flatMap(TLSProtocolVersion.init)?.rawValue ?? "TLS",
+            cipherSuite: "", alpn: negotiated, serverChainSHA256: UpstreamTLS.fingerprints(capture.chain),
+            validation: capture.validation)
     }
 
     /// `CONNECT host:port` through an HTTP proxy; a 2xx turns the connection into a byte tunnel, so
@@ -431,7 +504,7 @@ public final class NIOHTTPEngine: HTTPEngine {
     /// Build the exchange (response hooks, derived fields), record it, and wrap it as a result.
     private func finish(
         _ outgoing: OutgoingRequest, options: SendOptions, wire: WireResponse?, error: GulpNetworkError?,
-        connectionID: UInt64, timing: Timing
+        connectionID: UInt64, timing: Timing, tls: TLSInfo? = nil
     ) async -> ExchangeResult {
         let isHead = outgoing.request.bytes[outgoing.request.parsed.method].string() == "HEAD"
         var response: RawResponse?
@@ -461,6 +534,7 @@ public final class NIOHTTPEngine: HTTPEngine {
             source: options.recordAs, target: outgoing.target, request: outgoing.request, response: response,
             state: state, timing: timing, clientAddress: options.clientAddress, connectionID: connectionID,
             edited: edited)
+        exchange.tls = tls
         if let recorder { exchange.id = await recorder.record(exchange) }
         return ExchangeResult(exchange: exchange, error: error)
     }
@@ -500,5 +574,57 @@ enum KeepAlive {
             }
         }
         return nil
+    }
+}
+
+/// One NIOSSL client context per distinct settings (building contexts is the expensive part).
+actor TLSContextCache {
+    private var contexts: [UpstreamTLSSettings: NIOSSLContext] = [:]
+
+    func context(for settings: UpstreamTLSSettings) throws -> NIOSSLContext {
+        if let context = contexts[settings] { return context }
+        let context = try UpstreamTLS.makeContext(settings)
+        contexts[settings] = context
+        return context
+    }
+}
+
+/// What the verification callback saw, read after the handshake.
+final class HandshakeCapture: Sendable {
+    private let state = NIOLockedValueBox<(chain: [[UInt8]], validation: TLSValidation)>(([], .notChecked))
+
+    func set(chain: [[UInt8]], validation: TLSValidation) {
+        state.withLockedValue { $0 = (chain, validation) }
+    }
+
+    var chain: [[UInt8]] { state.withLockedValue { $0.chain } }
+    var validation: TLSValidation { state.withLockedValue { $0.validation } }
+}
+
+/// Completes `done` with the negotiated ALPN protocol when the TLS handshake finishes, or with the
+/// error that ended it. Afterwards it only passes events through.
+final class TLSHandshakeWaiter: ChannelInboundHandler {
+    typealias InboundIn = NIOAny
+    private let done: EventLoopPromise<String?>
+
+    init(done: EventLoopPromise<String?>) {
+        self.done = done
+    }
+
+    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        if let event = event as? TLSUserEvent, case .handshakeCompleted(let negotiated) = event {
+            done.succeed(negotiated)  // later completions of the promise are ignored by NIO
+        }
+        context.fireUserInboundEventTriggered(event)
+    }
+
+    func errorCaught(context: ChannelHandlerContext, error: any Error) {
+        done.fail(error)
+        context.fireErrorCaught(error)
+    }
+
+    func channelInactive(context: ChannelHandlerContext) {
+        done.fail(GulpNetworkError.connectionReset)
+        context.fireChannelInactive()
     }
 }
