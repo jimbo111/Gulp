@@ -40,6 +40,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-http2.git", from: "1.33.0"),
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.22.0"),
         .package(url: "https://github.com/apple/swift-certificates.git", from: "1.5.0"),
+        .package(url: "https://github.com/apple/swift-asn1.git", from: "1.1.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.7.0"),
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
@@ -74,6 +75,7 @@ let package = Package(
             dependencies: [
                 "GulpCore",
                 .product(name: "X509", package: "swift-certificates"),
+                .product(name: "SwiftASN1", package: "swift-asn1"),
                 .product(name: "Crypto", package: "swift-crypto"),
                 .product(name: "_CryptoExtras", package: "swift-crypto"),
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
@@ -151,7 +153,13 @@ let package = Package(
         .testTarget(name: "GulpQueryTests", dependencies: ["GulpQuery"]),
         .testTarget(name: "GulpDiffTests", dependencies: ["GulpDiff"]),
         .testTarget(name: "GulpStoreTests", dependencies: ["GulpStore"]),
-        .testTarget(name: "GulpTLSTests", dependencies: ["GulpTLS"]),
+        .testTarget(
+            name: "GulpTLSTests",
+            dependencies: ["GulpTLS"] + nioCore + [
+                .product(name: "X509", package: "swift-certificates"),
+                .product(name: "SwiftASN1", package: "swift-asn1"),
+                .product(name: "NIOSSL", package: "swift-nio-ssl"),
+            ]),
         .testTarget(name: "GulpHTTPTests", dependencies: ["GulpHTTP"] + nioCore + nioConcurrency),
         .testTarget(name: "GulpProxyTests", dependencies: ["GulpProxy"] + nioCore + nioConcurrency),
         .testTarget(name: "GulpSessionTests", dependencies: ["GulpSession"]),
