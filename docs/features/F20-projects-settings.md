@@ -32,7 +32,7 @@ settings live in each feature's spec and in Settings panes listed in doc 05 §1)
 | ID | Pri | Requirement |
 |---|---|---|
 | PRJ-020 | P0 | **Layered settings** (doc 04 §6): default → user → project override, with a clear "Applies to: User/Project" control per group in each Settings pane. |
-| PRJ-021 | P0 | Settings panes (doc 05 §1): General, Proxy, TLS, Network, HTTP, Scanner, Beacon, Browser, Extensions, AI, Appearance, Shortcuts, Diagnostics. Each reads/writes its `SettingsGroup`. |
+| PRJ-021 | P0 | Settings panes — the canonical list is doc 05 §1: General, Proxy, TLS, Network, HTTP, Scanner, Beacon, Browser, Extensions, Automation, AI, Appearance, Shortcuts, Updates, Diagnostics. (Automation hosts the REST/MCP controls of F21 §3; Updates hosts Sparkle, F24 MAC-026.) Each reads/writes its `SettingsGroup`. |
 | PRJ-022 | P0 | **Export/Import settings** as JSON (whole or per group); versioned with safe decoding of unknown/missing keys (fallback to defaults). |
 | PRJ-023 | P1 | Reset-to-default per group and globally; a search box over all settings. |
 | PRJ-024 | P1 | First-run experience: the authorized-testing acknowledgment (doc 00 §6), CA setup prompt, and an offer to install the CA / open the browser. |

@@ -147,6 +147,8 @@ accepted ones; supersede them.
 | 2026-11-07 | FTS trigram search needs 3+ chars; shorter queries fall back to a bounded scan | doc 04 §4, F05 HIS-050/052 |
 | 2026-11-07 | Beacon binds privileged ports 53/443 via `CAP_NET_BIND_SERVICE` or privilege-drop, documented in deploy | F10 |
 | 2026-11-07 | Single-packet send is best-effort (one `write`/flush, small payload), not a guaranteed single segment | F03 HTTP-033 |
+| 2026-11-07 | Lint: `AlwaysUseLowerCamelCase` disabled in `.swift-format`. It would force renaming the wire-faithful `HTTPVersion` cases (`http1_0`/`http1_1`, defined in doc 04 §2) and the byte constants `CR`/`LF`/`SP`/`HT`; keeping them is clearer and matches the spec. `AllPublicDeclarationsHaveDocumentation` stays on (CLAUDE.md §4) | `.swift-format`, verified by CI run 42346403079 |
+| 2026-11-07 | Linux CI builds SQLite from source with `SQLITE_ENABLE_SNAPSHOT` + `FTS5`/`RTREE`/`JSON1`: Ubuntu's `libsqlite3` lacks `SQLITE_ENABLE_SNAPSHOT`, so GRDB 7's `DatabaseSnapshotPool`/`WALSnapshot` fail to link (`undefined reference to sqlite3_snapshot_*`). macOS uses Apple's SQLite, which has it. FTS5 is also needed for HIS-050 | `.github/workflows/ci.yml` (core-linux), ADR-003, surfaced by CI run 42346403079 |
 
 ---
 

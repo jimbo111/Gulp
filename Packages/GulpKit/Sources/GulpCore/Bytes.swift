@@ -32,7 +32,7 @@ public struct Bytes: Sendable, Hashable, RandomAccessCollection {
     /// A UTF-8 string view for display. `lossy` (default) substitutes U+FFFD for invalid sequences;
     /// with `lossy: false` it returns nil when the bytes aren't valid UTF-8. Stdlib-only (no Foundation).
     public func string(lossy: Bool = true) -> String {
-        String(decoding: storage, as: UTF8.self)          // always lossy; fine for display
+        String(decoding: storage, as: UTF8.self)  // always lossy; fine for display
     }
     /// Strict UTF-8 decode: nil if the bytes aren't valid UTF-8.
     public func validUTF8() -> String? {
@@ -59,5 +59,6 @@ public struct Bytes: Sendable, Hashable, RandomAccessCollection {
 }
 
 extension Bytes: ExpressibleByArrayLiteral {
+    /// Create a buffer from a byte array literal, e.g. `[0x47, 0x45, 0x54]`.
     @inlinable public init(arrayLiteral elements: UInt8...) { self.storage = elements }
 }

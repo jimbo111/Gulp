@@ -360,8 +360,9 @@ CREATE TABLE extension_state (extension_id TEXT, key TEXT, value BLOB, PRIMARY K
 
 These back the Phase F features (F30 Drift & Retest, F31 Journal). They ship as **two** later additive
 migrations, not in schema v1, so each lands with its feature under the "never edit a shipped
-migration" rule: `v2_journal` at M9/M16 (the `journal_*` tables) and `v3_drift` at M25 (the `drift_*`,
-`issue_proofs`, `retest_runs` tables). Defined here together so the schema stays centralized.
+migration" rule: `v2_journal` at **M16** (the `journal_*` tables back JRN-006/JRN-008, both M16; the
+M9 coverage index JRN-001 needs no table) and `v3_drift` at M25 (the `drift_*`, `issue_proofs`,
+`retest_runs` tables). Defined here together so the schema stays centralized.
 
 ```sql
 -- F30 Drift & Retest -------------------------------------------------------

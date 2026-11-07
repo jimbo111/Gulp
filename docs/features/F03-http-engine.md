@@ -62,6 +62,11 @@ public struct GroupItem: Sendable {                // one request in a group sen
 receive frames, close, reconnect) is specified in F01 §2.4 / F26 — for M1 the `openWebSocket` method
 and `WebSocketSession` type are declared but not implemented (WebSockets are M4), so in M1 calling
 `openWebSocket` throws `GulpError(message: "WebSockets are implemented in M4", underlying: nil)`.
+Because `openWebSocket` lives on the engine, the WebSocket frame codec (RFC 6455 framing +
+permessage-deflate) is implemented **in `GulpHTTP`** when WebSockets land at M4 — not in a
+higher-layer module. `GulpProxy`, the WS Repeater (F26) and any other consumer use that one codec;
+nothing lower than `GulpHTTP` needs it, so there is no upward import (doc 01 §3). F26 §4's note about
+the codec "currently housed" elsewhere defers to this placement.
 
 `ExchangeResult` contains the final `Exchange` (recorded or not, depending on options), the redirect
 chain if one was followed, and timing.

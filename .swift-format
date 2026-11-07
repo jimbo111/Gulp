@@ -9,7 +9,7 @@
   "indentConditionalCompilationBlocks": false,
   "rules": {
     "AllPublicDeclarationsHaveDocumentation": true,
-    "AlwaysUseLowerCamelCase": true,
+    "AlwaysUseLowerCamelCase": false,
     "AmbiguousTrailingClosureOverload": true,
     "NoLeadingUnderscores": false,
     "OrderedImports": true,
