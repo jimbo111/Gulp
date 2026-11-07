@@ -107,8 +107,8 @@ for behavior.
   - `project.yml` (XcodeGen; app + `GulpAppUITests`, Sparkle, embeds `gulp-cli`), `Makefile`,
     `Brewfile`, `.swift-format`, `.github/workflows/ci.yml` (Linux core + macOS jobs).
   - `Beacon/` package (separate, Linux/Docker) with placeholder `gulp-beacon` + `Dockerfile`.
-  - Also corrected a spec error found while scaffolding: `SNIHandler` is in `NIOSSL`, not
-    swift-nio-extras (F02).
+  - Also corrected a spec error found while scaffolding: `SNIHandler` is in the `NIOTLS` module of
+    swift-nio (a later review corrected an interim "NIOSSL" note; doc 01 §1 and F02 §4 are authoritative).
 
 ## How to pick up work (reminder)
 
