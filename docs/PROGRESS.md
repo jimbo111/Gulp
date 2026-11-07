@@ -6,18 +6,22 @@ order; within a milestone, do P0 first.
 
 ## Current status
 
-- **Phase**: **M1 DONE** — CI green on both platforms (run 42398666124, commit `cd84c2a`), and the
-  M1 DoD is an executable check (`Scripts/m1-dod.sh`, run by the Linux job): PASS. M0 done earlier.
-- **Active milestone**: **M2 — Plain-HTTP proxy, storage, history UI** (next).
+- **Phase**: **M2 DONE** — CI green on both platforms (run 42416523505, commit `1acf39c`), and the M2 DoD
+  is an executable check (`Scripts/m2-dod.sh`, run by the Linux job): PASS. M0 and M1 done earlier.
+- **Active milestone**: **M3 — TLS interception + CA + HTTP/2** (next).
 - **Build verification**: the authoring container has no Swift toolchain (`download.swift.org` is
   blocked), so CI (`.github/workflows/ci.yml`) is the gate and runs on **every branch push**:
-  `core-linux` (`swift:6.0-noble`: build + all tests + the M1 DoD script) and `macos`
-  (`make lint generate test-core build test`).
-- **M1 carry-overs** (tracked, not silently dropped): HTTP-007 brotli and zstd decoders (gzip/deflate
-  ship; `br`/`zstd` throw `.unsupported`); SOCKS5 username/password (NIOSOCKS client is no-auth only).
-  Redirect following is declared but `.never`-only until the Repeater (M5); TLS/HTTP/2 are M3.
-- **Next action**: start **M2** — GulpStore schema v1 + write coalescer (implements the engine's
-  `ExchangeRecorder`), projects, the HTTP/1 forward proxy, and the History UI.
+  `core-linux` (`swift:6.0-noble`: build + all tests + the M1 and M2 DoD scripts) and `macos`
+  (`make lint generate test-core build test`, incl. the app UI smoke tests).
+- **Carry-overs** (tracked, not silently dropped):
+  - M1: HTTP-007 brotli and zstd decoders (gzip/deflate ship; `br`/`zstd` throw `.unsupported`);
+    SOCKS5 username/password (NIOSOCKS client is no-auth only). Redirect following is declared but
+    `.never`-only until the Repeater (M5).
+  - M2: PRJ-001 save/discard prompt on closing a temporary project (the file is kept in Caches
+    instead; needs an NSWindow close hook, M16 polish). The proxy answers CONNECT with 501 until M3
+    and origin-form (invisible) requests with 400 until PRX-040.
+- **Next action**: start **M3** — GulpTLS CA + leaf minting (TLS-001…TLS-010), CONNECT/SNI/ALPN in
+  GulpProxy (PRX-005…PRX-009), the macOS CA-install helpers (MAC-001…MAC-004), HTTP/2 (HTTP-020…026).
 - **Product decisions**: resolved by the owner and recorded in `docs/07-decisions.md` §"Product
   decisions" (MIT license; macOS 14 min; Claude-only AI in v1; OAST off until configured;
   `com.gulp.app` placeholder bundle id; no team server). Build to those.
@@ -104,7 +108,7 @@ for behavior.
 
 - [x] M0 — Scaffolding (repo layout, Package.swift, project.yml, Makefile, CI, empty app window) — **CI green both platforms (`6e17d38`)**
 - [x] M1 — Core model + raw HTTP/1 engine — **CI green both platforms + executable DoD PASS (`cd84c2a`)**
-- [ ] M2 — Plain-HTTP proxy, storage, history UI
+- [x] M2 — Plain-HTTP proxy, storage, history UI — **CI green both platforms + executable DoD PASS (`1acf39c`)**
 - [ ] M3 — TLS interception + CA + HTTP/2
 - [ ] M4 — Intercept, Match & Replace, message editor, WebSockets
 - [ ] M5 — Repeater + advanced HTTP engine (HTTP/2 raw, group/race sends)
@@ -193,6 +197,24 @@ for behavior.
     ArgumentParser's sync entry point refusing an async command; NIO's async `writeAndFlush`
     overload shadowing the future-returning one. Plus, from fuzz-test design: chunk-size overflow
     and the `0`-line chunk heuristic.
+
+- 2026-11-07 — **M2 DONE** (CI run 42416523505, `1acf39c`; DoD `Scripts/m2-dod.sh`: PASS):
+  - GulpStore: schema v1 + migrations (newer schemas refused), SHA-256-deduplicated blobs with
+    zlib for large bodies, FTS in the same transaction, the write coalescer (50 ms / 500 rows,
+    ids assigned in memory, events after flush), paged/filtered/sorted summaries, annotations.
+  - GulpProxy: HTTP/1 forward proxy (absolute-form, keep-alive, `Expect: 100-continue`,
+    hop-by-hop stripping, recording with the client address) on configurable listeners.
+  - GulpWorkspace: `ProjectSession` (temporary/open/Save As/close with flush), layered settings,
+    recent projects, the bounded `HistoryPageCache`.
+  - App + GulpFeatures: one window per project, File menu (New Temporary/New/Open/Recent/Save As),
+    Proxy → HTTP History (virtualised NSTableView, column prefs, sort, highlight/comment/delete/
+    copy URLs, quick filters, auto-scroll), read-only Raw/Hex viewer, the Listeners sheet.
+  - gulp-cli: `proxy` (headless, flushes on SIGINT/SIGTERM), `history`, `send --via/--repeat`.
+    The DoD browses VulnLab through the proxy with curl, sends 10,000 requests through it, quits,
+    reopens the project and finds all 10,001 exchanges. Tests: 105 on Linux, plus the UI smoke tests.
+  - Caught by CI: a closing proxy error page without `Connection: close` (the client reused a dead
+    connection); swift-format's `indentConditionalCompilationBlocks: false`; the synthesized
+    memberwise init of a public struct being `internal`; undeclared transitive module imports.
 
 ## How to pick up work (reminder)
 

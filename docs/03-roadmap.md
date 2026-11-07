@@ -69,10 +69,10 @@ that exercises a deferred part (e.g. F07 test 4's OAST column) runs only in the 
 - **DoD:** `gulp-cli send --raw request.txt --target http://127.0.0.1:8088/echo` prints the exact response bytes, and `--target http://127.0.0.1:8089/echo-raw` round-trips a malformed request byte-for-byte; all HTTP-0xx P0 tests pass. (HTTPS/`:8443` and TLS trust are **not** exercised until M3 — M1 is plaintext HTTP/1 only.)
 
 ### M2 — Plain-HTTP proxy, storage, history UI
-- [ ] GulpStore: schema v1 (doc 04 §4), migrations, write coalescer, paged queries.
-- [ ] Projects: new temporary project, new/open/save-as `*.gulp`, recent projects (F20 PRJ-001…PRJ-006).
-- [ ] GulpProxy: HTTP/1 forward proxy listener (non-CONNECT), absolute-form requests, keep-alive, recording (F01 PRX-001…PRX-004).
-- [ ] UI: Proxy → HTTP History table (NSTableView, paged), the message viewer (read-only Raw/Hex), a basic filter bar (F05 HIS-001…HIS-006), Settings → Proxy listeners.
+- [x] GulpStore: schema v1 (doc 04 §4), migrations, write coalescer, paged queries.
+- [x] Projects: new temporary project, new/open/save-as `*.gulp`, recent projects (F20 PRJ-001…PRJ-006).
+- [x] GulpProxy: HTTP/1 forward proxy listener (non-CONNECT), absolute-form requests, keep-alive, recording (F01 PRX-001…PRX-004).
+- [x] UI: Proxy → HTTP History table (NSTableView, paged), the message viewer (read-only Raw/Hex), a basic filter bar (F05 HIS-001…HIS-006), Settings → Proxy listeners.
 - **DoD:** Browse `http://localhost:8088` through Gulp; 10k requests are recorded and scroll smoothly; quitting and reopening the project shows the same history.
 
 ### M3 — TLS interception and the certificate authority
