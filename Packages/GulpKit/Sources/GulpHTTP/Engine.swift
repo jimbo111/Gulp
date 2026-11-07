@@ -210,6 +210,8 @@ public struct SendOptions: Sendable {
     public var applyHooks: HookSet = .all
     /// The tool the exchange is recorded as.
     public var recordAs: ToolSource
+    /// The client the request came from (proxy traffic, PRX-004); recorded with the exchange.
+    public var clientAddress: String?
 
     /// Options with defaults, recorded as `recordAs`.
     public init(recordAs: ToolSource) {

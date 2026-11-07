@@ -458,7 +458,8 @@ public final class NIOHTTPEngine: HTTPEngine {
         }
         var exchange = Exchange(
             source: options.recordAs, target: outgoing.target, request: outgoing.request, response: response,
-            state: state, timing: timing, connectionID: connectionID, edited: edited)
+            state: state, timing: timing, clientAddress: options.clientAddress, connectionID: connectionID,
+            edited: edited)
         if let recorder { exchange.id = await recorder.record(exchange) }
         return ExchangeResult(exchange: exchange, error: error)
     }

@@ -151,7 +151,7 @@ let package = Package(
         .testTarget(name: "GulpStoreTests", dependencies: ["GulpStore"]),
         .testTarget(name: "GulpTLSTests", dependencies: ["GulpTLS"]),
         .testTarget(name: "GulpHTTPTests", dependencies: ["GulpHTTP"] + nioCore + nioConcurrency),
-        .testTarget(name: "GulpProxyTests", dependencies: ["GulpProxy"]),
+        .testTarget(name: "GulpProxyTests", dependencies: ["GulpProxy"] + nioCore + nioConcurrency),
         .testTarget(name: "GulpSessionTests", dependencies: ["GulpSession"]),
         .testTarget(name: "GulpRepeaterTests", dependencies: ["GulpRepeater"]),
         .testTarget(name: "GulpOASTTests", dependencies: ["GulpOAST"]),
