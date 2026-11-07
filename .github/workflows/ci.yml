@@ -49,15 +49,19 @@ jobs:
         run: swift build --package-path Beacon -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
       - name: Test Beacon
         run: swift test --package-path Beacon --parallel -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
-      # TEMP diagnostic: the Linux toolchain bundles `swift format`; print the canonical formatting
-      # diff so the exact lint-clean form can be applied without iterating against the macOS runner.
+      # TEMP diagnostic: the Linux toolchain bundles `swift format`; print the CANONICAL formatted
+      # text of the two package manifests (the only remaining lint violations) to stdout, so the
+      # exact lint-clean form can be applied without iterating against the macOS runner.
       # Remove once formatting is converged.
-      - name: Formatting diff (diagnostic, non-failing)
+      - name: Canonical manifest formatting (diagnostic, non-failing)
         if: always()
         run: |
-          swift format --version || true
-          swift format --in-place --recursive App Packages Beacon UITests || true
-          git --no-pager diff || echo "(no diff)"
+          echo "=====BEGIN GulpKit/Package.swift====="
+          swift format Packages/GulpKit/Package.swift || true
+          echo "=====END GulpKit/Package.swift====="
+          echo "=====BEGIN Beacon/Package.swift====="
+          swift format Beacon/Package.swift || true
+          echo "=====END Beacon/Package.swift====="
 
   macos:
     name: App + full test (macOS)
