@@ -328,6 +328,13 @@ CREATE TABLE cookie_jar (domain TEXT, path TEXT, name TEXT, value TEXT, expires 
 CREATE TABLE identities (id INTEGER PRIMARY KEY, name TEXT, color TEXT, config_json TEXT);       -- Authz Matrix, sessions
 CREATE TABLE macros (id INTEGER PRIMARY KEY, name TEXT, steps_json TEXT);
 CREATE TABLE session_rules (id INTEGER PRIMARY KEY, name TEXT, enabled INTEGER, ordinal INTEGER, config_json TEXT);
+-- Note: proxy intercept rules (PRX-013/014), match & replace rules (PRX-020+), listeners and upstream/
+-- pass-through config have no dedicated table; they are project config stored as Codable SettingsGroups
+-- in `settings` (doc §6), e.g. keys "proxy.intercept" / "proxy.matchReplace", ordered lists inside value_json.
+-- Proxy intercept rules (PRX-013/014), match & replace rules (PRX-020..025), listeners (PRX-001),
+-- upstream proxy rules (PRX-041) and TLS pass-through (PRX-007) have NO dedicated table: they are
+-- project config, stored as Codable SettingsGroups in `settings` (doc §6), e.g. key "proxy.intercept",
+-- "proxy.matchReplace". Ordered rule lists are arrays inside value_json (array order = rule order).
 
 CREATE TABLE sequencer_runs (id INTEGER PRIMARY KEY, name TEXT, config_json TEXT, tokens_blob INTEGER, results_json TEXT, created_at REAL);
 
