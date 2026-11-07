@@ -53,6 +53,10 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/m2-dod.sh
+      - name: M3a Definition of Done (HTTPS interception, Gulp CA trusted, history decrypted)
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/m3a-dod.sh
       - name: Build Beacon
         run: swift build --package-path Beacon -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
       - name: Test Beacon

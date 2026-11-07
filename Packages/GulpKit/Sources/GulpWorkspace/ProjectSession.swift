@@ -7,6 +7,7 @@ import GulpCore
 import GulpHTTP
 import GulpProxy
 import GulpStore
+import GulpTLS
 
 /// Where user-level data lives (doc 04 §5). Injectable so tests and the CLI can isolate it.
 public struct WorkspaceEnvironment: Sendable {
@@ -14,21 +15,41 @@ public struct WorkspaceEnvironment: Sendable {
     public var supportDirectory: URL
     /// `~/Library/Caches/Gulp` (temporary projects).
     public var cachesDirectory: URL
+    /// Where the user's Gulp CA lives (TLS-002): the Keychain for the macOS app, a 0600 file elsewhere.
+    public var caStore: any CAStore
+    /// Key type for a CA generated on first use (TLS-001: RSA-2048 by default).
+    public var caKeyType: CAKeyType = .rsa2048
 
     /// The platform's standard locations.
     public static var standard: WorkspaceEnvironment {
         let fm = FileManager.default
         let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
         let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first
+        let supportDirectory = (support ?? fm.temporaryDirectory).appendingPathComponent("Gulp")
+        #if canImport(Security)
+        let caStore: any CAStore = KeychainCAStore(
+            directory: supportDirectory.appendingPathComponent("CA", isDirectory: true))
+        #else
+        let caStore: any CAStore = FileCAStore(
+            directory: supportDirectory.appendingPathComponent("ca", isDirectory: true))
+        #endif
+        let cachesDirectory = (caches ?? fm.temporaryDirectory).appendingPathComponent("Gulp")
         return WorkspaceEnvironment(
-            supportDirectory: (support ?? fm.temporaryDirectory).appendingPathComponent("Gulp"),
-            cachesDirectory: (caches ?? fm.temporaryDirectory).appendingPathComponent("Gulp"))
+            supportDirectory: supportDirectory, cachesDirectory: cachesDirectory, caStore: caStore)
     }
 
-    /// Create an environment rooted at the given directories.
-    public init(supportDirectory: URL, cachesDirectory: URL) {
+    /// Create an environment rooted at the given directories. Without `caStore`, the CA is a file
+    /// store under `supportDirectory/ca`.
+    public init(supportDirectory: URL, cachesDirectory: URL, caStore: (any CAStore)? = nil) {
         self.supportDirectory = supportDirectory
         self.cachesDirectory = cachesDirectory
+        let directory = supportDirectory.appendingPathComponent("ca", isDirectory: true)
+        self.caStore = caStore ?? FileCAStore(directory: directory)
+    }
+
+    /// The user's CA, generated and saved on first use (TLS-001).
+    public func certificateAuthority() throws -> CertificateAuthority {
+        try CertificateAuthority.loadOrCreate(from: caStore, keyType: caKeyType)
     }
 
     var userSettingsFile: URL { supportDirectory.appendingPathComponent("user-settings.json") }
@@ -126,10 +147,13 @@ public actor ProjectSession {
     /// A temporary project is deleted on close unless saved (PRJ-001).
     public private(set) var isTemporary: Bool
     private let recorder: ProjectRecorder
+    /// Mints leaves for TLS interception; nil when the CA could not be loaded (CONNECT then fails
+    /// with a clear page instead of the project failing to open).
+    public nonisolated let minter: LeafMinter?
 
     private init(
         store: ProjectStore, events: EventBus, settings: LayeredSettings, isTemporary: Bool,
-        environment: WorkspaceEnvironment
+        environment: WorkspaceEnvironment, minter: LeafMinter?
     ) {
         self.store = store
         self.events = events
@@ -140,7 +164,10 @@ public actor ProjectSession {
         self.recorder = recorder
         let engine = NIOHTTPEngine(recorder: recorder)
         self.http = engine
-        self.proxy = ProxyServer(engine: engine)
+        self.minter = minter
+        let passThrough = settings.get(ProxySettings.self).passThroughHosts
+        self.proxy = ProxyServer(
+            engine: engine, tls: minter.map { ProxyTLSOptions(minter: $0, passThroughHosts: passThrough) })
     }
 
     /// The project file.
@@ -180,9 +207,10 @@ public actor ProjectSession {
             try await template.close()
             try await settings.importProjectSettings(values)
         }
+        let minter = (try? environment.certificateAuthority()).flatMap { try? LeafMinter(authority: $0) }
         return ProjectSession(
             store: store, events: events, settings: settings, isTemporary: temporary,
-            environment: environment)
+            environment: environment, minter: minter)
     }
 
     /// Save the project to `url` and continue working there (PRJ-002). A saved temporary project
@@ -222,6 +250,10 @@ public actor ProjectSession {
     /// listener, or the user-facing bind error.
     public func startProxyListeners() async -> [UUID: Result<Int, GulpError>] {
         var results: [UUID: Result<Int, GulpError>] = [:]
+        if let minter {
+            let passThrough = settings.get(ProxySettings.self).passThroughHosts
+            await proxy.setTLS(ProxyTLSOptions(minter: minter, passThroughHosts: passThrough))
+        }
         for listener in settings.get(ProxySettings.self).listeners where listener.enabled {
             do {
                 results[listener.id] = .success(try await proxy.start(listener))

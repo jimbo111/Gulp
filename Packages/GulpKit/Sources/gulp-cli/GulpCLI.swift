@@ -1,4 +1,4 @@
-// gulp-cli — headless entry point for Gulp. `send` (M1), `proxy` and `history` (M2); scan/project
+// gulp-cli — headless entry point for Gulp: `send` (M1), `proxy`/`history` (M2), `ca` (M3); scan/project
 // automation arrives with M17 (docs/features/F21-automation.md). It drives the same ProjectSession as
 // the app, so headless and GUI behave the same (doc 01 §5.2).
 
@@ -9,12 +9,13 @@ import GulpCore
 import GulpHTTP
 import GulpProxy
 import GulpStore
+import GulpTLS
 import GulpWorkspace
 
 /// Version marker for the Gulp command-line tool.
 enum GulpCLI {
     /// Semantic version of the CLI; bumped as the tool gains commands.
-    static let version = "0.2.0"
+    static let version = "0.3.0"
 }
 
 /// The root command. `@main` (in a file not named main.swift) is how ArgumentParser runs an async
@@ -23,7 +24,7 @@ enum GulpCLI {
 struct GulpCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "gulp-cli", abstract: "Gulp, headless.", version: GulpCLI.version,
-        subcommands: [Send.self, Proxy.self, History.self])
+        subcommands: [Send.self, Proxy.self, History.self, CA.self])
 }
 
 /// `gulp-cli send --raw request.txt --target http://host:port` writes the file's bytes exactly as
@@ -171,6 +172,44 @@ struct History: AsyncParsableCommand {
             }
         }
         try await store.close()
+    }
+}
+
+/// `gulp-cli ca export --out gulp-ca.pem` exports the user's Gulp CA certificate (TLS-006), creating
+/// the CA on first use; clients that trust it accept the certificates the proxy presents.
+struct CA: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Show or export the Gulp CA certificate.", subcommands: [Export.self, Show.self])
+
+    struct Export: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(abstract: "Write the CA certificate to a file.")
+
+        @Option(help: "Output file.")
+        var out: String
+
+        @Flag(help: "Write DER instead of PEM.")
+        var der = false
+
+        func run() async throws {
+            let authority = try WorkspaceEnvironment.standard.certificateAuthority()
+            let bytes = der ? try authority.certificateDER() : Array(try authority.certificatePEM().utf8)
+            guard FileManager.default.createFile(atPath: out, contents: Data(bytes)) else {
+                throw ValidationError("Cannot write \(out)")
+            }
+            print("gulp-cli ca: wrote \(out) (SHA-256 \(try authority.sha256Fingerprint()))")
+        }
+    }
+
+    struct Show: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(abstract: "Print the CA's subject and fingerprint.")
+
+        func run() async throws {
+            let authority = try WorkspaceEnvironment.standard.certificateAuthority()
+            print("subject: \(authority.certificate.subject)")
+            print("sha256:  \(try authority.sha256Fingerprint())")
+            let certificate = authority.certificate
+            print("valid:   \(certificate.notValidBefore) – \(certificate.notValidAfter)")
+        }
     }
 }
 

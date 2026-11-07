@@ -351,7 +351,7 @@ public final class NIOHTTPEngine: HTTPEngine {
         do {
             do {
                 channel = try await bootstrap.connect(to: address).get()
-            } catch where Self.shouldTryOtherAddresses(error, host: host) {
+            } catch let error where Self.shouldTryOtherAddresses(error, host: host) {
                 // The resolver's first answer can be an address nobody listens on (`localhost` →
                 // `::1` while the server is bound to 127.0.0.1): let NIO try every address.
                 channel = try await bootstrap.connect(host: host, port: port).get()

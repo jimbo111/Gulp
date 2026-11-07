@@ -139,12 +139,14 @@ let package = Package(
         .executableTarget(
             name: "gulp-cli",
             dependencies: [
-                "GulpWorkspace", "GulpAutomation", "GulpHTTP", "GulpProxy", "GulpStore", "GulpCore",
+                "GulpWorkspace", "GulpAutomation", "GulpHTTP", "GulpProxy", "GulpStore", "GulpTLS",
+                "GulpCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),
         .executableTarget(
             name: "gulp-vulnlab",
-            dependencies: ["GulpCore"] + nioCore + [
+            dependencies: ["GulpCore", "GulpTLS"] + nioCore + [
+                .product(name: "NIOSSL", package: "swift-nio-ssl"),
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),
@@ -187,7 +189,7 @@ let package = Package(
         .testTarget(name: "GulpScriptTests", dependencies: ["GulpScript"]),
         .testTarget(name: "GulpUITests", dependencies: ["GulpUI"]),
         .testTarget(name: "GulpFeaturesTests", dependencies: ["GulpFeatures"]),
-        .testTarget(name: "GulpWorkspaceTests", dependencies: ["GulpWorkspace"]),
+        .testTarget(name: "GulpWorkspaceTests", dependencies: ["GulpWorkspace", "GulpTLS"]),
         .testTarget(name: "GulpAutomationTests", dependencies: ["GulpAutomation"]),
         .testTarget(name: "IntegrationTests", dependencies: ["GulpWorkspace"]),
     ],

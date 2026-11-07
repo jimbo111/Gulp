@@ -1,9 +1,9 @@
 import GulpCore
 import GulpHTTP
+import GulpTLS
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
-import GulpTLS
 import NIOSSL
 import Testing
 
