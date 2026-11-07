@@ -14,12 +14,32 @@
 ## 2. Core Swift types (GulpCore)
 
 ```swift
-public struct Bytes: Sendable, Hashable, RandomAccessCollection { /* [UInt8] storage, cheap slices */ }
+// Bytes wraps [UInt8] with copy-on-write storage and cheap slices. Minimum API GulpCore relies on:
+public struct Bytes: Sendable, Hashable, RandomAccessCollection {
+    public typealias Element = UInt8
+    public typealias SubSequence = Bytes
+    public init(_ bytes: [UInt8])
+    public init(_ string: String)                 // UTF-8
+    public var startIndex: Int { get }; public var endIndex: Int { get }
+    public subscript(position: Int) -> UInt8 { get }
+    public subscript(bounds: Range<Int>) -> Bytes { get }
+    public func string(lossy: Bool = true) -> String   // UTF-8 view for display
+    public mutating func replaceSubrange(_ r: Range<Int>, with new: Bytes)
+}
 
 public struct RawRequest: Sendable, Hashable {
-    public var bytes: Bytes
-    public var parsed: ParsedRequest { get }      // cached lazily; invalidated on mutation
+    public var bytes: Bytes { get }               // the canonical bytes (see init/edit below)
+    public var parsed: ParsedRequest { get }      // parsed once at init and memoized (see note)
+    public init(_ bytes: Bytes)                   // parses eagerly; `parsed` is stored, not recomputed
+    /// Serializing is the identity: `RawRequest(b).serialize() == b` (doc 06 §2 round-trip test).
+    public func serialize() -> Bytes
+    /// Splice new bytes over a parsed byte range (e.g. a header value), returning a re-parsed value;
+    /// only those bytes change, everything else is preserved (doc 06 §2 edit test).
+    public func replacing(_ range: Range<Int>, with new: Bytes) -> RawRequest
 }
+// Memoization note: `parsed` is computed in `init` and stored, so there is no "mutate then
+// invalidate" problem — these are value types and any edit (`replacing`) returns a NEW value whose
+// `parsed` is recomputed from the spliced bytes. `bytes` is get-only for the same reason.
 
 public struct ParsedRequest: Sendable {
     public var method: Range<Int>                 // byte ranges into RawRequest.bytes
@@ -34,7 +54,30 @@ public struct ParsedRequest: Sendable {
 
 public struct HeaderField: Sendable { public var name: Range<Int>; public var value: Range<Int>; public var line: Range<Int> }
 
-public struct RawResponse: Sendable, Hashable { public var bytes: Bytes; public var parsed: ParsedResponse { get } }
+public struct ParsedResponse: Sendable {          // mirror of ParsedRequest for the status line
+    public var version: Range<Int>                // e.g. "HTTP/1.1"
+    public var statusCode: Int                    // parsed integer, e.g. 200
+    public var reasonPhrase: Range<Int>
+    public var headers: [HeaderField]             // in order, duplicates allowed
+    public var headerBlockEnd: Int                // index after CRLFCRLF (or LFLF, tolerated)
+    public var body: Range<Int>                   // the body as framed (raw; chunked stays chunked)
+    public var dechunkedBody: Bytes?              // de-chunked view when Transfer-Encoding: chunked
+    public var transferEncodingChunked: Bool
+    public var contentLength: Int?
+    public var bodyFraming: BodyFraming           // .contentLength / .chunked / .closeDelimited / .none
+    public var interimResponses: [ParsedResponse] // recorded 1xx responses that preceded this one (HTTP-002)
+    public var lineEnding: LineEnding
+    public var warnings: [ParseWarning]
+    public var incomplete: Bool                   // true if the connection closed before the declared body finished
+}
+
+public struct RawResponse: Sendable, Hashable {
+    public var bytes: Bytes { get }
+    public var parsed: ParsedResponse { get }
+    public init(_ bytes: Bytes)                   // parses eagerly; `parsed` memoized as in RawRequest
+    public func serialize() -> Bytes              // identity
+    public func replacing(_ range: Range<Int>, with new: Bytes) -> RawResponse
+}
 
 public struct HTTPTarget: Sendable, Hashable, Codable {
     public var scheme: Scheme            // .http / .https
@@ -54,13 +97,77 @@ public struct Exchange: Sendable, Identifiable {
     public var request: RawRequest
     public var response: RawResponse?              // nil while pending or failed
     public var state: ExchangeState                // .pending, .complete, .failed(GulpNetworkError), .dropped, .intercepted
-    public var timing: Timing                      // start, dnsMs, connectMs, tlsMs, ttfbMs, totalMs
+    public var timing: Timing                      // see Timing below (all phases of HTTP-010)
     public var clientAddress: String?              // for proxy traffic
     public var connectionID: UInt64                // groups requests on the same connection
     public var tls: TLSInfo?                       // negotiated version, cipher, ALPN, server cert chain fingerprint
     public var edited: EditInfo?                   // original request/response if modified by intercept or match&replace
     public var annotation: Annotation              // comment, highlight, tags
     public var derived: DerivedFields              // host, path, query, mime, status, lengths, title, param count, cookies set…
+}
+
+// ---- Supporting value types (all in GulpCore) ----
+public enum Scheme: String, Sendable, Codable { case http, https }
+public enum HTTPVersion: String, Sendable, Codable { case http1_0 = "HTTP/1.0", http1_1 = "HTTP/1.1", http2 = "HTTP/2" }
+public enum LineEnding: Sendable { case crlf, lf, mixed }
+public enum BodyFraming: Sendable { case contentLength, chunked, closeDelimited, none }
+public enum ParseWarning: Sendable, Equatable {
+    case bareLF, obsoleteLineFolding, missingFinalCRLF, invalidCharInName, duplicateContentLength,
+         conflictingFraming, oversizedHeaders, nonUTF8
+}
+
+public struct Timing: Sendable, Codable {         // milliseconds per phase; all of HTTP-010
+    public var start: Date
+    public var dnsMs, connectMs, tlsMs, requestWriteMs, ttfbMs, downloadMs, totalMs: Double?
+}  // tlsMs/connectMs are nil for reused or plaintext connections; requestWriteMs + downloadMs added per HTTP-010.
+
+public struct TLSInfo: Sendable, Codable {        // Exchange.tls
+    public var version: String                    // e.g. "TLSv1.3"
+    public var cipherSuite: String
+    public var alpn: String?                       // "h2" / "http/1.1"
+    public var serverChainSHA256: [String]         // fingerprints, leaf first
+    public var validation: TLSValidation           // .ok / .failed(reason) / .notChecked
+}
+public enum TLSValidation: Sendable, Codable, Equatable { case ok, notChecked, failed(String) }
+
+public struct EditInfo: Sendable {                // Exchange.edited (set when intercept/match&replace changed bytes)
+    public var originalRequest: RawRequest?
+    public var originalResponse: RawResponse?
+    public var editedBy: ToolSource                // who changed it
+}
+
+public struct DerivedFields: Sendable, Codable {  // denormalized columns mirrored into `exchanges` (doc §4)
+    public var host: String; public var port: Int; public var scheme: Scheme
+    public var method: String?; public var path: String?; public var query: String?; public var ext: String?
+    public var status: Int?; public var responseLength: Int?; public var mime: String?; public var title: String?
+    public var paramCount: Int; public var hasCookies: Bool; public var setsCookies: Bool
+}
+
+public struct Annotation: Sendable, Codable {     // Exchange.annotation
+    public var comment: String?; public var highlight: Highlight?; public var tags: [String]
+}
+
+// ToolSource encodes to the TEXT column `exchanges.source` as a stable string: the simple cases are
+// their names ("proxy","repeater",…); `.extension(id)` encodes as "extension:<id>".
+public enum ToolSource: Sendable, Codable, Hashable {
+    case proxy, repeater, fuzzer, scanner, crawler, sequencer, session, browser, automation, ai
+    case extension(id: String)
+    public var rawValue: String { get }            // the TEXT encoding above
+    public init?(rawValue: String)
+}
+
+// Error model. GulpNetworkError is the typed failure stored in ExchangeState.failed and serialized
+// into `exchanges.error`; GulpError is the user-facing app error (message + recovery suggestion).
+public enum GulpNetworkError: Sendable, Codable, Equatable {
+    case cancelled, connectTimeout, tlsHandshakeTimeout, firstByteTimeout, idleTimeout, totalTimeout
+    case connectionRefused, connectionReset, dnsFailure(String), tlsFailure(String)
+    case tooLarge(limit: Int), incompleteResponse, upstreamProxyError(String), other(String)
+    public var code: String { get }                // the `exchanges.error` TEXT token, e.g. "connect_timeout"
+}
+public struct GulpError: Error, Sendable {         // thrown to the UI/CLI, never stored in an exchange
+    public var message: String                     // user-facing
+    public var recoverySuggestion: String?
+    public var underlying: GulpNetworkError?
 }
 ```
 

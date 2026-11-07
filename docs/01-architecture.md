@@ -218,7 +218,25 @@ The ID types are `Int64` row ids (`typealias TaskID = Int64`, likewise `Exchange
 is Gulp's own value type (fraction done, counts, ETA — not Foundation's `Progress`). `SettingsKey`
 identifies a settings group + key (it maps to the `SettingsGroup.key` string of doc 04 §6, carried
 as `struct SettingsKey { let group: String; let key: String? }`). `LogEntry` is the event-log record
-shown in the Event Log panel (§8).
+shown in the Event Log panel (§8), and `GulpError` is the user-facing error (doc 04 §2).
+
+`EventBus` public API (the overflow marker is on the **delivery wrapper**, not a `GulpEvent` case):
+
+```swift
+public struct Delivery: Sendable {                 // what a subscriber's stream yields
+    public var event: GulpEvent?                   // the event, or nil when `lagged` > 0
+    public var lagged: Int                          // 0 normally; N = events this subscriber missed on overflow
+}
+public actor EventBus {
+    public func publish(_ event: GulpEvent)         // never blocks; fans out to each subscriber's bounded buffer
+    public func subscribe(bufferSize: Int = 256) -> AsyncStream<Delivery>   // on overflow, yields Delivery(event: nil, lagged: n)
+    public func unsubscribe(_ id: SubscriptionID)   // also happens automatically when the stream is dropped
+}
+```
+
+A subscriber that sees `lagged > 0` should re-query the store for the window it missed (§5.3). This
+is why `.lagged` is **not** a `GulpEvent` case: the event enum stays a pure description of what
+happened, and backpressure is expressed by the transport wrapper.
 
 ### 5.4 Concurrency and threading
 
@@ -274,7 +292,7 @@ Logger records exchange (source = tool)   →  passive scanner (if enabled for t
 |---|---|
 | `ByteBuffer`-free `Bytes` (`[UInt8]` wrapper with slicing views) | Core message storage, independent of NIO, so that UI and store don't import NIO |
 | `RawRequest`, `RawResponse` | Raw bytes plus lazily computed `ParsedHTTPMessage` (byte ranges of start line, headers, body) |
-| `HTTPTarget` | `scheme`, `host`, `port`, `sni?`, `ipOverride?`, `httpVersionPreference` |
+| `HTTPTarget` | `scheme`, `host`, `port`, `sniOverride?`, `ipOverride?` (HTTP-version preference is **not** here — it lives in `SendOptions`, F03 §2, since it's per-send not per-target; authoritative shape in doc 04 §2) |
 | `Exchange` | One request/response pair with metadata (see doc 04) |
 | `InsertionPoint` | A named byte range in a request plus an encoding context (F08) |
 | `ScopeService` / `ScopeGuard` | Scope rules and checks (F04) |

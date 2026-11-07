@@ -18,7 +18,7 @@ public struct SendOptions: Sendable {
     public var followRedirects: RedirectPolicy = .never           // .never, .onSite, .inScope, .always (+ maxHops, + process cookies)
     public var updateContentLength = false
     public var normalizeLineEndings = false
-    public var timeouts = Timeouts(connect: .seconds(10), firstByte: .seconds(30), total: .seconds(120))
+    public var timeouts = Timeouts()   // all phases of HTTP-005 (see type below)
     public var maxResponseBytes = 50 * 1024 * 1024
     public var decompressForHooks = true
     public var tlsProfile: TLSProfile? = nil
@@ -36,6 +36,32 @@ public protocol HTTPEngine: Sendable {
 
 public enum GroupSendMode: Sendable { case sequentialSingleConnection, sequentialSeparateConnections, parallel, singlePacket }
 ```
+
+Supporting types for the API above:
+
+```swift
+public struct Timeouts: Sendable {                 // every phase named by HTTP-005
+    public var connect: Duration = .seconds(10)
+    public var tlsHandshake: Duration = .seconds(10)
+    public var firstByte: Duration = .seconds(30)
+    public var idleBetweenBytes: Duration = .seconds(30)
+    public var total: Duration = .seconds(120)
+}
+public struct ExchangeResult: Sendable {
+    public var exchange: Exchange                  // the final record (recorded per options.recordAs)
+    public var redirectChain: [Exchange]           // empty unless followRedirects produced hops
+    public var error: GulpNetworkError?            // nil on success; also reflected in exchange.state
+}
+public struct GroupItem: Sendable {                // one request in a group send (F03 §3.3)
+    public var request: RawRequest
+    public var target: HTTPTarget
+}
+```
+
+`WebSocketSession` is the live-socket handle returned by `openWebSocket`; its full surface (send/
+receive frames, close, reconnect) is specified in F01 §2.4 / F26 — for M1 the `openWebSocket` method
+and `WebSocketSession` type are declared but not implemented (WebSockets are M4), so M1 ships the
+type as an unimplemented stub that throws `.unsupported` if called.
 
 `ExchangeResult` contains the final `Exchange` (recorded or not, depending on options), the redirect
 chain if one was followed, and timing.

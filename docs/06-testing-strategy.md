@@ -37,7 +37,7 @@ tests can measure false positives.
 
 | Area | Vulnerable endpoint(s) | Safe twin | Used by |
 |---|---|---|---|
-| Basics | `/echo` (reflects the request as a readable response), **`/echo-raw`** (a raw TCP listener on :8089 that writes back the exact bytes it received, verbatim — used for byte-fidelity tests with malformed/duplicate headers and bare LF), `/redirect?to=`, `/chunked`, `/gzip`, `/slow?ms=`, `/large?mb=`, `/status/{code}`, `/h2` (HTTPS listener on :8443 with ALPN h2) | — | F01, F03 |
+| Basics | `/echo` (reflects the request as a readable response), **`/echo-raw`** (a raw TCP listener on :8089 that writes back the exact bytes it received, verbatim — used for byte-fidelity tests with malformed/duplicate headers and bare LF), `/redirect?to=`, `/chunked`, `/gzip`, `/slow?ms=`, `/large?mb=`, `/status/{code}`, `/continue` (emits `100 Continue` then the final response), `/h2` (HTTPS listener on :8443 with ALPN h2) | — | F01, F03 |
 | Auth | `/login` (form + CSRF token), `/account` (session cookie), `/api/me` (Bearer JWT), session expires after N requests (configurable) | — | F15, F07 |
 | Reflected XSS | `/xss/html?q=`, `/xss/attr?q=`, `/xss/js?q=`, `/xss/url?q=` (into href) | `/safe/xss/...` (encoded per context) | SCN |
 | Stored XSS | `/guestbook` (POST, then rendered on GET) | `/safe/guestbook` | SCN |
@@ -61,6 +61,19 @@ tests can measure false positives.
 | WebSockets | `/ws/chat` (echo + broadcast; an XSS sink in messages) | — | PRX |
 | Clickjacking | `/frameable` (no X-Frame-Options / frame-ancestors) | `/safe/frameable` | BRW (Frame Kit) |
 | SPA | `/app/` (client-side routing, links rendered by JS) | — | CRL |
+
+**M1 endpoint behaviors (so the M1 build isn't guessing).** `/echo` returns `200` with the request's
+method, target, headers and body reflected as `text/plain` (and `Content-Length` set). `/echo-raw`
+(raw TCP, :8089) writes the exact received bytes straight back and then **closes the connection**
+(close-delimited), so a client reading to EOF gets a byte-identical copy — this is the byte-fidelity
+oracle for HTTP-001 and the M1 DoD. `/redirect?to=` returns `302` with a `Location` of the `to`
+value. `/chunked` responds `Transfer-Encoding: chunked` in several small chunks (e.g. 3 chunks) plus
+a terminating zero-chunk (optionally a trailer, to exercise trailer parsing). `/gzip` sets
+`Content-Encoding: gzip`; `/slow?ms=` delays before the body; `/large?mb=` streams N MB;
+`/status/{code}` returns that status (used for the Governor-backoff test). A `/continue` endpoint
+emits a `100 Continue` interim response before the final one, to exercise 1xx handling (recorded in
+`ParsedResponse.interimResponses`, doc 04 §2). Fixture files for the parser round-trip/edit tests
+live in `Tests/Fixtures/http/` and are authored as part of M1 (doc §2 lists the malformed cases).
 
 **Determinism prerequisites.** For the accuracy test to be stable, VulnLab must make its planted
 issues explicit rather than incidental:
