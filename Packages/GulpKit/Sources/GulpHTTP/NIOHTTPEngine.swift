@@ -282,9 +282,10 @@ public final class NIOHTTPEngine: HTTPEngine {
 
             let keep =
                 wire.error == nil && wire.reusable && options.connection != .newAndClose
-                && !request.hasHeaderToken("connection", "close") && !Task.isCancelled
+                && KeepAlive.requestAllowsReuse(request) && !Task.isCancelled
             if keep {
-                await pool.putIdle(key, channel: channel, id: connectionID)
+                let timeout = KeepAlive.serverTimeout(wire.bytes)
+                await pool.putIdle(key, channel: channel, id: connectionID, serverTimeout: timeout)
             } else {
                 channel.close(promise: nil)
             }
@@ -470,5 +471,34 @@ extension UpstreamProxy {
     var basicAuthorization: String? {
         guard let username else { return nil }
         return "Basic " + Data("\(username):\(password ?? "")".utf8).base64EncodedString()
+    }
+}
+
+/// Keep-alive decisions that depend on the request and on the server's hints (HTTP-003).
+enum KeepAlive {
+    /// False when the request itself ends the connection: `Connection: close`, or HTTP/1.0 without
+    /// `Connection: keep-alive` (the server will close after responding).
+    static func requestAllowsReuse(_ request: RawRequest) -> Bool {
+        if request.hasHeaderToken("connection", "close") { return false }
+        let version = request.bytes[request.parsed.version].string()
+        return version != "HTTP/1.0" || request.hasHeaderToken("connection", "keep-alive")
+    }
+
+    /// The server's `Keep-Alive: timeout=N` minus a one-second margin, read from the response's
+    /// header block only.
+    static func serverTimeout(_ response: [UInt8]) -> TimeAmount? {
+        let (end, terminator) = HTTP1.headerBlockEnd(response)
+        guard terminator != 0 else { return nil }
+        let head = RawResponse(Bytes(Array(response[..<end])))
+        guard let value = head.headerValue("keep-alive")?.string().lowercased() else { return nil }
+        for parameter in value.split(separator: ",") {
+            let pair = parameter.split(separator: "=", maxSplits: 1).map {
+                String($0).trimmingCharacters(in: .whitespaces)
+            }
+            if pair.count == 2, pair[0] == "timeout", let seconds = Int(pair[1]), seconds >= 0 {
+                return .seconds(Int64(max(0, seconds - 1)))
+            }
+        }
+        return nil
     }
 }

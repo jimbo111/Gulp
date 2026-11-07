@@ -13,16 +13,35 @@ public final class ProjectStore: Sendable {
     /// Batched exchange writes; also the engine's recorder (via GulpWorkspace).
     public let writer: StoreWriter
     let pool: DatabasePool
+    private let lock: ProjectLock
 
-    private init(url: URL, pool: DatabasePool, writer: StoreWriter) {
+    private init(url: URL, pool: DatabasePool, writer: StoreWriter, lock: ProjectLock) {
         self.url = url
         self.pool = pool
         self.writer = writer
+        self.lock = lock
     }
 
     /// Open (creating if needed) the project at `url`, migrating it to the current schema.
     public static func open(
         at url: URL, eventBus: EventBus? = nil, durable: Bool = false
+    ) throws -> ProjectStore {
+        let lock = try ProjectLock(for: url)
+        do {
+            return try openLocked(at: url, eventBus: eventBus, durable: durable, lock: lock)
+        } catch {
+            lock.release()
+            throw error
+        }
+    }
+
+    /// Throw `StoreError.alreadyOpen` if another session has the project at `url` open.
+    public static func ensureNotOpen(_ url: URL) throws {
+        try ProjectLock(for: url).release()
+    }
+
+    private static func openLocked(
+        at url: URL, eventBus: EventBus?, durable: Bool, lock: ProjectLock
     ) throws -> ProjectStore {
         var configuration = Configuration()
         configuration.prepareDatabase { db in
@@ -51,7 +70,7 @@ public final class ProjectStore: Sendable {
             return try ExchangeID.fetchOne(db, sql: next) ?? 1
         }
         let writer = StoreWriter(pool: pool, nextID: nextID, eventBus: eventBus, durable: durable)
-        return ProjectStore(url: url, pool: pool, writer: writer)
+        return ProjectStore(url: url, pool: pool, writer: writer, lock: lock)
     }
 
     /// Flush pending writes, checkpoint the WAL into the main file, and release the file. The store
@@ -62,6 +81,9 @@ public final class ProjectStore: Sendable {
             try db.checkpoint(.truncate)
         }
         try pool.close()
+        // Unlink while still holding the lock, so nobody can lock the old file in between.
+        try? FileManager.default.removeItem(atPath: ProjectLock.path(for: url))
+        lock.release()
     }
 
     /// Write a consistent copy of the whole project to `url` (Save As, PRJ-002), using SQLite's

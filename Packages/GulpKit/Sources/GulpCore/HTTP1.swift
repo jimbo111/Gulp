@@ -355,6 +355,12 @@ public enum HTTP1 {
         }
         let (fields, hWarn) = parseHeaders(a, lineRanges.dropFirst())
         warnings.append(contentsOf: hWarn)
+        // Framing ambiguity stays visible (F01 §4.1): it is exactly what smuggling tests look for.
+        let lengths = headerValues("content-length", fields, a)
+        if lengths.count > 1 { warnings.append(.duplicateContentLength) }
+        if !lengths.isEmpty, !headerValues("transfer-encoding", fields, a).isEmpty {
+            warnings.append(.conflictingFraming)
+        }
         return ParsedRequest(
             method: method, target: target, version: version, headers: fields,
             headerBlockEnd: end, body: end..<a.count, lineEnding: ending, warnings: warnings)

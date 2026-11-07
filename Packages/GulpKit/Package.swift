@@ -88,7 +88,8 @@ let package = Package(
                 .product(name: "NIOHTTPCompression", package: "swift-nio-extras"),
                 .product(name: "NIOSOCKS", package: "swift-nio-extras"),
             ]),
-        .target(name: "GulpProxy", dependencies: ["GulpCore", "GulpHTTP", "GulpTLS"] + nioHTTP),
+        .target(
+            name: "GulpProxy", dependencies: ["GulpCore", "GulpHTTP", "GulpTLS"] + nioHTTP + nioConcurrency),
         .target(name: "GulpSession", dependencies: ["GulpCore", "GulpHTTP"]),
         .target(name: "GulpRepeater", dependencies: ["GulpCore", "GulpHTTP"]),
         .target(name: "GulpOAST", dependencies: ["GulpCore", "GulpHTTP"]),

@@ -73,4 +73,6 @@ public enum StoreError: Error, Sendable, Equatable {
     case corruptBlob(Int64)
     /// The file is a project from a newer schema than this build understands.
     case newerSchema(Int)
+    /// Another window or process already has this project open (F20 §5).
+    case alreadyOpen(String)
 }

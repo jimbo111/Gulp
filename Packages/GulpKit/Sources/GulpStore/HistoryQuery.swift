@@ -60,8 +60,8 @@ public struct HistoryFilter: Sendable, Hashable {
             clauses.append("(highlight IS NOT NULL OR (comment IS NOT NULL AND comment != ''))")
         }
         if let mimeContains, !mimeContains.isEmpty {
-            clauses.append("mime LIKE ?")
-            arguments.append("%\(mimeContains.lowercased())%".databaseValue)
+            clauses.append("mime LIKE ? ESCAPE '\\'")
+            arguments.append(Self.likeContains(mimeContains.lowercased()).databaseValue)
         }
         if !methods.isEmpty {
             let marks = Array(repeating: "?", count: methods.count).joined(separator: ", ")
@@ -69,10 +69,21 @@ public struct HistoryFilter: Sendable, Hashable {
             arguments += methods.sorted().map(\.databaseValue)
         }
         if let text, !text.isEmpty {
-            clauses.append("(host LIKE ? OR path LIKE ?)")
-            arguments += ["%\(text)%".databaseValue, "%\(text)%".databaseValue]
+            clauses.append("(host LIKE ? ESCAPE '\\' OR path LIKE ? ESCAPE '\\')")
+            let pattern = Self.likeContains(text).databaseValue
+            arguments += [pattern, pattern]
         }
         return (clauses.isEmpty ? "1" : clauses.joined(separator: " AND "), arguments)
+    }
+
+    /// A LIKE pattern matching `text` literally anywhere (`%`, `_` and `\` escaped).
+    static func likeContains(_ text: String) -> String {
+        var escaped = ""
+        for character in text {
+            if character == "%" || character == "_" || character == "\\" { escaped.append("\\") }
+            escaped.append(character)
+        }
+        return "%" + escaped + "%"
     }
 }
 

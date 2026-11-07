@@ -196,6 +196,19 @@ struct StoreTests {
         #expect(next == 11)
     }
 
+    @Test("F20 §5: a project open in one session cannot be opened again until it is closed")
+    func test_singleWriterLock() async throws {
+        let url = temporaryProject()
+        let store = try ProjectStore.open(at: url)
+        #expect(throws: StoreError.alreadyOpen(url.lastPathComponent)) {
+            _ = try ProjectStore.open(at: url)
+        }
+        #expect(throws: StoreError.self) { try ProjectStore.ensureNotOpen(url) }
+        try await store.close()
+        let again = try ProjectStore.open(at: url)
+        try await again.close()
+    }
+
     @Test("Project settings are stored as JSON per key (doc 04 §6)")
     func test_settings() async throws {
         let store = try ProjectStore.open(at: temporaryProject())
