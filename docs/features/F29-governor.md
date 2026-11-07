@@ -7,18 +7,22 @@
 
 One place that bounds everything Gulp *generates*: global and per-host concurrency and request-rate
 caps, resource watchpoints, scheduled quiet hours, and a one-key **panic stop** that halts every
-active tool at once. Today rate limiting and resource pools exist per tool (doc 00 §6) with no global
-ceiling, no per-host budget shared across tools, and no emergency brake. This is both a safety
-feature ("safe by default") and a performance control, and it's the single choke point active tools
-already pass through for ScopeGuard.
+active tool at once. **F03 HTTP-013 already specifies the shared global + per-host requests/sec
+token-bucket** (and tools honor it — FUZ-030/033), so Governor does not reinvent it: it **owns,
+consolidates and exposes** that limiter as a first-class, user-visible control and **adds** what
+HTTP-013 doesn't cover — a panic stop, shared per-host *concurrency* budgets, resource watchpoints,
+quiet hours, adaptive backoff, and a live throughput panel. (GOV-002/003 below are the HTTP-013
+limiter, extended; the Governor is its home.) It's both a safety feature ("safe by default") and a
+performance control, sitting at the same choke point active tools already pass through for
+ScopeGuard.
 
 ## 2. Requirements
 
 | ID | Pri | Requirement |
 |---|---|---|
 | GOV-001 | P0 | **Panic stop** (⌃. and a toolbar + menu-bar-extra item): immediately pause all active, network-generating tasks across the project (Scanner, Crawler, Fuzzer, Beacon injection, Sequencer capture, Drift runs, scheduled tasks); show what was stopped and offer "resume all". |
-| GOV-002 | P0 | **Global caps**: max total concurrent outbound connections and max requests/sec across *all* tools, enforced by a shared token-bucket + semaphore in `GulpHTTP` that every active tool draws from. |
-| GOV-003 | P0 | **Per-host budgets**: concurrency and req/s limits keyed by host, shared across tools, so Scanner + Fuzzer hitting one host can't collectively overrun it; conservative defaults, overridable per host. |
+| GOV-002 | P0 | **Global caps**: max total concurrent outbound connections and max requests/sec across *all* tools. This **is** the F03 HTTP-013 shared token-bucket, extended with a global concurrency semaphore; every active tool draws from the one `GulpHTTP` limiter (not a second, parallel one). |
+| GOV-003 | P0 | **Per-host budgets**: per-host req/s (from HTTP-013) **plus** a per-host concurrency limit, shared across tools so Scanner + Fuzzer hitting one host can't collectively overrun it; conservative defaults, overridable per host. |
 | GOV-004 | P1 | **Resource watchpoints**: pause active tasks and warn when project size, free disk, or app memory cross thresholds; tie into PRJ-010 retention. |
 | GOV-005 | P1 | **Quiet hours / windows**: a schedule during which active tools auto-pause (e.g. no automated traffic during business hours on prod), integrating with the scheduler (F17 ETL-006). |
 | GOV-006 | P1 | **Live throughput panel** (status bar + Dashboard): current req/s, in-flight, per-host leaders, and which cap is the current bottleneck. |

@@ -221,6 +221,43 @@ CREATE TABLE settings (scope TEXT, key TEXT, value_json TEXT, PRIMARY KEY(scope,
 CREATE TABLE extension_state (extension_id TEXT, key TEXT, value BLOB, PRIMARY KEY(extension_id, key));
 ```
 
+### Post-1.0 expansion tables (Phase F, migration v2+)
+
+These back the Phase F features (F30 Drift & Retest, F31 Journal). They ship as a later additive
+migration (`v2_phasef`), not in schema v1, but are defined here so the schema stays centralized.
+
+```sql
+-- F30 Drift & Retest -------------------------------------------------------
+CREATE TABLE drift_baselines (id INTEGER PRIMARY KEY, name TEXT, created_at REAL, scope_json TEXT);
+CREATE TABLE drift_endpoints (                                 -- immutable per-endpoint snapshot (DRF-001)
+  id INTEGER PRIMARY KEY, baseline_id INTEGER REFERENCES drift_baselines(id) ON DELETE CASCADE,
+  target_json TEXT, request_blob INTEGER REFERENCES blobs(id), response_blob INTEGER REFERENCES blobs(id),
+  facts_json TEXT, mask_json TEXT                              -- extracted facts + per-endpoint noise masks (DRF-006)
+);
+CREATE TABLE drift_runs (id INTEGER PRIMARY KEY, baseline_id INTEGER REFERENCES drift_baselines(id) ON DELETE CASCADE, run_at REAL);
+CREATE TABLE drift_results (                                   -- one row per endpoint per run (DRF-004)
+  run_id INTEGER REFERENCES drift_runs(id) ON DELETE CASCADE, endpoint_id INTEGER REFERENCES drift_endpoints(id),
+  status TEXT,                                                 -- unchanged | changed | new | removed | error
+  sample_request_blob INTEGER REFERENCES blobs(id), sample_response_blob INTEGER REFERENCES blobs(id),
+  diff_json TEXT, PRIMARY KEY(run_id, endpoint_id)
+);
+CREATE TABLE issue_proofs (                                    -- replayable proof per issue (DRF-003)
+  id INTEGER PRIMARY KEY, issue_id INTEGER REFERENCES issues(id) ON DELETE CASCADE,
+  target_json TEXT, request_blob INTEGER REFERENCES blobs(id), matcher_json TEXT, created_at REAL
+);
+CREATE TABLE retest_runs (                                     -- per-issue retest history (DRF-005)
+  id INTEGER PRIMARY KEY, issue_id INTEGER REFERENCES issues(id) ON DELETE CASCADE, run_at REAL,
+  verdict TEXT,                                                -- fixed | still_vulnerable | changed | needs_review
+  evidence_exchange_id INTEGER REFERENCES exchanges(id), note TEXT
+);  -- the verdict axis is retest-run history; issues.status is updated from it, not replaced by it.
+
+-- F31 Journal (coverage index is derived/rebuildable; only these need persistence) ---------------
+CREATE TABLE journal_checklists (                              -- per-endpoint methodology goals (JRN-006)
+  id INTEGER PRIMARY KEY, host TEXT, endpoint_key TEXT, category TEXT, done INTEGER NOT NULL DEFAULT 0, note TEXT
+);
+CREATE TABLE journal_markers (id INTEGER PRIMARY KEY, at REAL, label TEXT, note TEXT);  -- timeline pins (JRN-008)
+```
+
 ### Notes
 
 - **Migrations**: use GRDB's `DatabaseMigrator`, one registered migration per schema change, named

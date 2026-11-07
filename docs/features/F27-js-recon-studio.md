@@ -1,7 +1,9 @@
 # F27 — JS Recon Studio (source-map recovery & API inventory)
 
-> Milestone: M23 (the recon core only needs F04/F05, so it can be built earlier if desired) · Modules: `GulpFeatures/JSRecon` + helpers in
-> `GulpCore`/`GulpStore` · Depends on: F04, F05, F08, F09, F23
+> Milestone: M23 (the recon core only needs F04/F05, so it can be built earlier if desired) · Modules: `GulpFeatures/JSRecon`
+> (asset storage in `GulpStore`; source-map/endpoint parsing is pure Swift and may live in `GulpCodec`/`GulpCore`; the JS
+> beautifier is either a pure-Swift formatter or, if it uses JavaScriptCore, `GulpScript` — **not** `GulpCore`, which is
+> pure-Swift and Linux-building, doc 01 §3 rule 3) · Depends on: F04, F05, F08, F09, F23
 
 ## 1. Purpose
 
@@ -18,7 +20,7 @@ code into live attack surface.
 | ID | Pri | Requirement |
 |---|---|---|
 | JSR-001 | P0 | Collect all JS (and CSS) assets observed for selected in-scope hosts, dedup by content hash, show size/host/first-seen; pull fresh copies via the engine on request (scope-gated). |
-| JSR-002 | P0 | Beautify/unminify JS for readable viewing and search, with syntax highlighting (reuse the F04/F05 viewer component). |
+| JSR-002 | P0 | Beautify/unminify JS for readable viewing and search, with syntax highlighting (reuse the `MessageEditor`, doc 05 UI-010, from `GulpUI`). |
 | JSR-003 | P0 | Recover original sources from source maps: detect `//# sourceMappingURL` and inline/base64 maps, fetch referenced `.map` files, and reconstruct the original file tree from `sourcesContent` as a browsable virtual folder. |
 | JSR-004 | P0 | Extract an endpoint/API inventory from JS/maps — URL string literals, `fetch`/XHR/axios/`$.ajax` targets, route-table paths, GraphQL operation strings — normalized against the target origin, deduped. |
 | JSR-005 | P0 | Send discovered endpoints into the site map (F04) and offer "crawl/scan/Param-Discover these" (F08/F09/F23), honoring scope. |
@@ -36,8 +38,10 @@ view across captures.
 
 ## 4. Implementation notes
 
-- Beautify with a bundled JS pretty-printer; source-map reconstruction parses the Source Map v3 JSON
-  (`sources` + `sourcesContent`) into a virtual tree (no eval, pure data).
+- Beautify with a pure-Swift JS formatter where possible (keeps it Linux-buildable); if a
+  JavaScriptCore-based beautifier is used it lives in `GulpScript` (macOS-only), never in `GulpCore`.
+  Source-map reconstruction parses the Source Map v3 JSON (`sources` + `sourcesContent`) into a
+  virtual tree — no eval, pure data, so it can live in a cross-platform module.
 - Endpoint extraction combines AST-ish scans (string literals passed to known fetch/XHR/axios calls)
   with scoped regexes; normalize relative URLs against the asset's origin; dedup against the site map.
 - This is pure parsing/orchestration — no attack sends except the scope-gated asset re-fetch and the

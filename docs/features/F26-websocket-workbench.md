@@ -1,23 +1,25 @@
 # F26 — WebSocket Security Workbench
 
 > Milestone: M22 · Modules: `GulpFeatures/WSX` + helpers in `GulpHTTP`/`GulpFuzzer` ·
-> Depends on: F01, F03, F07, F08, F10, F15
+> Depends on: F01, F03, F06, F07, F08, F10, F15, F29 (Governor limiter)
 
 ## 1. Purpose
 
-F01 proxies, intercepts and edits WebSocket frames but can't **replay**, **fuzz**, or
-**security-test** a socket. This adds a WS Repeater (reconnect + resend + iterate), a WS Fuzzer
-(payload sets into a message template with match/extract), and dedicated checks — Cross-Site
-WebSocket Hijacking (CSWSH), handshake-time vs per-message authorization, and message-level
-injection delivered over WS and OAST-correlated. Modern apps (chat, trading, collaborative editors,
-GraphQL-over-WS subscriptions) run critical logic over sockets that today's tooling barely reaches.
+v1 can proxy/intercept/edit WebSocket frames (F01) and **replay** them interactively via the
+WebSocket Repeater that already ships in F06 (REP-012, M5). What's still missing is **fuzzing** and
+**security-testing** a socket. F26 therefore **builds on** the F06 WS Repeater rather than
+re-implementing it, adding: a WS **Fuzzer**, and dedicated checks — Cross-Site WebSocket Hijacking
+(CSWSH), handshake-time vs per-message authorization, and message-level injection delivered over WS
+and OAST-correlated — plus sub-protocol decoding shared with the Repeater. Modern apps (chat,
+trading, collaborative editors, GraphQL-over-WS subscriptions) run critical logic over sockets that
+today's tooling barely reaches.
 
 ## 2. Requirements
 
 | ID | Pri | Requirement |
 |---|---|---|
-| WSX-001 | P0 | **WS Repeater**: open a WebSocket (reusing the F01/F03 handshake + proxy/scope config, honoring cookies/identities from F15) and send/edit/resend individual frames (text/binary/ping/close) with a per-connection history. |
-| WSX-002 | P0 | **WS Fuzzer**: fuzz a message template with `§…§` insertion points across payload sets (reusing the F07 engine) over one live socket, with match/extract rules on returned frames and a results grid. |
+| WSX-001 | P0 | **WS Repeater** is F06 REP-012 — this spec does not duplicate it. F26 surfaces it alongside the Fuzzer/checks here and extends it with the sub-protocol decoding (WSX-006), the structured insertion-point actions (WSX-007) and the identity-swap used by WSX-004. "Send to WS Repeater" continues to route through F01 PRX-035 → REP-012. |
+| WSX-002 | P0 | **WS Fuzzer**: fuzz a message template with `§…§` insertion points across payload sets over one live socket, reusing only the F07 **payload generators/processors and grep** (not F07's HTTP-exchange loop — WS iterates frames over one persistent `openWebSocket` connection). Results are WS messages, stored in `ws_messages` (not `fuzzer_results`/`exchanges`), with match/extract rules on returned frames and a results grid. |
 | WSX-003 | P0 | **CSWSH**: replay the upgrade handshake with a forged/absent/cross-origin `Origin` header and report whether the server still upgrades and returns authenticated data; raise a CSWSH issue (F08). |
 | WSX-004 | P0 | Distinguish **handshake-time vs per-message authorization** by replaying messages with a stripped/other-identity session and reporting whether privileged actions still succeed. |
 | WSX-005 | P1 | OAST-correlated (F10) blind injection over WS messages (SSRF/command/XXE-style payloads carried in frames). |
@@ -34,8 +36,12 @@ the frame to send; a Fuzzer sub-view (template + payload sets + results grid); a
 
 ## 4. Implementation notes
 
-- Builds on `HTTPEngine.openWebSocket` (F03) and the WS framing/`permessage-deflate` handling from
-  F01; the Repeater/Fuzzer reuse the F07 payload engine and grep/extract.
+- Builds on `HTTPEngine.openWebSocket` (F03). The WS **frame codec** (framing + `permessage-deflate`)
+  belongs in `GulpHTTP` (services layer) so both `GulpProxy` (F01's proxy path) and `openWebSocket`
+  share one implementation — WSX (a feature module) must not import `GulpProxy` for it (that would
+  invert the layering, doc 01 §3 rule 1). If F01 currently houses the codec, it moves down to
+  `GulpHTTP` when this lands. The Repeater is F06 REP-012; only the F07 payload generators/processors
+  and grep are reused by the Fuzzer.
 - CSWSH test re-issues the raw upgrade with mutated `Origin`/cookies and inspects the `101` + first
   authenticated frames; per-message-authz test re-sends captured frames under a different/empty
   identity (F15).

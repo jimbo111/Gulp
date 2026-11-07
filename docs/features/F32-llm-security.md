@@ -1,7 +1,7 @@
 # F32 — LLM/AI-feature security testing
 
 > Milestone: M26 · Modules: `GulpFeatures/LLMTest` + helpers in `GulpFuzzer`/`GulpScanner` ·
-> Depends on: F05, F07, F08, F09, F10, F16
+> Depends on: F05, F07, F08, F09, F10, F16, F29 (Governor limiter)
 
 ## 1. Purpose
 

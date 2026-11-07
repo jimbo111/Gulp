@@ -37,12 +37,18 @@ verdict + history) that also shows as a status column in the Dashboard issue lis
 
 ## 4. Implementation notes
 
-- Baselines and proofs are stored snapshots (blobs + extracted-facts JSON), independent of live
-  history so later traffic/deletion can't change them (same snapshot discipline as Notebook, F14).
+- Persistence is a **new additive schema** (doc 04 §4 "Post-1.0 expansion tables", migration v2):
+  `drift_baselines`/`drift_endpoints` hold the immutable per-endpoint snapshots (DRF-001),
+  `drift_runs`/`drift_results` the per-run verdicts (DRF-004), and `issue_proofs`/`retest_runs` the
+  per-issue proof and retest history (DRF-003/005). Snapshots are blobs + facts JSON, independent of
+  live history so later traffic/deletion can't change them (same discipline as Notebook, F14).
+- The retest **verdict axis** (Fixed / Still-Vulnerable / Changed / Needs-Review) lives in
+  `retest_runs`, orthogonal to `issues.status` (open/false_positive/accepted_risk/fixed): a
+  Still-Vulnerable or Fixed verdict can *update* `issues.status`, it does not replace it.
 - Re-run reuses the Repeater/engine send path; verdict logic compares new evidence to the stored
   proof's matcher (issue) or to the baseline snapshot (endpoint), applying masks first.
-- Schedules and notifications reuse F17; headless retest reuses the F21 service layer; nothing new in
-  the engine except the snapshot/verdict store.
+- Schedules and notifications reuse F17; headless retest reuses the F21 service layer. The only new
+  persistence is the tables above; no new engine primitives.
 
 ## 5. Edge cases
 

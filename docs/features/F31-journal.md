@@ -15,7 +15,7 @@ uses to plan, track progress, and avoid missing endpoints.
 
 | ID | Pri | Requirement |
 |---|---|---|
-| JRN-001 | P0 | **Coverage index**: per endpoint (from the F04 site map), record which tools have exercised it (Repeater/Fuzzer/Scanner active+passive/Notebook) and last-tested time, derived from the `ToolSource` on exchanges. |
+| JRN-001 | P0 | **Coverage index**: per endpoint (from the F04 site map), record which tools have exercised it and last-tested time, derived from the `ToolSource` on exchanges. At its M9 landing the available sources are Repeater/Fuzzer/Notebook; the Scanner (active/passive) columns populate once F08 ships (M10/M11). The index is source-agnostic, so it extends automatically as tools come online. |
 | JRN-002 | P0 | **Coverage view**: the Target tree (UI-060) annotated with coverage badges, plus filters "show untested in-scope endpoints" and "show params never fuzzed". |
 | JRN-003 | P0 | **Activity timeline**: a reverse-chronological feed of meaningful actions (sends, issues found, notes, scope changes, baselines) grouped by day/host, searchable with GulpQL-style filters. |
 | JRN-004 | P1 | **Attack-surface treemap/heatmap** (Swift Charts): hosts → endpoints sized by traffic, colored by coverage or highest issue severity, click-through to the node. |
@@ -34,7 +34,9 @@ A "resume" card appears on project open.
 ## 4. Implementation notes
 
 - The coverage index is an aggregation over `exchanges.source` + endpoint identity (the audit dedup
-  key from F09 works here too); it's derived and rebuildable from the store.
+  key from F09 works here too); it's derived and rebuildable from the store, so it needs no table.
+  The two things that *do* need persistence — per-endpoint checklists (JRN-006) and timeline markers
+  (JRN-008) — use `journal_checklists` and `journal_markers` (doc 04 §4 Post-1.0 tables).
 - The timeline reads a curated subset of `GulpEvent`/stored actions; keep it cheap by querying the
   store with the existing indexes, not by holding everything in memory.
 - Reuse Swift Charts (already used by the Dashboard/Sequencer) for the treemap.

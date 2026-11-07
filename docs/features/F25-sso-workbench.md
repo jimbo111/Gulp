@@ -1,7 +1,8 @@
 # F25 — SSO Workbench (OAuth 2.0 / OIDC / SAML flow testing)
 
 > Milestone: M21 · Modules: `GulpFeatures/SSO` + helpers in `GulpScanner`/`GulpSession` ·
-> Depends on: F03, F05, F08, F12, F15, F16, F23 (reuses JWT ops)
+> Depends on: F03, F05, F08, F12 (JWT/codec primitives — sign/verify, base64, inflate), F15, F16,
+> F23 (the JWT Workbench's attack helpers, which themselves sit on F12/GulpCodec), F29 (Governor limiter)
 
 ## 1. Purpose
 
@@ -45,8 +46,8 @@ per-variant accept/reject results; and a metadata inspector. Findings feed Issue
   parameter names; it tolerates missing steps (reconstruct what's present).
 - SAML: base64-decode (+ raw-inflate for redirect binding) via F12 codecs; parse XML and compute the
   signed-node set (reference URIs) to drive the signature-scope highlight and XSW mutations.
-- Token manipulation reuses the F23 JWT ops (sign/verify, alg confusion); this tool adds the flow
-  context around them.
+- Token manipulation reuses the JWT sign/verify/alg-confusion ops that live in **F12/GulpCodec**
+  (surfaced by the F23 JWT Workbench); this tool adds the flow context around them.
 - Browser-drive JS-heavy logins via F16 to capture the full flow when it isn't all in history.
 - All active sends (SAML replays, redirect_uri probes) go through ScopeGuard and the shared Governor
   limiter (F29).

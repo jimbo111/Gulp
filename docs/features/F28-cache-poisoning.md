@@ -1,7 +1,7 @@
 # F28 — Web Cache Poisoning & Deception Scanner
 
 > Milestone: M24 · Modules: `GulpFeatures/CacheProbe` + helpers in `GulpScanner`/`GulpHTTP` ·
-> Depends on: F03, F05, F08, F10, F23 (header wordlists)
+> Depends on: F03, F05, F08, F10, F13 (diff machinery), F23 (header wordlists), F29 (Governor limiter)
 
 ## 1. Purpose
 
