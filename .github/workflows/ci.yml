@@ -23,7 +23,7 @@ jobs:
         # Build a SQLite with the flags GRDB expects and the project uses (FTS5 for HIS-050),
         # installed to /usr/local so the linker resolves -lsqlite3 to it. (docs/07 ADR)
         run: |
-          apt-get update && apt-get install -y build-essential curl libsqlite3-dev
+          apt-get update && apt-get install -y build-essential curl libsqlite3-dev zlib1g-dev
           curl -fsSL https://www.sqlite.org/2024/sqlite-autoconf-3460100.tar.gz -o /tmp/sqlite.tar.gz
           mkdir -p /tmp/sqlite-src
           tar xzf /tmp/sqlite.tar.gz -C /tmp/sqlite-src --strip-components=1

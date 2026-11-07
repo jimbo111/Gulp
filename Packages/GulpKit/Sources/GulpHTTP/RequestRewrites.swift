@@ -48,4 +48,31 @@ extension RawRequest {
         out += a[end...]
         return RawRequest(Bytes(out))
     }
+
+    /// Insert a header line before the blank line, using the message's own line ending. Unchanged if
+    /// the header block has no end.
+    public func insertingHeader(_ line: String) -> RawRequest {
+        let (end, terminator) = HTTP1.headerBlockEnd(bytes.rawBytes)
+        guard terminator != 0 else { return self }
+        let lineEnding = terminator == 4 ? "\r\n" : "\n"
+        let insertAt = end - (terminator == 4 ? 2 : 1)
+        return replacing(insertAt..<insertAt, with: Bytes("\(line)\(lineEnding)"))
+    }
+
+    /// HTTP-006 classic proxying of a plain-HTTP request: rewrite an origin-form request-target to
+    /// absolute-form (`http://host:port/path`) and add `Proxy-Authorization` when given. Used only
+    /// when a plain HTTP proxy is configured without tunnelling.
+    func forPlainHTTPProxy(target: HTTPTarget, proxyAuthorization: String?) -> RawRequest {
+        var result = self
+        let requestTarget = bytes[parsed.target].string()
+        if requestTarget.hasPrefix("/") {
+            let host = target.host.contains(":") ? "[\(target.host)]" : target.host
+            let authority = target.port == 80 ? host : "\(host):\(target.port)"
+            result = replacing(parsed.target, with: Bytes("http://\(authority)\(requestTarget)"))
+        }
+        if let proxyAuthorization {
+            result = result.insertingHeader("Proxy-Authorization: \(proxyAuthorization)")
+        }
+        return result
+    }
 }

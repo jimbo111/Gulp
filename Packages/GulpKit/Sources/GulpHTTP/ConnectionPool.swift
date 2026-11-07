@@ -13,16 +13,17 @@ struct PoolKey: Hashable, Sendable {
     let sni: String?
     let ip: String?
     let tlsProfile: String?
-    let upstream: UpstreamProxyOverride
+    /// The proxy actually used after rules are applied (nil = direct).
+    let route: UpstreamProxy?
 
-    init(target: HTTPTarget, options: SendOptions) {
+    init(target: HTTPTarget, options: SendOptions, route: UpstreamProxy?) {
         scheme = target.scheme
         host = target.host.lowercased()
         port = target.port
         sni = target.sniOverride
         ip = target.ipOverride
         tlsProfile = options.tlsProfile?.name
-        upstream = options.upstreamProxy
+        self.route = route
     }
 }
 

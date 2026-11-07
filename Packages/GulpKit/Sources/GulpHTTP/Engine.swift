@@ -91,14 +91,67 @@ public struct UpstreamProxy: Sendable, Hashable {
     public var username: String?
     /// Optional credentials.
     public var password: String?
+    /// HTTP proxies only: reach plain-HTTP targets through a CONNECT tunnel, so the request bytes stay
+    /// exactly as written. Off (the default) uses classic proxying, which must rewrite the request
+    /// line to absolute-form. HTTPS targets always tunnel.
+    public var tunnelPlainHTTP: Bool
 
     /// Create a proxy definition.
-    public init(kind: Kind, host: String, port: Int, username: String? = nil, password: String? = nil) {
+    public init(
+        kind: Kind, host: String, port: Int, username: String? = nil, password: String? = nil,
+        tunnelPlainHTTP: Bool = false
+    ) {
         self.kind = kind
         self.host = host
         self.port = port
         self.username = username
         self.password = password
+        self.tunnelPlainHTTP = tunnelPlainHTTP
+    }
+}
+
+/// One upstream-proxy rule (PRX-041): hosts matching `hostPattern` use `proxy` (nil = direct).
+/// Rules are ordered; the first match wins.
+public struct UpstreamRule: Sendable, Hashable {
+    /// A case-insensitive host glob where `*` matches any run of characters, e.g. `*.example.com`.
+    public var hostPattern: String
+    /// The proxy to use, or nil to connect directly.
+    public var proxy: UpstreamProxy?
+
+    /// Create a rule.
+    public init(hostPattern: String, proxy: UpstreamProxy?) {
+        self.hostPattern = hostPattern
+        self.proxy = proxy
+    }
+
+    /// Whether `host` matches the pattern.
+    public func matches(_ host: String) -> Bool {
+        Self.glob(Array(hostPattern.lowercased()), Array(host.lowercased()))
+    }
+
+    static func glob(_ pattern: [Character], _ text: [Character]) -> Bool {
+        var p = 0
+        var t = 0
+        var star = -1
+        var mark = 0
+        while t < text.count {
+            if p < pattern.count, pattern[p] == "*" {
+                star = p
+                mark = t
+                p += 1
+            } else if p < pattern.count, pattern[p] == text[t] {
+                p += 1
+                t += 1
+            } else if star >= 0 {
+                p = star + 1
+                mark += 1
+                t = mark
+            } else {
+                return false
+            }
+        }
+        while p < pattern.count, pattern[p] == "*" { p += 1 }
+        return p == pattern.count
     }
 }
 

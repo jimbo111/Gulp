@@ -10,6 +10,8 @@ struct RequestCommand: Sendable {
     let bytes: ByteBuffer
     /// The request was HEAD: the response has no body whatever its framing headers say.
     let isHead: Bool
+    /// The request was CONNECT: a 2xx response has no body and the connection becomes a tunnel.
+    let isConnect: Bool
     let maxResponseBytes: Int
     let firstByteTimeout: TimeAmount
     let idleTimeout: TimeAmount
@@ -44,16 +46,17 @@ private struct ResponseHead {
 
     var isInterim: Bool { status >= 100 && status < 200 && status != 101 }
 
-    init(headerBytes: [UInt8], blockEnd: Int, isHead: Bool) {
+    init(headerBytes: [UInt8], blockEnd: Int, isHead: Bool, isConnect: Bool) {
         let r = RawResponse(Bytes(headerBytes))
         self.blockEnd = blockEnd
         status = r.parsed.statusCode
         let version = r.bytes[r.parsed.version].string()
         let close = r.hasHeaderToken("connection", "close")
         let keep = r.hasHeaderToken("connection", "keep-alive")
-        keepAlive = status != 101 && (version == "HTTP/1.1" ? !close : (keep && !close))
-        // RFC 9112 §6.3: HEAD, 1xx, 204 and 304 end at the header block regardless of headers.
-        if isHead || status == 204 || status == 304 || (status >= 100 && status < 200) {
+        let tunnel = isConnect && status >= 200 && status < 300
+        keepAlive = tunnel || (status != 101 && (version == "HTTP/1.1" ? !close : (keep && !close)))
+        // RFC 9112 §6.3: HEAD, 1xx, 204, 304 and a 2xx to CONNECT end at the header block.
+        if tunnel || isHead || status == 204 || status == 304 || (status >= 100 && status < 200) {
             framing = .none
         } else if r.parsed.transferEncodingChunked {
             framing = .chunked
@@ -74,6 +77,7 @@ final class HTTP1ClientHandler: ChannelDuplexHandler {
     private struct Pending {
         let promise: EventLoopPromise<WireResponse>
         let isHead: Bool
+        let isConnect: Bool
         let maxBytes: Int
         let idleTimeout: TimeAmount
         var buffer: [UInt8] = []
@@ -107,8 +111,8 @@ final class HTTP1ClientHandler: ChannelDuplexHandler {
             return
         }
         pending = Pending(
-            promise: command.promise, isHead: command.isHead, maxBytes: command.maxResponseBytes,
-            idleTimeout: command.idleTimeout)
+            promise: command.promise, isHead: command.isHead, isConnect: command.isConnect,
+            maxBytes: command.maxResponseBytes, idleTimeout: command.idleTimeout)
         let bound = NIOLoopBound(self, eventLoop: context.eventLoop)
         pending?.totalTimer = context.eventLoop.scheduleTask(deadline: command.totalDeadline) {
             bound.value.timedOut(.totalTimeout)
@@ -162,7 +166,8 @@ final class HTTP1ClientHandler: ChannelDuplexHandler {
                 let (end, terminator) = HTTP1.headerBlockEnd(rest)
                 guard terminator != 0 else { return }  // header block not complete yet
                 let head = ResponseHead(
-                    headerBytes: Array(rest[..<end]), blockEnd: p.start + end, isHead: p.isHead)
+                    headerBytes: Array(rest[..<end]), blockEnd: p.start + end, isHead: p.isHead,
+                    isConnect: p.isConnect)
                 if head.isInterim {
                     pending?.interim.append(Array(rest[..<end]))
                     pending?.start += end
@@ -244,6 +249,7 @@ final class HTTP1ClientHandler: ChannelDuplexHandler {
         if let e = error as? GulpNetworkError { return e }
         if let e = error as? ChannelError, case .connectTimeout = e { return .connectTimeout }
         let text = String(describing: error).lowercased()
+        if text.contains("socks") { return .upstreamProxyError(String(describing: error)) }
         if text.contains("refused") { return .connectionRefused }
         if text.contains("reset") || text.contains("broken pipe") || text.contains("eof") {
             return .connectionReset

@@ -6,6 +6,7 @@ import Foundation
 import GulpCore
 import NIOCore
 import NIOPosix
+import NIOSOCKS
 
 /// Convert a Swift `Duration` to NIO's `TimeAmount`.
 func timeAmount(_ duration: Duration) -> TimeAmount {
@@ -28,6 +29,8 @@ public final class NIOHTTPEngine: HTTPEngine {
         public var maxConnectionsPerKey = 6
         /// Idle pooled connections older than this are closed instead of reused (HTTP-003).
         public var idleConnectionTimeout: Duration = .seconds(30)
+        /// Upstream proxy rules, first match wins (PRX-041, HTTP-006). No match connects directly.
+        public var upstreamRules: [UpstreamRule] = []
 
         /// Default settings.
         public init() {}
@@ -161,11 +164,18 @@ public final class NIOHTTPEngine: HTTPEngine {
         if options.normalizeLineEndings { outgoing.request = outgoing.request.normalizingLineEndings() }
         if options.updateContentLength { outgoing.request = outgoing.request.updatingContentLength() }
 
-        if let refusal = unsupported(outgoing.target, options) {
+        let route = upstreamRoute(for: outgoing.target, options: options)
+        if let refusal = unsupported(outgoing.target, options, route: route) {
             return await finish(
                 outgoing, options: options, wire: nil, error: refusal, connectionID: 0, timing: timing)
         }
-        let attempt = await perform(outgoing, options: options, pool: pool, start: start, timing: &timing)
+        // Classic (non-tunnelled) HTTP proxying must rewrite the request line to absolute-form.
+        if let route, route.kind == .http, !route.tunnelPlainHTTP, outgoing.target.scheme == .http {
+            outgoing.request = outgoing.request.forPlainHTTPProxy(
+                target: outgoing.target, proxyAuthorization: route.basicAuthorization)
+        }
+        let attempt = await perform(
+            outgoing, options: options, route: route, pool: pool, start: start, timing: &timing)
         if let wire = attempt.wire {
             timing.requestWriteMs = milliseconds(from: attempt.writeStart, to: attempt.writeEnd)
             if let first = wire.firstByteAt {
@@ -179,7 +189,19 @@ public final class NIOHTTPEngine: HTTPEngine {
             connectionID: attempt.connectionID, timing: timing)
     }
 
-    private func unsupported(_ target: HTTPTarget, _ options: SendOptions) -> GulpNetworkError? {
+    /// The upstream proxy for `target` (HTTP-006): the per-send override, else the first matching
+    /// rule (PRX-041); nil connects directly.
+    func upstreamRoute(for target: HTTPTarget, options: SendOptions) -> UpstreamProxy? {
+        switch options.upstreamProxy {
+        case .direct: return nil
+        case .proxy(let proxy): return proxy
+        case .useRules: return configuration.upstreamRules.first { $0.matches(target.host) }?.proxy
+        }
+    }
+
+    private func unsupported(
+        _ target: HTTPTarget, _ options: SendOptions, route: UpstreamProxy?
+    ) -> GulpNetworkError? {
         if target.scheme == .https {
             return .tlsFailure("HTTPS is implemented in M3 (GulpTLS); M1 sends plaintext HTTP/1 only")
         }
@@ -187,8 +209,8 @@ public final class NIOHTTPEngine: HTTPEngine {
         case .http2, .http2PriorKnowledge: return .other("HTTP/2 is implemented in M3")
         case .auto, .http1_1: break
         }
-        if case .proxy = options.upstreamProxy {
-            return .upstreamProxyError("Upstream proxies (HTTP-006) are not implemented yet")
+        if let route, route.kind == .socks5, route.username != nil {
+            return .upstreamProxyError("SOCKS5 username/password authentication is not supported yet")
         }
         return nil
     }
@@ -203,11 +225,11 @@ public final class NIOHTTPEngine: HTTPEngine {
 
     /// Get a connection, write, read; retry once on a stale pooled connection (HTTP-003).
     private func perform(
-        _ outgoing: OutgoingRequest, options: SendOptions, pool: ConnectionPool, start: NIODeadline,
-        timing: inout Timing
+        _ outgoing: OutgoingRequest, options: SendOptions, route: UpstreamProxy?, pool: ConnectionPool,
+        start: NIODeadline, timing: inout Timing
     ) async -> Attempt {
         let request = outgoing.request
-        let key = PoolKey(target: outgoing.target, options: options)
+        let key = PoolKey(target: outgoing.target, options: options, route: route)
         let method = request.bytes[request.parsed.method].string()
         let idempotent = ["GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"].contains(method)
         let totalDeadline = start + timeAmount(options.timeouts.total)
@@ -231,7 +253,8 @@ public final class NIOHTTPEngine: HTTPEngine {
             } else {
                 do {
                     channel = try await connect(
-                        outgoing.target, options: options, deadline: totalDeadline, timing: &timing)
+                        outgoing.target, route: route, options: options, deadline: totalDeadline,
+                        timing: &timing)
                 } catch {
                     await pool.releaseSlot(key)
                     let mapped = (error as? GulpNetworkError) ?? HTTP1ClientHandler.networkError(error)
@@ -274,12 +297,20 @@ public final class NIOHTTPEngine: HTTPEngine {
         return Attempt(error: .connectionReset)
     }
 
-    /// Resolve (with overrides, HTTP-004) and connect (HTTP-005 connect timeout).
+    /// The host to connect to for `target` after the override table and per-target IP (HTTP-004).
+    private func effectiveHost(_ target: HTTPTarget) -> String {
+        target.ipOverride ?? configuration.hostOverrides[target.host.lowercased()] ?? target.host
+    }
+
+    /// Resolve (with overrides, HTTP-004) and connect (HTTP-005 connect timeout), directly or through
+    /// an upstream proxy (HTTP-006): SOCKS5 via NIOSOCKS, or an HTTP proxy's CONNECT tunnel.
     private func connect(
-        _ target: HTTPTarget, options: SendOptions, deadline: NIODeadline, timing: inout Timing
+        _ target: HTTPTarget, route: UpstreamProxy?, options: SendOptions, deadline: NIODeadline,
+        timing: inout Timing
     ) async throws -> any Channel {
-        let host = target.ipOverride ?? configuration.hostOverrides[target.host.lowercased()] ?? target.host
-        let port = target.port
+        let proxyHost = route.map { configuration.hostOverrides[$0.host.lowercased()] ?? $0.host }
+        let host = proxyHost ?? effectiveHost(target)
+        let port = route?.port ?? target.port
         let dnsStart = NIODeadline.now()
         let address: SocketAddress
         do {
@@ -287,30 +318,68 @@ public final class NIOHTTPEngine: HTTPEngine {
                 try SocketAddress.makeAddressResolvingHost(host, port: port)
             }
         } catch {
-            throw GulpNetworkError.dnsFailure(target.host)
+            throw GulpNetworkError.dnsFailure(route?.host ?? target.host)
         }
         let connectStart = NIODeadline.now()
         timing.dnsMs = milliseconds(from: dnsStart, to: connectStart)
 
         let configured = timeAmount(options.timeouts.connect)
         let remaining = max(deadline - connectStart, .milliseconds(1))
+        let socksTarget: SOCKSAddress? =
+            route?.kind == .socks5 ? .domain(effectiveHost(target), port: target.port) : nil
         let bootstrap = ClientBootstrap(group: group)
             .connectTimeout(min(configured, remaining))
-            .channelOption(ChannelOptions.socketOption(.tcp_nodelay), value: 1)
-            .channelInitializer { channel in
+            .channelOption(ChannelOptions.tcpOption(.tcp_nodelay), value: 1)
+            .channelInitializer { [socksTarget] channel in
                 channel.eventLoop.makeCompletedFuture(withResultOf: {
+                    if let socksTarget {
+                        // Buffers our writes until the SOCKS5 handshake completes.
+                        let socks = SOCKSClientHandler(targetAddress: socksTarget)
+                        try channel.pipeline.syncOperations.addHandler(socks)
+                    }
                     try channel.pipeline.syncOperations.addHandler(HTTP1ClientHandler())
                 })
             }
+        let channel: any Channel
         do {
-            let channel = try await bootstrap.connect(to: address).get()
-            timing.connectMs = milliseconds(from: connectStart, to: .now())
-            return channel
+            channel = try await bootstrap.connect(to: address).get()
         } catch {
             let mapped = HTTP1ClientHandler.networkError(error)
             // A connect cut short by the total budget is a total timeout, not a connect timeout.
             if mapped == .connectTimeout && remaining < configured { throw GulpNetworkError.totalTimeout }
-            throw mapped
+            guard route != nil else { throw mapped }
+            throw GulpNetworkError.upstreamProxyError("Cannot reach proxy \(host):\(port): \(mapped.code)")
+        }
+        if let route, route.kind == .http, target.scheme == .https || route.tunnelPlainHTTP {
+            try await establishTunnel(
+                on: channel, to: target, via: route, options: options, deadline: deadline)
+        }
+        timing.connectMs = milliseconds(from: connectStart, to: .now())
+        return channel
+    }
+
+    /// `CONNECT host:port` through an HTTP proxy; a 2xx turns the connection into a byte tunnel, so
+    /// the request that follows is written exactly as given.
+    private func establishTunnel(
+        on channel: any Channel, to target: HTTPTarget, via proxy: UpstreamProxy, options: SendOptions,
+        deadline: NIODeadline
+    ) async throws {
+        let host = effectiveHost(target)
+        let authority = host.contains(":") ? "[\(host)]:\(target.port)" : "\(host):\(target.port)"
+        var text = "CONNECT \(authority) HTTP/1.1\r\nHost: \(authority)\r\n"
+        if let authorization = proxy.basicAuthorization {
+            text += "Proxy-Authorization: \(authorization)\r\n"
+        }
+        text += "\r\n"
+        let result = await exchange(
+            on: channel, request: RawRequest(Bytes(text)), options: options, totalDeadline: deadline,
+            isConnect: true)
+        let status = RawResponse(Bytes(result.wire.bytes)).parsed.statusCode
+        guard result.wire.error == nil, (200..<300).contains(status) else {
+            channel.close(promise: nil)
+            let reason = result.wire.error.map(\.code) ?? "status \(status)"
+            let message = "CONNECT \(authority) via \(proxy.host) failed: \(reason)"
+            throw GulpNetworkError.upstreamProxyError(message)
         }
     }
 
@@ -322,14 +391,15 @@ public final class NIOHTTPEngine: HTTPEngine {
 
     /// Write the exact request bytes and wait for the framed response.
     private func exchange(
-        on channel: any Channel, request: RawRequest, options: SendOptions, totalDeadline: NIODeadline
+        on channel: any Channel, request: RawRequest, options: SendOptions, totalDeadline: NIODeadline,
+        isConnect: Bool = false
     ) async -> WireResult {
         var buffer = channel.allocator.buffer(capacity: request.bytes.count)
         buffer.writeBytes(request.bytes.rawBytes)
         let promise = channel.eventLoop.makePromise(of: WireResponse.self)
         let command = RequestCommand(
             bytes: buffer, isHead: request.bytes[request.parsed.method].string() == "HEAD",
-            maxResponseBytes: options.maxResponseBytes,
+            isConnect: isConnect, maxResponseBytes: options.maxResponseBytes,
             firstByteTimeout: timeAmount(options.timeouts.firstByte),
             idleTimeout: timeAmount(options.timeouts.idleBetweenBytes), totalDeadline: totalDeadline,
             promise: promise)
@@ -388,5 +458,13 @@ public final class NIOHTTPEngine: HTTPEngine {
             state: state, timing: timing, connectionID: connectionID, edited: edited)
         if let recorder { exchange.id = await recorder.record(exchange) }
         return ExchangeResult(exchange: exchange, error: error)
+    }
+}
+
+extension UpstreamProxy {
+    /// `Basic <base64(user:pass)>` when credentials are configured.
+    var basicAuthorization: String? {
+        guard let username else { return nil }
+        return "Basic " + Data("\(username):\(password ?? "")".utf8).base64EncodedString()
     }
 }
