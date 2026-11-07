@@ -18,15 +18,15 @@
 
 | ID | Feature | Milestone |
 |---|---|---|
-| F01 | [Proxy (intercept, match & replace, listeners)](features/F01-proxy.md) | M2, M4 |
+| F01 | [Proxy (intercept, match & replace, listeners)](features/F01-proxy.md) | M2, M3, M4 |
 | F02 | [TLS & certificate authority](features/F02-tls-certificates.md) | M3 |
-| F03 | [HTTP engine (raw send, HTTP/2, pooling, race conditions)](features/F03-http-engine.md) | M1, M5 |
+| F03 | [HTTP engine (raw send, HTTP/2, pooling, race conditions)](features/F03-http-engine.md) | M1, M3, M5 |
 | F04 | [Target: site map & scope](features/F04-target-sitemap-scope.md) | M6 |
 | F05 | [History, Logger, GulpQL filters & search](features/F05-history-logger-filters.md) | M2, M9 |
 | F06 | [Repeater](features/F06-repeater.md) | M5 |
 | F07 | [Fuzzer (Intruder-equivalent)](features/F07-fuzzer.md) | M8 |
 | F08 | [Scanner (passive, active, check recipes)](features/F08-scanner.md) | M10, M11 |
-| F09 | [Crawler](features/F09-crawler.md) | M11 |
+| F09 | [Crawler](features/F09-crawler.md) | M11, M13 |
 | F10 | [Beacon (OAST / out-of-band)](features/F10-beacon-oast.md) | M11 |
 | F11 | [Sequencer](features/F11-sequencer.md) | M14 |
 | F12 | [Decoder & transform tags](features/F12-decoder.md) | M7 |

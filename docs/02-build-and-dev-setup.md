@@ -61,8 +61,9 @@ The Makefile is the single entry point. Every target must work from a clean chec
     it, JSC falls back to its interpreter).
   - A post-build phase that embeds `gulp-cli` in `Gulp.app/Contents/Helpers/gulp` (so users can
     symlink it into `/usr/local/bin`).
-- Target `GulpUITests` (UI testing bundle).
-- Scheme `Gulp`: test action runs `GulpUITests`. The SwiftPM tests run through `make test-core`.
+- Target `GulpAppUITests` (XCUITest bundle for the app). Named with the `App` prefix to avoid
+  colliding with the `GulpUI` module's own SwiftPM test target (`GulpUITests`).
+- Scheme `Gulp`: test action runs `GulpAppUITests`. The SwiftPM tests run through `make test-core`.
 
 ## 5. `Package.swift` (GulpKit) — outline
 

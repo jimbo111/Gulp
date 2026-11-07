@@ -108,6 +108,16 @@ accepted ones; supersede them.
 - **Consequences**: Simple to implement and explain; users order excludes after the includes they
   carve out of.
 
+## ADR-012: MIT license
+
+- **Context**: The owner chose to open-source Gulp (2026-11-07 decision #2). The license governs
+  whether the Extension Gallery and update feeds can be public and how extensions may be shared.
+- **Decision**: Release under the **MIT License**. Add a top-level `LICENSE` file and an SPDX header
+  policy is optional (not required by MIT).
+- **Consequences**: Permissive reuse; the Gallery/update feeds may be public. Note that MIT places no
+  restriction on use, so the "authorized testing only" guidance (doc 00 §6) is a usage expectation
+  enforced in-app (the acknowledgment and ScopeGuard), not a license term.
+
 ---
 
 ## Small decisions (append here)
@@ -125,18 +135,23 @@ accepted ones; supersede them.
 
 ---
 
-## Open questions for the product owner
+## Product decisions (resolved 2026-11-07)
 
-The specs assume the defaults below. Override any of them and Claude will update the docs.
+These were open questions; the product owner has answered them. They are binding for v1. To change
+one, ask the owner and update this list plus the "Where it applies" docs.
 
-1. **Bundle ID / organization name**: the specs use `com.gulp.app`. What reverse-DNS ID and Apple
-   Developer team should releases use?
-2. **Licensing model**: open source (which license?) or closed/commercial? This decides whether the
-   Extension Gallery and update feeds are public.
-3. **Minimum macOS**: the specs say macOS 14 Sonoma. Is it OK to require macOS 15 or later (it
-   unlocks newer SwiftUI APIs)?
-4. **Beacon domain**: do you have a domain for a default self-hosted Beacon, or should the defaults
-   point to interactsh public servers (opt-in)?
-5. **AI provider**: Claude-only, or also OpenAI-compatible and local (Ollama) providers from day one?
-6. **Team features**: is a shared team server (shared projects, collaborative Repeater) in scope for
-   a later version?
+1. **Bundle ID** — keep the placeholder `com.gulp.app` for now; it must be replaced with the final
+   reverse-DNS ID and an Apple Developer team before the first signed release (M20).
+   *Applies: doc 02 §4, `project.yml`.*
+2. **License** — **MIT** (open source). The Extension Gallery and update feeds may be public. See
+   ADR-012 and the `LICENSE` file. *Applies: `LICENSE`, README, doc 02 §8.*
+3. **Minimum macOS** — **macOS 14 Sonoma**. Newer SwiftUI APIs go behind `if #available` with a
+   Sonoma fallback. *Applies: doc 01 §1, doc 02 §1, `project.yml`.*
+4. **OAST default** — **off until configured**. A fresh install preconfigures no Beacon and no public
+   server; OAST is inactive until the user sets a Beacon URL or explicitly opts in to an interactsh
+   server (with the third-party-egress notice). *Applies: F10 BCN-004/005.*
+5. **AI providers (v1)** — **Claude (Anthropic Messages API) only**. The `LLMProvider` abstraction
+   stays so OpenAI-compatible and local (Ollama) providers can be added later; they are **not** v1
+   scope. *Applies: ADR-009, F22 AI-001/002/011.*
+6. **Team server** — **not planned**. Gulp is single-user; sharing is by exchanging `.gulp` files and
+   reports. Recorded as a non-goal. *Applies: doc 00 §3.*

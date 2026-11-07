@@ -6,7 +6,7 @@
 |---|---|---|---|
 | Unit | `Packages/GulpKit/Tests/<Module>Tests` | Swift Testing (`import Testing`, `@Test`, `#expect`) — XCTest is acceptable where Swift Testing lacks something | Parsers, codecs, GulpQL, diff, payload generators, statistics, cert minting, scope matching |
 | Integration | `Tests/IntegrationTests` | Swift Testing + an in-process VulnLab + an in-process proxy | Proxy ↔ engine ↔ store end-to-end; scanner against VulnLab; Beacon client ↔ dev Beacon server |
-| UI | `GulpUITests` (XCUITest) | Xcode | Smoke flows: create a project, see proxied traffic, send to Repeater, run an attack |
+| UI | `GulpAppUITests` (XCUITest) | Xcode | Smoke flows: create a project, see proxied traffic, send to Repeater, run an attack |
 | Performance | `Tests/PerformanceTests` (run with `make perf`, not in the default `make test`) | `ContinuousClock` measurements with budgets from doc 01 §9 | Throughput, latency, table paging, project open |
 | Fuzz | `Tests/FuzzTests` (Linux, libFuzzer via `-sanitize=fuzzer`) plus a deterministic random-input test in the unit suite | | HTTP/1 parser, HTTP/2 frame handling, GulpQL parser, decoders |
 

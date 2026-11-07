@@ -29,7 +29,7 @@ Gulp/
 ├── CLAUDE.md
 ├── README.md
 ├── Makefile
-├── project.yml                      # XcodeGen spec: Gulp.app target + GulpUITests
+├── project.yml                      # XcodeGen spec: Gulp.app target + GulpAppUITests
 ├── .swift-format                    # formatting rules
 ├── .github/workflows/ci.yml
 ├── App/                             # macOS app target (thin: composition + windows)

@@ -18,7 +18,7 @@ provider.
 | ID | Pri | Requirement |
 |---|---|---|
 | AI-001 | P0 | **Provider abstraction**: an `LLMProvider` protocol (chat + streaming + tool-use). First implementation: Anthropic Messages API (Claude), streaming with tool calls. Config: API key (Keychain), model, max tokens, temperature. |
-| AI-002 | P0 | **Consent & egress control**: disabled until the user enables it and acknowledges that selected data will be sent to the configured provider; a persistent indicator when enabled; nothing is sent implicitly. Local/self-hosted providers (OpenAI-compatible, Ollama) selectable to keep data on-prem. |
+| AI-002 | P0 | **Consent & egress control**: disabled until the user enables it and acknowledges that selected data will be sent to the configured provider; a persistent indicator when enabled; nothing is sent implicitly. (v1 ships **Claude only** — doc 07 decision #5; the `LLMProvider` abstraction leaves room for OpenAI-compatible and local/self-hosted providers later, see AI-011.) |
 | AI-003 | P0 | **Redaction pipeline**: before any request to the provider, strip/mask secrets (auth headers, cookies, tokens, API keys, obvious PII) via patterns; show the user what will be sent (a preview for one-shot actions) and let them edit/cancel. Redaction is on by default and configurable. |
 | AI-004 | P0 | **Grounded tool use**: the assistant uses the F21 tool surface (list/get exchanges, search, send request, start scan, list issues, scope, Beacon, notes). Active actions are ScopeGuard-checked and honor the approval mode; all actions are logged and attributed `source = .ai`. |
 | AI-005 | P0 | **Context actions** from anywhere (UI-040 "Assistant ▸"): **Explain this request/response**, **What's suspicious here?**, **Suggest payloads for this parameter**, **Explain this issue & how to exploit/fix**, **Write a repro** — each builds a redacted, grounded prompt about the selected item. |
@@ -69,5 +69,5 @@ acknowledgment. A clear on/off indicator in the status bar when enabled.
    tools and citing the right exchanges.
 4. An AI-initiated active scan on an out-of-scope host is blocked and surfaced; in-scope with
    approval mode on, it waits for confirmation; all actions appear in the audit log as `.ai`.
-5. Switching the provider to a local OpenAI-compatible endpoint keeps all data on-prem (no external
-   calls observed).
+5. (AI-011, post-v1) When a local OpenAI-compatible provider is added, switching to it keeps all data
+   on-prem (no external calls observed). Not required for the Claude-only v1 (doc 07 decision #5).

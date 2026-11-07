@@ -82,7 +82,7 @@ unless the spec marks them "(later: Mxx)".
 - **DoD:** A Cartesian attack with 2 positions × 100 payloads runs at ≥ 1,000 req/s against VulnLab; grep-extract pulls the CSRF token from every response.
 
 ### M9 — Logger, GulpQL, search, Notebook
-- [ ] GulpQL parser and evaluator, applied to History, Logger, site map and Fuzzer results (HIS-020…HIS-030).
+- [ ] GulpQL parser and evaluator, applied to History, Logger, site map and Fuzzer results (HIS-020…HIS-028).
 - [ ] Logger tool showing every tool's traffic (HIS-040…HIS-045).
 - [ ] Global search with FTS5 (HIS-050…HIS-054).
 - [ ] Notebook (all P0/P1 of F14).
@@ -91,14 +91,14 @@ unless the spec marks them "(later: Mxx)".
 ## Phase C — Automation (M10–M14)
 
 ### M10 — Passive scanner and the issue model
-- [ ] Issue model, issue UI (dashboard issue list, the issue detail with highlighted evidence), dedup (SCN-001…SCN-012).
+- [ ] Issue model, issue UI (dashboard issue list, the issue detail with highlighted evidence), dedup (SCN-001…SCN-007).
 - [ ] Passive checks catalog (F08 §5.1).
 - [ ] Live passive scanning of proxy traffic as a background task.
 - **DoD:** Browsing VulnLab produces the expected passive issues (fixture list in doc 06 §3) and no duplicates.
 
 ### M11 — Crawler, active scanner, Beacon
 - [ ] Crawler, static mode (all P0 of F09); the browser-backed mode comes in M13.
-- [ ] Insertion points, active check engine, scan configurations, the scan task UI (SCN-020…SCN-045).
+- [ ] Insertion points, active check engine, scan configurations, the scan task UI (SCN-020…SCN-038).
 - [ ] Active checks catalog (F08 §5.2), at least every check marked P0.
 - [ ] Beacon client + interactsh client; Beacon server (Beacon package) (all P0 of F10).
 - [ ] Check Recipes (YAML custom checks) (SCN-060…SCN-066).

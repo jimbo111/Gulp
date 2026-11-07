@@ -17,8 +17,9 @@ order; within a milestone, do P0 first.
   only once that workflow is green; fix anything it flags before starting M1.
 - **Next action**: push, watch CI, fix any build fallout, then begin **M1** (GulpCore model + raw
   HTTP/1 engine).
-- **Product defaults assumed**: see `docs/07-decisions.md` "Open questions" (bundle id, license, min
-  macOS, Beacon domain, AI providers, team features). Safe to build on; the owner can override.
+- **Product decisions**: resolved by the owner and recorded in `docs/07-decisions.md` §"Product
+  decisions" (MIT license; macOS 14 min; Claude-only AI in v1; OAST off until configured;
+  `com.gulp.app` placeholder bundle id; no team server). Build to those.
 
 ## Milestone checklist (summary — details in docs/03-roadmap.md)
 

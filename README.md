@@ -33,3 +33,10 @@ by milestone, following `docs/03-roadmap.md`. Progress is tracked in `docs/PROGR
 - **XcodeGen** for the app project; all logic lives in a SwiftPM package (`Packages/GulpKit`)
 
 The reasoning behind each choice is in [`docs/07-decisions.md`](docs/07-decisions.md).
+
+## License
+
+Gulp is released under the [MIT License](LICENSE).
+
+> Reminder: Gulp is for **authorized** security testing only. The MIT license grants broad reuse
+> rights but does not authorize testing systems you don't have permission to test.

@@ -22,7 +22,7 @@ A tester lives here, iterating on a single request to understand and exploit beh
 | REP-009 | P1 | Inspector editing (UI-020): change a param/header/cookie/pseudo-header via the structured panel and the raw updates. |
 | REP-010 | P1 | **Groups** of tabs with a group **send mode** (F03 group sends: sequential-same-conn, sequential-separate, parallel, single-packet). "Send group" issues all requests per the mode and shows a combined results table (status, length, time, order). This is the race-condition workflow. |
 | REP-011 | P1 | Save/variable capture: extract a value from a response (regex or Inspector pick) into a named variable usable by Transform Tags in this or other tabs (e.g. grab a CSRF token from a GET, use it in a POST). |
-| REP-012 | P1 | WebSocket Repeater (REP-030): a tab can hold a WS session — open the upgrade, then send/receive frames interactively, with a message log and an editor; reconnect button. |
+| REP-012 | P1 | WebSocket Repeater: a tab can hold a WS session — open the upgrade, then send/receive frames interactively, with a message log and an editor; reconnect button. |
 | REP-013 | P2 | "Send sequence": chain tabs so the output (variables) of one feeds the next; a lightweight multi-step runner (a precursor to macros, F15). |
 | REP-014 | P2 | Auto-resend on edit (debounced) mode for fast iteration; and a "resend every N seconds" option (polling), with a clear stop. |
 | REP-015 | P2 | Response rendering niceties: pin a search term (UI-015), word-wrap toggle, show non-printables, and a "render" tab for HTML (sandboxed, doc 01 §7). |
