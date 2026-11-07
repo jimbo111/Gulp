@@ -85,7 +85,9 @@ let package = Package(
         .target(name: "GulpSequencer", dependencies: ["GulpCore", "GulpHTTP"]),
         .target(name: "GulpReport", dependencies: ["GulpCore"]),
         .target(name: "GulpExtensions", dependencies: ["GulpCore", "GulpHTTP"]),
-        .target(name: "GulpAI", dependencies: ["GulpCore", "GulpReport"]),
+        // GulpAI is an orchestration-layer consumer (architecture §3 rule 6): it builds on the
+        // GulpWorkspace agent tool surface, so it depends on GulpWorkspace, not the other way round.
+        .target(name: "GulpAI", dependencies: ["GulpCore", "GulpWorkspace", "GulpReport"]),
 
         // macOS-capability modules (empty shells on Linux). GulpBrowser implements
         // GulpCrawler's BrowserDriver; GulpWorkspace injects it on macOS.
@@ -98,14 +100,14 @@ let package = Package(
             "GulpCore", "GulpCodec", "GulpQuery", "GulpDiff", "GulpStore", "GulpTLS",
             "GulpHTTP", "GulpProxy", "GulpSession", "GulpRepeater", "GulpFuzzer", "GulpOAST",
             "GulpCrawler", "GulpScanner", "GulpSequencer", "GulpReport", "GulpExtensions",
-            "GulpAI", "GulpBrowser", "GulpScript",
+            "GulpBrowser", "GulpScript",
         ]),
         .target(name: "GulpAutomation", dependencies: [
             "GulpCore", "GulpWorkspace", .product(name: "Hummingbird", package: "hummingbird"),
         ]),
 
         // ---- UI layer (macOS content; empty on Linux) ----
-        .target(name: "GulpFeatures", dependencies: ["GulpCore", "GulpWorkspace", "GulpUI"]),
+        .target(name: "GulpFeatures", dependencies: ["GulpCore", "GulpWorkspace", "GulpUI", "GulpAI"]),
 
         // ---- Executables ----
         .executableTarget(name: "gulp-cli", dependencies: [

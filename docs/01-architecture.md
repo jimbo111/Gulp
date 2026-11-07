@@ -7,7 +7,7 @@
 | Language | Swift 6, language mode 6 (strict concurrency) | Native, fast, one language for UI and engine |
 | UI | SwiftUI for the app shell, forms and settings; **AppKit** (via `NSViewRepresentable`) for heavy views: history tables (`NSTableView`), the message editor (`NSTextView`, TextKit 2), hex view, site-map outline (`NSOutlineView`) | SwiftUI `Table` and `TextEditor` don't scale to 1M rows or multi-MB syntax-highlighted bodies |
 | State | Observation framework (`@Observable`) for view models | macOS 14+ |
-| Networking | SwiftNIO 2.x: `swift-nio`, `swift-nio-ssl`, `swift-nio-http2`, `swift-nio-extras` (NIOTLS `SNIHandler`), `swift-nio-transport-services` (optional) | Byte-level control, server and client, HTTP/2 frames, high throughput |
+| Networking | SwiftNIO 2.x: `swift-nio` (NIOCore/NIOPosix/NIOHTTP1, and `SNIHandler` lives in its **NIOTLS** module), `swift-nio-ssl` (NIOSSL), `swift-nio-http2` (NIOHTTP2), `swift-nio-extras` (NIOHTTPCompression, NIOSOCKS) | Byte-level control, server and client, HTTP/2 frames, high throughput |
 | Certificates | `swift-certificates` (X.509 building and signing), `swift-crypto` + `_CryptoExtras` (RSA) | Pure Swift, cross-platform |
 | Storage | SQLite through **GRDB.swift** (WAL, FTS5) | Crash-safe single-file projects, fast paging and search |
 | Logging | `swift-log` (OSLog backend on macOS) | Standard |
@@ -92,12 +92,14 @@ Gulp/
   UI            │ GulpFeatures → GulpUI   │ (macOS)  │
                 └───────────────┬─────────┘          │
                 ┌───────────────▼────────────────────▼───────────┐
-  Orchestration │ GulpWorkspace (ProjectSession), GulpAutomation  │
+  Orchestration │ GulpWorkspace (ProjectSession) · GulpAutomation │
+                │ GulpAI  (both build on the GulpWorkspace tool    │
+                │          surface; see rule 6)                   │
                 └───────────────┬────────────────────────────────┘
                 ┌───────────────▼────────────────────────────────┐
   Engines       │ GulpProxy GulpRepeater GulpFuzzer GulpScanner   │
                 │ GulpCrawler GulpSequencer GulpSession GulpOAST  │
-                │ GulpBrowser GulpScript GulpExtensions GulpAI    │
+                │ GulpBrowser GulpScript GulpExtensions           │
                 │ GulpReport                                      │
                 └───────────────┬────────────────────────────────┘
                 ┌───────────────▼────────────────────────────────┐
@@ -121,14 +123,24 @@ Rules:
      Linux the driver is simply absent and only static-mode crawling is available.
    - `GulpFuzzer` → `GulpOAST`, `GulpSession`
    - `GulpExtensions` → any engine (it exposes them to extensions)
-   - `GulpAI` → `GulpReport` (to draft reports)
 2. Engines never import `GulpUI`, `GulpFeatures`, SwiftUI or AppKit.
 3. `GulpCore` has no dependencies except `swift-collections` and `swift-log`.
-4. Platform-specific modules (`GulpBrowser`, `GulpScript`, `GulpUI`, `GulpFeatures`) are declared
-   in `Package.swift` with `#if os(macOS)` conditions. Everything else must compile on Linux.
+4. The platform-capability modules (`GulpBrowser`, `GulpScript`, `GulpUI`, `GulpFeatures`) are
+   **defined on every platform** (no `#if os(macOS)` in the manifest); their AppKit/JavaScriptCore
+   code is wrapped in `#if canImport(...)` so on Linux they compile to empty shells. Dependencies on
+   them are plain and unconditional, and the package graph is identical on macOS and Linux
+   (doc 02 §5; ADR-010). Everything compiles on Linux; only the shells are empty there.
 5. Cross-cutting behavior goes through **protocols defined in a lower layer** and implemented in a
    higher one. Example: `GulpHTTP` defines `RequestHook`; `GulpSession` and `GulpExtensions`
    implement it; `GulpWorkspace` registers them.
+6. **Agent tool surface.** The set of capabilities an automated/AI caller can invoke (list/send
+   exchanges, start a scan, read issues, change scope…) — its request/response DTOs, JSON schemas,
+   and the `APIGate` that enforces ScopeGuard, the approval mode and the audit log — is defined once
+   in **`GulpWorkspace`** (orchestration). Both `GulpAutomation` (REST/MCP, F21) and `GulpAI`
+   (assistant, F22) are orchestration-layer consumers that depend on `GulpWorkspace` and reuse that
+   one definition; `GulpAI` additionally uses `GulpReport` for drafting. Neither imports the other,
+   and `GulpWorkspace` does **not** depend on `GulpAI`/`GulpAutomation` (that would cycle) — the app
+   and `GulpFeatures` compose them on top.
 
 ## 4. Linux compatibility matrix
 
@@ -139,7 +151,7 @@ Rules:
 | GulpTLS, GulpHTTP, GulpProxy | ✅ | NIO + BoringSSL (bundled in swift-nio-ssl) |
 | GulpSession, GulpRepeater, GulpFuzzer, GulpScanner, GulpCrawler (static mode), GulpOAST, GulpSequencer, GulpReport, GulpAI, GulpAutomation, GulpWorkspace, gulp-cli, gulp-vulnlab | ✅ | |
 | GulpExtensions | ✅ (JSON-RPC only) | The JS host is compiled only when `canImport(JavaScriptCore)` |
-| GulpBrowser, GulpScript, GulpUI, GulpFeatures | ❌ | macOS only |
+| GulpBrowser, GulpScript, GulpUI, GulpFeatures | ⚠️ shell | Targets are defined and **compile on Linux as empty shells** (their AppKit/JavaScriptCore code is behind `#if canImport(...)`); the real functionality is macOS-only. So `swift build`/`swift test` cover the whole graph on Linux, but these modules do nothing there. |
 
 This lets most of the engine be built and tested in Linux CI or cloud containers.
 
@@ -193,13 +205,20 @@ public enum GulpEvent: Sendable {
     case interceptQueued(InterceptItemID)
     case wsMessage(WSMessageID)
     case issueFound(IssueID)
-    case taskProgress(TaskID, Progress)
+    case taskProgress(TaskID, TaskProgress)
     case oastInteraction(OASTInteractionID)
     case scopeChanged
     case settingsChanged(SettingsKey)
     case log(LogEntry)
 }
 ```
+
+The ID types are `Int64` row ids (`typealias TaskID = Int64`, likewise `ExchangeID`,
+`IssueID`, `InterceptItemID`, `WSMessageID`, `OASTInteractionID`), all in `GulpCore`. `TaskProgress`
+is Gulp's own value type (fraction done, counts, ETA — not Foundation's `Progress`). `SettingsKey`
+identifies a settings group + key (it maps to the `SettingsGroup.key` string of doc 04 §6, carried
+as `struct SettingsKey { let group: String; let key: String? }`). `LogEntry` is the event-log record
+shown in the Event Log panel (§8).
 
 ### 5.4 Concurrency and threading
 

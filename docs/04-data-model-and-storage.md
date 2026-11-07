@@ -97,11 +97,18 @@ User-Agent: …
   re-parsing the text.
 
 ```swift
+// A header field for H2 raw mode. Named struct, NOT a tuple: Swift cannot synthesize Codable
+// for tuples or arrays of tuples, so the fields below must be a Codable element type.
+public struct H2Field: Sendable, Codable, Hashable {
+    public var name: Bytes      // bytes so illegal-in-H1 names (uppercase, etc.) are representable
+    public var value: Bytes
+}
+
 public struct H2RequestSpec: Sendable, Codable {
-    public var pseudoHeaders: [(name: String, value: Bytes)]   // ordered
-    public var headers: [(name: Bytes, value: Bytes)]          // ordered, case preserved (lowercased on wire unless "raw case" option)
+    public var pseudoHeaders: [H2Field]   // ordered; e.g. :method :scheme :authority :path
+    public var headers: [H2Field]         // ordered, case preserved (lowercased on wire unless "raw case")
     public var body: Bytes
-    public var dataFrameSplit: [Int]?                          // optional: split body into DATA frames of these sizes
+    public var dataFrameSplit: [Int]?     // optional: split body into DATA frames of these sizes
 }
 ```
 
@@ -155,7 +162,8 @@ CREATE TABLE ws_messages (
   direction INTEGER NOT NULL,              -- 0 client→server, 1 server→client
   opcode INTEGER NOT NULL, created_at REAL NOT NULL,
   payload_blob INTEGER REFERENCES blobs(id), original_payload_blob INTEGER REFERENCES blobs(id),
-  length INTEGER, highlight TEXT, comment TEXT
+  length INTEGER, highlight TEXT, comment TEXT,
+  frames_json TEXT                         -- per-message frame boundaries (offsets, fin bits, rsv/compression) for PRX-031
 );
 
 CREATE VIRTUAL TABLE fts_exchanges USING fts5(request_text, response_text, content='', contentless_delete=1, tokenize='trigram');
@@ -170,8 +178,8 @@ CREATE TABLE issues (
   severity TEXT NOT NULL, confidence TEXT NOT NULL,
   host TEXT NOT NULL, path TEXT NOT NULL, insertion_point TEXT,
   dedup_key TEXT NOT NULL UNIQUE,
-  detail_md TEXT, background_md TEXT, remediation_md TEXT,
-  status TEXT NOT NULL DEFAULT 'open',      -- open | false_positive | accepted_risk | fixed
+  detail_md TEXT, background_md TEXT, remediation_md TEXT, references_md TEXT,   -- references_md backs SCN-001's "references"
+  status TEXT NOT NULL DEFAULT 'open',      -- open | false_positive | accepted_risk | fixed (SCN-001 uses these exact tokens)
   source_task_id INTEGER, created_at REAL, updated_at REAL
 );
 CREATE TABLE issue_evidence (id INTEGER PRIMARY KEY, issue_id INTEGER REFERENCES issues(id) ON DELETE CASCADE, exchange_id INTEGER REFERENCES exchanges(id), request_markers_json TEXT, response_markers_json TEXT, oast_interaction_id INTEGER, note TEXT);
@@ -200,7 +208,9 @@ CREATE TABLE notebook_items (
   created_at REAL, updated_at REAL, ordinal INTEGER
 );
 
-CREATE TABLE cookie_jar (domain TEXT, path TEXT, name TEXT, value TEXT, expires REAL, secure INTEGER, http_only INTEGER, same_site TEXT, identity_id INTEGER, PRIMARY KEY(domain, path, name, identity_id));
+CREATE TABLE cookie_jar (domain TEXT, path TEXT, name TEXT, value TEXT, expires REAL, secure INTEGER, http_only INTEGER, same_site TEXT, identity_id INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(domain, path, name, identity_id));
+-- identity_id is NOT NULL (0 = "no identity") because SQLite treats NULLs in a PRIMARY KEY as
+-- distinct, which would let duplicate no-identity cookies accumulate instead of being replaced.
 CREATE TABLE identities (id INTEGER PRIMARY KEY, name TEXT, color TEXT, config_json TEXT);       -- Authz Matrix, sessions
 CREATE TABLE macros (id INTEGER PRIMARY KEY, name TEXT, steps_json TEXT);
 CREATE TABLE session_rules (id INTEGER PRIMARY KEY, name TEXT, enabled INTEGER, ordinal INTEGER, config_json TEXT);

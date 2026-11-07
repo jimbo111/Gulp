@@ -14,7 +14,9 @@ order; within a milestone, do P0 first.
   were statically checked (structure, YAML/JSON validity, target↔directory mapping, 110-col lint
   limit). **CI (`.github/workflows/ci.yml`) is the real gate** — the `core-linux` job runs
   `swift test` on Linux and the `macos` job runs `make generate lint test build`. Treat M0 as done
-  only once that workflow is green; fix anything it flags before starting M1.
+  only once that workflow is green; fix anything it flags before starting M1. (The `macos` job runs
+`make bootstrap` then `make lint generate test-core build test`; the `core-linux` job runs
+`swift build`/`swift test` on the whole GulpKit graph.)
 - **Next action**: push, watch CI, fix any build fallout, then begin **M1** (GulpCore model + raw
   HTTP/1 engine).
 - **Product decisions**: resolved by the owner and recorded in `docs/07-decisions.md` §"Product

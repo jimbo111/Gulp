@@ -141,7 +141,7 @@ The macOS-only targets are excluded automatically (see §5).
 | Job | Runner | Steps |
 |---|---|---|
 | `core-linux` | `ubuntu-latest` + Swift 6 container | `swift build` + `swift test` for GulpKit and Beacon |
-| `macos` | `macos-15` (or newer) | `make bootstrap generate lint test` |
+| `macos` | `macos-15` (or newer) | `make bootstrap`, then `make lint generate test-core build test` (matches `.github/workflows/ci.yml`: lint → generate → core tests → build app → app/UI tests) |
 | `release` (on tag `v*`) | `macos-15` | `make release` using signing secrets in GitHub encrypted secrets |
 
 Cache `.build` and SwiftPM checkouts keyed on `Package.resolved`.

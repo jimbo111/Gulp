@@ -30,9 +30,20 @@ itself forward-depends on the Browser (F16, M13) for login recording, so pulling
 would create a new forward dependency. So the tool is built first with a clean **hook point**, and
 the dependent requirement is finished in the later milestone and marked "(later: Mxx)" in its spec.
 The known cases are: FUZ-025 (M8 tool → OAST column in M11), CRL-006 (M11 crawler → session re-auth
-in M12), REP-008 (M5 Repeater → Transform Tags in M7), SES-030 (M12 Sessions → recorded login in
-M13). Each milestone's Definition of Done only checks what can work with the capabilities built so
-far (e.g. M11 validates an **unauthenticated** crawl+audit; M12 validates the authenticated one).
+in M12), REP-006 (M5 Repeater's "in-scope" redirect option + ScopeGuard gating → M6 when F04/scope
+lands; until then Repeater sends unconditionally), REP-008 (M5 Repeater → Transform Tags in M7),
+DEC-021 `beacon()` tag (M7 Decoder → wired in M11 when F10/Beacon lands), NB-005 (M9 Notebook↔issue
+link → M10 when F08 lands), NB-007 (M9 Notebook→report → M16 when F19 lands), ETL-004 (M16 →
+secret-scanner link in M19), SES-030 (M12 Sessions → recorded login in M13). Each milestone's
+Definition of Done only checks what can work with the capabilities built so far (e.g. M11 validates
+an **unauthenticated** crawl+audit; M12 validates the authenticated one), and any acceptance test
+that exercises a deferred part (e.g. F07 test 4's OAST column) runs only in the later milestone.
+
+> **On spec "Depends on" headers.** Those headers list the features a spec is *conceptually* related
+> to, not a strict acyclic module graph, so they can appear mutually (e.g. F01↔F05, F04↔F05). The
+> authoritative, acyclic import graph is the module layering in doc 01 §3; resolve any apparent cycle
+> at module granularity there (e.g. F05's history UI is M2 but its scope-aware filters are M9), not
+> from the feature-header lists.
 
 ---
 
@@ -40,7 +51,7 @@ far (e.g. M11 validates an **unauthenticated** crawl+audit; M12 validates the au
 
 ### M0 — Scaffolding
 - [ ] Create the repository layout from doc 01 §2 (empty modules with a placeholder type and test each).
-- [ ] `Package.swift` with every target and the dependency graph from doc 01 §3, including the macOS-only conditions.
+- [ ] `Package.swift` with every target and the dependency graph from doc 01 §3. The manifest has **no** platform `#if`: the macOS-capability modules are ordinary targets whose AppKit/JavaScriptCore code is behind `#if canImport(...)` (empty shells on Linux), so the whole graph builds on both OSes (doc 01 §3 rule 4, ADR-010).
 - [ ] `project.yml`, `App/GulpApp.swift` showing an empty `NavigationSplitView` window with the sidebar from doc 05 §2.
 - [ ] Makefile, Brewfile, `.swift-format`, `.gitignore` (`.build/`, `*.xcodeproj`, `DerivedData`, `.DS_Store`).
 - [ ] CI workflow (doc 02 §7).
@@ -51,7 +62,7 @@ far (e.g. M11 validates an **unauthenticated** crawl+audit; M12 validates the au
 - [ ] GulpHTTP: HTTP/1.1 client that sends raw bytes over TCP/TLS, plus response framing (Content-Length, chunked, close-delimited, 1xx, HEAD/204/304), connection pool and timeouts (F03 HTTP-001…HTTP-010).
 - [ ] gulp-vulnlab: first endpoints (echo, redirect, chunked, gzip, slow, large; doc 06 §3).
 - [ ] Parser fuzz tests and round-trip property tests (doc 06 §2).
-- **DoD:** `gulp-cli send --raw request.txt --target https://localhost:8443` prints the exact response bytes; all HTTP-0xx P0 tests pass.
+- **DoD:** `gulp-cli send --raw request.txt --target http://127.0.0.1:8088/echo` prints the exact response bytes, and `--target http://127.0.0.1:8089/echo-raw` round-trips a malformed request byte-for-byte; all HTTP-0xx P0 tests pass. (HTTPS/`:8443` and TLS trust are **not** exercised until M3 — M1 is plaintext HTTP/1 only.)
 
 ### M2 — Plain-HTTP proxy, storage, history UI
 - [ ] GulpStore: schema v1 (doc 04 §4), migrations, write coalescer, paged queries.
@@ -91,8 +102,8 @@ far (e.g. M11 validates an **unauthenticated** crawl+audit; M12 validates the au
 - **DoD:** A Base64 → URL → Gzip chain decodes correctly; Smart Decode solves the fixture set; Comparer word-diffs two 1 MB responses in < 1 s.
 
 ### M8 — Fuzzer
-- [ ] All P0/P1 of F07 except Turbo mode (that is M8b, same milestone, but optional to finish last)
-  and except FUZ-025 (the OAST result column), which needs Beacon and is finished in M11.
+- [ ] All P0/P1 of F07 except Turbo mode (optional, finish it last within this milestone) and
+  except FUZ-025 (the OAST result column), which needs Beacon and is finished in M11.
 - **DoD:** A Cartesian attack with 2 positions × 100 payloads runs at ≥ 1,000 req/s against VulnLab; grep-extract pulls the CSRF token from every response.
 
 ### M9 — Logger, GulpQL, search, Notebook
