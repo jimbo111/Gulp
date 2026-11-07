@@ -7,7 +7,7 @@
 | Language | Swift 6, language mode 6 (strict concurrency) | Native, fast, one language for UI and engine |
 | UI | SwiftUI for the app shell, forms and settings; **AppKit** (via `NSViewRepresentable`) for heavy views: history tables (`NSTableView`), the message editor (`NSTextView`, TextKit 2), hex view, site-map outline (`NSOutlineView`) | SwiftUI `Table` and `TextEditor` don't scale to 1M rows or multi-MB syntax-highlighted bodies |
 | State | Observation framework (`@Observable`) for view models | macOS 14+ |
-| Networking | SwiftNIO 2.x: `swift-nio`, `swift-nio-ssl`, `swift-nio-http2`, `swift-nio-extras` (NIOTLS `SNIHandler`), `swift-nio-transport-services` (optional) | Byte-level control, server and client, HTTP/2 frames, high throughput |
+| Networking | SwiftNIO 2.x: `swift-nio` (NIOCore/NIOPosix/NIOHTTP1, and `SNIHandler` lives in its **NIOTLS** module), `swift-nio-ssl` (NIOSSL), `swift-nio-http2` (NIOHTTP2), `swift-nio-extras` (NIOHTTPCompression, NIOSOCKS) | Byte-level control, server and client, HTTP/2 frames, high throughput |
 | Certificates | `swift-certificates` (X.509 building and signing), `swift-crypto` + `_CryptoExtras` (RSA) | Pure Swift, cross-platform |
 | Storage | SQLite through **GRDB.swift** (WAL, FTS5) | Crash-safe single-file projects, fast paging and search |
 | Logging | `swift-log` (OSLog backend on macOS) | Standard |
@@ -28,8 +28,10 @@ Minimum OS: **macOS 14 Sonoma**. Development toolchain: the latest stable Xcode 
 Gulp/
 ├── CLAUDE.md
 ├── README.md
+├── LICENSE                          # MIT (docs/07 decision #2)
 ├── Makefile
-├── project.yml                      # XcodeGen spec: Gulp.app target + GulpUITests
+├── Brewfile                         # Homebrew deps for `make bootstrap` (xcodegen, swift-format)
+├── project.yml                      # XcodeGen spec: Gulp.app target + GulpAppUITests
 ├── .swift-format                    # formatting rules
 ├── .github/workflows/ci.yml
 ├── App/                             # macOS app target (thin: composition + windows)
@@ -90,12 +92,14 @@ Gulp/
   UI            │ GulpFeatures → GulpUI   │ (macOS)  │
                 └───────────────┬─────────┘          │
                 ┌───────────────▼────────────────────▼───────────┐
-  Orchestration │ GulpWorkspace (ProjectSession), GulpAutomation  │
+  Orchestration │ GulpWorkspace (ProjectSession) · GulpAutomation │
+                │ GulpAI  (both build on the GulpWorkspace tool    │
+                │          surface; see rule 6)                   │
                 └───────────────┬────────────────────────────────┘
                 ┌───────────────▼────────────────────────────────┐
   Engines       │ GulpProxy GulpRepeater GulpFuzzer GulpScanner   │
                 │ GulpCrawler GulpSequencer GulpSession GulpOAST  │
-                │ GulpBrowser GulpScript GulpExtensions GulpAI    │
+                │ GulpBrowser GulpScript GulpExtensions           │
                 │ GulpReport                                      │
                 └───────────────┬────────────────────────────────┘
                 ┌───────────────▼────────────────────────────────┐
@@ -119,14 +123,24 @@ Rules:
      Linux the driver is simply absent and only static-mode crawling is available.
    - `GulpFuzzer` → `GulpOAST`, `GulpSession`
    - `GulpExtensions` → any engine (it exposes them to extensions)
-   - `GulpAI` → `GulpReport` (to draft reports)
 2. Engines never import `GulpUI`, `GulpFeatures`, SwiftUI or AppKit.
 3. `GulpCore` has no dependencies except `swift-collections` and `swift-log`.
-4. Platform-specific modules (`GulpBrowser`, `GulpScript`, `GulpUI`, `GulpFeatures`) are declared
-   in `Package.swift` with `#if os(macOS)` conditions. Everything else must compile on Linux.
+4. The platform-capability modules (`GulpBrowser`, `GulpScript`, `GulpUI`, `GulpFeatures`) are
+   **defined on every platform** (no `#if os(macOS)` in the manifest); their AppKit/JavaScriptCore
+   code is wrapped in `#if canImport(...)` so on Linux they compile to empty shells. Dependencies on
+   them are plain and unconditional, and the package graph is identical on macOS and Linux
+   (doc 02 §5; ADR-010). Everything compiles on Linux; only the shells are empty there.
 5. Cross-cutting behavior goes through **protocols defined in a lower layer** and implemented in a
    higher one. Example: `GulpHTTP` defines `RequestHook`; `GulpSession` and `GulpExtensions`
    implement it; `GulpWorkspace` registers them.
+6. **Agent tool surface.** The set of capabilities an automated/AI caller can invoke (list/send
+   exchanges, start a scan, read issues, change scope…) — its request/response DTOs, JSON schemas,
+   and the `APIGate` that enforces ScopeGuard, the approval mode and the audit log — is defined once
+   in **`GulpWorkspace`** (orchestration). Both `GulpAutomation` (REST/MCP, F21) and `GulpAI`
+   (assistant, F22) are orchestration-layer consumers that depend on `GulpWorkspace` and reuse that
+   one definition; `GulpAI` additionally uses `GulpReport` for drafting. Neither imports the other,
+   and `GulpWorkspace` does **not** depend on `GulpAI`/`GulpAutomation` (that would cycle) — the app
+   and `GulpFeatures` compose them on top.
 
 ## 4. Linux compatibility matrix
 
@@ -137,7 +151,7 @@ Rules:
 | GulpTLS, GulpHTTP, GulpProxy | ✅ | NIO + BoringSSL (bundled in swift-nio-ssl) |
 | GulpSession, GulpRepeater, GulpFuzzer, GulpScanner, GulpCrawler (static mode), GulpOAST, GulpSequencer, GulpReport, GulpAI, GulpAutomation, GulpWorkspace, gulp-cli, gulp-vulnlab | ✅ | |
 | GulpExtensions | ✅ (JSON-RPC only) | The JS host is compiled only when `canImport(JavaScriptCore)` |
-| GulpBrowser, GulpScript, GulpUI, GulpFeatures | ❌ | macOS only |
+| GulpBrowser, GulpScript, GulpUI, GulpFeatures | ⚠️ shell | Targets are defined and **compile on Linux as empty shells** (their AppKit/JavaScriptCore code is behind `#if canImport(...)`); the real functionality is macOS-only. So `swift build`/`swift test` cover the whole graph on Linux, but these modules do nothing there. |
 
 This lets most of the engine be built and tested in Linux CI or cloud containers.
 
@@ -158,7 +172,7 @@ This lets most of the engine be built and tested in Linux CI or cloud containers
 ```swift
 public actor ProjectSession {
     public let id: UUID
-    public let store: ProjectStore              // GulpStore
+    public private(set) var store: ProjectStore // GulpStore (var: Save As switches files, docs/07)
     public let settings: LayeredSettings        // user + project settings
     public let scope: ScopeService              // GulpCore
     public let events: EventBus                 // GulpCore
@@ -181,8 +195,8 @@ same type, which is why the headless and GUI modes behave the same.
 ### 5.3 Event bus
 
 `EventBus` is a typed broadcast built on `AsyncStream`. Producers never block: each subscriber has
-a bounded buffer, and if it overflows the subscriber gets a `.lagged(count)` marker and should
-re-query the store.
+a bounded buffer, and if it overflows the subscriber receives a `Delivery` with `lagged > 0` (see
+the API below) and should re-query the store.
 
 ```swift
 public enum GulpEvent: Sendable {
@@ -191,13 +205,45 @@ public enum GulpEvent: Sendable {
     case interceptQueued(InterceptItemID)
     case wsMessage(WSMessageID)
     case issueFound(IssueID)
-    case taskProgress(TaskID, Progress)
+    case taskProgress(TaskID, TaskProgress)
     case oastInteraction(OASTInteractionID)
     case scopeChanged
     case settingsChanged(SettingsKey)
     case log(LogEntry)
 }
 ```
+
+The ID types are `Int64` row ids (`typealias TaskID = Int64`, likewise `ExchangeID`,
+`IssueID`, `InterceptItemID`, `WSMessageID`, `OASTInteractionID`), all in `GulpCore`. `TaskProgress`
+is Gulp's own value type (fraction done, counts, ETA — not Foundation's `Progress`). `SettingsKey`
+identifies a settings group + key (it maps to the `SettingsGroup.key` string of doc 04 §6, carried
+as `struct SettingsKey { let group: String; let key: String? }`). `LogEntry` is the event-log record
+shown in the Event Log panel (§8), and `GulpError` is the user-facing error (doc 04 §2).
+
+`EventBus` public API (the overflow marker is on the **delivery wrapper**, not a `GulpEvent` case):
+
+```swift
+public struct Delivery: Sendable {                 // what a subscriber's stream yields
+    public var event: GulpEvent?                   // the event, or nil when `lagged` > 0
+    public var lagged: Int                          // 0 normally; N = events this subscriber missed on overflow
+}
+public actor EventBus {
+    public func publish(_ event: GulpEvent)         // never blocks; fans out to each subscriber's bounded buffer
+    public func subscribe(bufferSize: Int = 256) -> AsyncStream<Delivery>   // on overflow, yields Delivery(event: nil, lagged: n)
+    public func subscribeWithID(bufferSize: Int = 256) -> Subscription      // (id, stream), for an explicit unsubscribe
+    public func unsubscribe(_ id: SubscriptionID)   // also happens automatically when the stream is dropped
+}
+public typealias Subscription = (id: SubscriptionID, stream: AsyncStream<Delivery>)
+```
+
+Overflow semantics (as implemented): each buffer uses `.bufferingOldest(bufferSize)`, so when it is
+full the *new* event is rejected and counted, buffered events keep their order, and the
+`Delivery(event: nil, lagged: n)` marker is enqueued on the next `publish` that finds room — right
+after the events the subscriber did receive and before the next one it will receive.
+
+A subscriber that sees `lagged > 0` should re-query the store for the window it missed (§5.3). This
+is why `.lagged` is **not** a `GulpEvent` case: the event enum stays a pure description of what
+happened, and backpressure is expressed by the transport wrapper.
 
 ### 5.4 Concurrency and threading
 
@@ -253,7 +299,7 @@ Logger records exchange (source = tool)   →  passive scanner (if enabled for t
 |---|---|
 | `ByteBuffer`-free `Bytes` (`[UInt8]` wrapper with slicing views) | Core message storage, independent of NIO, so that UI and store don't import NIO |
 | `RawRequest`, `RawResponse` | Raw bytes plus lazily computed `ParsedHTTPMessage` (byte ranges of start line, headers, body) |
-| `HTTPTarget` | `scheme`, `host`, `port`, `sni?`, `ipOverride?`, `httpVersionPreference` |
+| `HTTPTarget` | `scheme`, `host`, `port`, `sniOverride?`, `ipOverride?` (HTTP-version preference is **not** here — it lives in `SendOptions`, F03 §2, since it's per-send not per-target; authoritative shape in doc 04 §2) |
 | `Exchange` | One request/response pair with metadata (see doc 04) |
 | `InsertionPoint` | A named byte range in a request plus an encoding context (F08) |
 | `ScopeService` / `ScopeGuard` | Scope rules and checks (F04) |
@@ -298,4 +344,5 @@ Gulp processes hostile input all day, so the tool itself is a target.
 | History table scroll with 1M rows | 60 fps, no hitches > 50 ms |
 | Open a 1M-exchange project | < 3 s to first paint |
 | Message editor: open a 5 MB response | < 300 ms to first paint (highlighting may continue in the background) |
+| Comparer: word/byte diff of two 1 MB responses (F13 CMP-004) | < 1 s |
 | Fuzzer throughput (HTTP/1 keep-alive, local) | ≥ 1,000 req/s; Turbo mode ≥ 5,000 req/s |

@@ -1,0 +1,2 @@
+# HTTP fixtures are exact wire bytes (CRLF vs bare LF, NULs): never normalize line endings.
+*.http -text -diff

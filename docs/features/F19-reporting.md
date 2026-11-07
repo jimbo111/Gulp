@@ -20,7 +20,7 @@ machine-readable formats for CI and ticketing.
 | RPT-006 | P1 | Severity model configurable (names/colors/order) and an optional CVSS 3.1/4.0 vector + score per issue (a small calculator UI). |
 | RPT-007 | P1 | Remediation/background text pulled from the issue-definition catalog (F08 SCN-006), editable per report. |
 | RPT-008 | P1 | Group findings by severity, by host, or by issue type; a table of contents and stable anchors. |
-| RPT-009 | P1 | PDF output (render the HTML via the print pipeline / WKWebView paginated printing) producing a tidy multi-page PDF. |
+| RPT-009 | P1 | PDF output producing a tidy multi-page PDF. **Module split**: `GulpReport` builds the cross-platform formats (HTML/MD/JSON/SARIF) and must compile on Linux (doc 01 §4), so the PDF step — which uses `WKWebView` paginated printing (macOS-only) — lives in `GulpFeatures/Reports`, consuming `GulpReport`'s self-contained HTML. On Linux/CLI, PDF is unavailable (emit HTML and note it); everything else works headless. |
 | RPT-010 | P1 | **Redaction**: strip or mask sensitive values (session tokens, credentials, PII) from included evidence via patterns, before export. Show what was redacted. |
 | RPT-011 | P2 | Diff/"delta" report vs. a previous report (new/fixed/still-open issues) for retests. |
 | RPT-012 | P2 | Ticketing export helpers (e.g. a per-issue Markdown block sized for Jira/GitHub issues) and a CSV. |

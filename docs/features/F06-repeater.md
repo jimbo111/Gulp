@@ -16,13 +16,13 @@ A tester lives here, iterating on a single request to understand and exploit beh
 | REP-003 | P0 | Per-tab target editor (scheme/host/port/SNI/IP override) and HTTP version preference; "Update Content-Length" toggle (default on). |
 | REP-004 | P0 | Per-tab request **history** (every send), navigable with ◀ ▶ (and ⌘[ / ⌘]); each entry keeps the exact request and response. Shows a diff against the previous response (UI-030) on demand. |
 | REP-005 | P0 | Tab management: rename (double-click), reorder (drag), close (⌘W), reopen-closed (⌘⇧T), colored labels, and **groups** (REP-010). Tabs persist in the project. |
-| REP-006 | P0 | Follow redirects option (never/on-site/in-scope/always, max hops); when on, show the redirect chain and let the user step through it. |
+| REP-006 | P0 | Follow redirects option (never/on-site/in-scope/always, max hops); when on, show the redirect chain and let the user step through it. *(The `in-scope` value and ScopeGuard gating of sends need F04/scope, which lands in M6; Repeater itself is M5, so until M6 `in-scope` behaves as `on-site` and out-of-scope sends aren't gated — see the roadmap cross-milestone note.)* |
 | REP-007 | P0 | Connection option: reuse vs. new connection; automatically reconnect on failure. Show connection info (reused, ALPN, TLS) for each send. |
-| REP-008 | P1 | Inline **Transform Tags** (F12) in the request are evaluated on send (e.g. `«base64(...)»`, `«now()»`, `«var(csrf)»`); a toggle enables/disables evaluation, and a preview shows the rendered bytes. |
+| REP-008 | P1 | Inline **Transform Tags** (F12) in the request are evaluated on send (e.g. `«base64(...)»`, `«now()»`, `«var(csrf)»`); a toggle enables/disables evaluation, and a preview shows the rendered bytes. *(later: M7 — needs F12, which lands in M7; the rest of Repeater is M5.)* |
 | REP-009 | P1 | Inspector editing (UI-020): change a param/header/cookie/pseudo-header via the structured panel and the raw updates. |
 | REP-010 | P1 | **Groups** of tabs with a group **send mode** (F03 group sends: sequential-same-conn, sequential-separate, parallel, single-packet). "Send group" issues all requests per the mode and shows a combined results table (status, length, time, order). This is the race-condition workflow. |
 | REP-011 | P1 | Save/variable capture: extract a value from a response (regex or Inspector pick) into a named variable usable by Transform Tags in this or other tabs (e.g. grab a CSRF token from a GET, use it in a POST). |
-| REP-012 | P1 | WebSocket Repeater (REP-030): a tab can hold a WS session — open the upgrade, then send/receive frames interactively, with a message log and an editor; reconnect button. |
+| REP-012 | P1 | WebSocket Repeater: a tab can hold a WS session — open the upgrade, then send/receive frames interactively, with a message log and an editor; reconnect button. |
 | REP-013 | P2 | "Send sequence": chain tabs so the output (variables) of one feeds the next; a lightweight multi-step runner (a precursor to macros, F15). |
 | REP-014 | P2 | Auto-resend on edit (debounced) mode for fast iteration; and a "resend every N seconds" option (polling), with a clear stop. |
 | REP-015 | P2 | Response rendering niceties: pin a search term (UI-015), word-wrap toggle, show non-printables, and a "render" tab for HTML (sandboxed, doc 01 §7). |

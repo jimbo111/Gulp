@@ -20,7 +20,7 @@ The Scanner finds vulnerabilities automatically. **Passive** checks analyze traf
 
 | ID | Pri | Requirement |
 |---|---|---|
-| SCN-001 | P0 | `Issue`: type id, name, severity (High/Medium/Low/Info), confidence (Certain/Firm/Tentative), host, path, insertion point, detail (markdown), background, remediation, references, status (open/false-positive/accepted/fixed), and one or more **evidence** items. |
+| SCN-001 | P0 | `Issue`: type id, name, severity (High/Medium/Low/Info), confidence (Certain/Firm/Tentative), host, path, insertion point, detail (markdown), background, remediation, references (all markdown, backed by the `issues` columns incl. `references_md`), status using the exact tokens `open` / `false_positive` / `accepted_risk` / `fixed` (matching doc 04), and one or more **evidence** items. |
 | SCN-002 | P0 | **Evidence** links to an exchange (or OAST interaction) with **marker ranges** into the request and response bytes, so the UI highlights exactly what proved the issue. |
 | SCN-003 | P0 | **Deduplication**: a stable `dedup_key` (type + host + normalized path + insertion-point identity + a payload-class hash). The same issue found again updates evidence/confidence instead of creating a duplicate. |
 | SCN-004 | P0 | Severity/confidence are check-defined but user-overridable per issue; status changes and notes are stored. |
@@ -45,7 +45,7 @@ The Scanner finds vulnerabilities automatically. **Passive** checks analyze traf
 | SCN-032 | P0 | Time-based detection with statistical rigor: multiple samples, compare against baseline latency distribution, require a consistent delay to reduce false positives. |
 | SCN-033 | P0 | OAST integration (F10): checks can request a correlation token, inject it, and later ask whether an interaction arrived (supports asynchronous/blind detection; a scan isn't "done" until a grace period for OAST has elapsed). |
 | SCN-034 | P0 | Scan configurations: **Passive only**, **Light active**, **Balanced**, **Thorough**, and **Custom** (choose check families, intensity, insertion-point policy, concurrency, throttle). Configs are savable/shareable. |
-| SCN-035 | P0 | Scan tasks: created from "Actively scan" on a request/branch, or from a Crawl-and-audit (F09). Progress, pause/resume/cancel, per-check counts, and a log. Respect ScopeGuard and the shared resource pool. |
+| SCN-035 | P0 | Scan tasks: created from "Actively scan" on a request/branch, or from a Crawl-and-audit (F09). Progress, pause/resume/cancel, per-check counts, and a log. Respect ScopeGuard and the shared resource pool. *(The F15 dependency in the header is for **authenticated** scanning, which lands in M12; the M11 scanner runs unauthenticated, matching the M11 DoD — same deferral as CRL-006.)* |
 | SCN-036 | P1 | Consolidation across insertion points (don't report the same reflected-XSS once per param if it's clearly the same sink); configurable. |
 | SCN-037 | P1 | Re-scan an issue to verify (re-run just that check) and mark fixed/still-present. |
 | SCN-038 | P1 | Scan speed/safety guards: max requests per insertion point, global budget, and "safe checks only" (no payloads that could modify data). |
@@ -96,10 +96,12 @@ Each entry = one or more issue definitions. Mark the P0 set that the VulnLab acc
 - **LDAP / NoSQL / XPath injection** (error- and boolean-based).
 - **Clickjacking** (missing framing protection — confirmed with Frame Kit, F16).
 - **Vulnerable JS libraries**: fingerprint versions of common libraries and flag known-vulnerable
-  ones from a bundled, updatable dataset (no network calls required at scan time).
+  ones from a bundled, updatable dataset (no network calls required at scan time). *(Passive
+  fingerprint — no probing; runs in the passive engine §4 even though listed here with its family.)*
 - **Secrets in responses**: API keys/tokens via a regex ruleset (overlaps F23 secret scanner).
+  *(Passive regex/entropy — no probing; runs passively like the F23 secret scanner.)*
 
-### 3.4 Check Recipes (custom checks, M11)
+### 3.3 Check Recipes (custom checks, M11)
 
 | ID | Pri | Requirement |
 |---|---|---|
@@ -110,6 +112,33 @@ Each entry = one or more issue definitions. Mark the P0 set that the VulnLab acc
 | SCN-064 | P1 | Recipes participate in scan configs like built-in checks (enable/disable, intensity). |
 | SCN-065 | P2 | Share/export recipes; a signed-recipe notion for trust. |
 | SCN-066 | P2 | A GraphQL/JSON-aware matcher helper set. |
+
+### 3.4 Detection methodology (precision rules for the P0 active checks)
+
+The catalog above names the checks; these are the techniques that keep them low-false-positive. All
+compare against the per-insertion-point baseline + random canary (SCN-031) and skip pages flagged
+volatile.
+
+- **Boolean SQLi**: use a control triplet — a true-condition payload must make the response ≈ the
+  baseline *and* a false-condition payload must differ from it; confirm with a second, independent
+  inverted pair. Never fire on a single coincidental length delta, and never on a volatile page.
+- **Time-based (SQLi/cmd)**: inject a *varying* delay (e.g. 0/5/10 s) and require the measured delay
+  to **scale with** the injected value across repeats (dose-response), not merely exceed a flat
+  threshold — this rejects uniformly slow/jittery endpoints. (Extends SCN-032.)
+- **SSTI**: use **randomized** operands per probe (e.g. `{{a*b}}` with fresh a,b) and require the
+  exact product to appear only in the injected response, so a literal already on the page can't
+  masquerade as evaluation.
+- **Reflected XSS**: beyond reflection, verify which context-breakout characters (`< > " '` per
+  HTML/attr/JS/URL/CSS context) survive **unencoded** in the response; only an unencoded breakout is
+  reported. The `/safe/xss/*` twins (encoded per context) must stay clean.
+- **Stored XSS**: inject a **unique canary token** per injection so the later-rendered reflection can
+  be located and attributed to the exact insertion point, across a different render endpoint
+  (coordinated with the Crawler).
+- **Open redirect**: inject a canary external host and its obfuscations (`//canary`, `/\canary`,
+  whitespace/`@`-confusion, protocol-relative) and confirm an actual redirect to the canary via a 3xx
+  `Location` or a client-side (meta/JS) redirect — not mere reflection in the body.
+- **CRLF / header injection**: confirm a **real new response header or status-line split** was
+  created (observe it in the parsed response), not merely that the payload is reflected in the body.
 
 ## 4. Live passive scanning (M10)
 
@@ -129,7 +158,27 @@ Each entry = one or more issue definitions. Mark the P0 set that the VulnLab acc
 - Determinism for tests: seed any randomness (canaries) from an injectable RNG; VulnLab timing is
   stable enough for the time-based checks in CI (use generous thresholds).
 
-## 6. Acceptance tests
+## 6. Edge cases
+
+- **Dynamic / non-deterministic pages**: responses that change every request (timestamps, CSRF
+  tokens, ads) break length/diff comparisons. Use the per-insertion-point canary (SCN-031) to detect
+  volatility and fall back to content-independent signals (reflection, OAST, timing) or widen
+  thresholds; never report solely on a length delta for a page flagged volatile.
+- **Rate limiting / WAF**: on 429/503 or a block page, back off (shared throttle), mark the host
+  throttled, and surface it in the task log rather than emitting false "fixed/absent" verdicts.
+- **Auth expiry mid-scan**: a session that drops mid-audit yields login redirects that look like
+  "not vulnerable". Detect via the session-validity check (F15) and re-auth before continuing;
+  single-flight the re-auth under concurrency.
+- **Stored-XSS timing**: the inject and the detect can be on different endpoints/requests, and the
+  render may be delayed — coordinate with the Crawler and allow a re-check pass before concluding.
+- **OAST asynchrony**: blind checks (OS command, SSRF, XXE) may see interactions arrive after the
+  request completes; the scan must honor the OAST grace period (SCN-033) before declaring "done".
+- **Insertion-point explosion**: deeply nested/decoded values (SCN-022) can multiply points without
+  bound; cap depth and per-request point count, and respect the per-insertion-point request budget.
+- **Destructive payloads**: anything that could modify or delete data stays behind the "unsafe
+  checks" gate (SCN-038); default configs never send it.
+
+## 7. Acceptance tests
 
 - Passive: browsing VulnLab yields exactly the planted passive issues (doc 06 §3), deduped, and none
   on `/safe/*`.

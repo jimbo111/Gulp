@@ -27,7 +27,7 @@ same transforms written inline inside Repeater/Fuzzer requests so they're applie
 | ID | Pri | Requirement |
 |---|---|---|
 | DEC-020 | P0 | Inline tags in request bytes using delimiters `«op(args){ inner }»` (configurable, doc 07). Tags nest: the inner content is transformed by the op. Example: `«base64{ «var(user)»:«var(pass)» }»`. |
-| DEC-021 | P0 | Core ops available as tags: all §3 encoders/decoders/hashes, plus dynamic ops `var(name)`, `now(format)`, `random(charset,len)`, `uuid()`, `counter(name)`, `beacon()` (F10), `len(inner)`. |
+| DEC-021 | P0 | Core ops available as tags: all §3 encoders/decoders/hashes, plus dynamic ops `var(name)`, `now(format)`, `random(charset,len)`, `uuid()`, `counter(name)`, `len(inner)`, and `beacon()`. *(All are P0 at M7 **except** `beacon()`, which needs F10/Beacon and is wired in M11 — later: M11; the tag parser reserves the name from M7.)* |
 | DEC-022 | P0 | Evaluation happens in the F03 send pipeline (a `TransformTagHook`) for Repeater/Fuzzer (and optionally Scanner probes); a toggle enables it per tool. A preview renders the final bytes before sending. |
 | DEC-023 | P1 | Clear errors for unknown ops/args, shown in the editor at the tag's location; unbalanced delimiters are reported, not silently ignored. |
 | DEC-024 | P1 | A Snippet op `js(name)` runs a JS transform (F18) for custom logic; sandboxed and timeout-bounded. |

@@ -6,7 +6,7 @@
 |---|---|---|---|
 | Unit | `Packages/GulpKit/Tests/<Module>Tests` | Swift Testing (`import Testing`, `@Test`, `#expect`) — XCTest is acceptable where Swift Testing lacks something | Parsers, codecs, GulpQL, diff, payload generators, statistics, cert minting, scope matching |
 | Integration | `Tests/IntegrationTests` | Swift Testing + an in-process VulnLab + an in-process proxy | Proxy ↔ engine ↔ store end-to-end; scanner against VulnLab; Beacon client ↔ dev Beacon server |
-| UI | `GulpUITests` (XCUITest) | Xcode | Smoke flows: create a project, see proxied traffic, send to Repeater, run an attack |
+| UI | `GulpAppUITests` (XCUITest) | Xcode | Smoke flows: create a project, see proxied traffic, send to Repeater, run an attack |
 | Performance | `Tests/PerformanceTests` (run with `make perf`, not in the default `make test`) | `ContinuousClock` measurements with budgets from doc 01 §9 | Throughput, latency, table paging, project open |
 | Fuzz | `Tests/FuzzTests` (Linux, libFuzzer via `-sanitize=fuzzer`) plus a deterministic random-input test in the unit suite | | HTTP/1 parser, HTTP/2 frame handling, GulpQL parser, decoders |
 
@@ -20,15 +20,23 @@ Rules:
 
 ## 2. Property and round-trip tests (must exist from M1)
 
-- `parse(bytes).serialize() == bytes` for every fixture in `Tests/Fixtures/http/` (including
-  malformed ones: bare LF, duplicate headers, obs-fold, missing final CRLF, NUL bytes, 1 MB headers).
+- `parse(bytes).serialize() == bytes` for every fixture in
+  `Packages/GulpKit/Tests/GulpCoreTests/Fixtures/http/` (`request-*.http` / `response-*.http`, exact
+  wire bytes protected by `.gitattributes`), including malformed ones: bare LF, duplicate headers,
+  obs-fold, missing final CRLF, NUL bytes; the 1 MB-header and 10k-header cases and a seeded fuzz
+  corpus are generated in `ParserPropertyTests`.
 - Editing a header via `ParsedRequest` changes only that header's bytes.
 - Codecs: `decode(encode(x)) == x` over random bytes, for every reversible codec.
 - GulpQL: `parse(print(ast)) == ast`.
 
 ## 3. VulnLab — the reference vulnerable target (`gulp-vulnlab`)
 
-VulnLab is a deliberately vulnerable web app that ships in the repo (Hummingbird executable target).
+VulnLab is a deliberately vulnerable web app that ships in the repo (`gulp-vulnlab` executable
+target). Its protocol-level **Basics** fixtures (`/echo`, `/echo-raw`, `/chunked`, `/continue`, …) run
+on a small raw SwiftNIO server so every byte on the wire is exact — a framework would normalize the
+very things they exist to exercise (1xx responses, chunk bytes, verbatim echo). The app-level
+endpoints below (auth, XSS, SQLi, …) may use Hummingbird. The M1 DoD is executable:
+`Scripts/m1-dod.sh` (run by the Linux CI job).
 It's the fixture for manual checks, integration tests and scanner accuracy tests. **It must bind
 only to 127.0.0.1** and prints a warning banner at startup.
 
@@ -37,7 +45,7 @@ tests can measure false positives.
 
 | Area | Vulnerable endpoint(s) | Safe twin | Used by |
 |---|---|---|---|
-| Basics | `/echo` (reflects the request), `/redirect?to=`, `/chunked`, `/gzip`, `/slow?ms=`, `/large?mb=`, `/status/{code}`, `/h2` (HTTPS listener on :8443 with ALPN h2) | — | F01, F03 |
+| Basics | `/echo` (reflects the request as a readable response), **`/echo-raw`** (a raw TCP listener on :8089 that writes back the exact bytes it received, verbatim — used for byte-fidelity tests with malformed/duplicate headers and bare LF), `/redirect?to=`, `/chunked`, `/gzip`, `/slow?ms=`, `/large?mb=`, `/status/{code}`, `/continue` (emits `100 Continue` then the final response), `/h2` (HTTPS listener on :8443 with ALPN h2) | — | F01, F03 |
 | Auth | `/login` (form + CSRF token), `/account` (session cookie), `/api/me` (Bearer JWT), session expires after N requests (configurable) | — | F15, F07 |
 | Reflected XSS | `/xss/html?q=`, `/xss/attr?q=`, `/xss/js?q=`, `/xss/url?q=` (into href) | `/safe/xss/...` (encoded per context) | SCN |
 | Stored XSS | `/guestbook` (POST, then rendered on GET) | `/safe/guestbook` | SCN |
@@ -62,12 +70,65 @@ tests can measure false positives.
 | Clickjacking | `/frameable` (no X-Frame-Options / frame-ancestors) | `/safe/frameable` | BRW (Frame Kit) |
 | SPA | `/app/` (client-side routing, links rendered by JS) | — | CRL |
 
-**Scanner accuracy test** (`IntegrationTests/ScannerAccuracyTests`): crawl and audit VulnLab with the
-"Thorough" configuration, then assert:
+**M1 endpoint behaviors (so the M1 build isn't guessing).** `/echo` returns `200` with the request's
+method, target, headers and body reflected as `text/plain` (and `Content-Length` set). `/echo-raw`
+(raw TCP, :8089) writes the exact received bytes straight back and then **closes the connection**
+(close-delimited), so a client reading to EOF gets a byte-identical copy — this is the byte-fidelity
+oracle for HTTP-001 and the M1 DoD. `/redirect?to=` returns `302` with a `Location` of the `to`
+value. `/chunked` responds `Transfer-Encoding: chunked` in several small chunks (e.g. 3 chunks) plus
+a terminating zero-chunk (optionally a trailer, to exercise trailer parsing). `/gzip` sets
+`Content-Encoding: gzip`; `/slow?ms=` delays before the body; `/large?mb=` streams N MB;
+`/status/{code}` returns that status (used for the Governor-backoff test). A `/continue` endpoint
+emits a `100 Continue` interim response before the final one, to exercise 1xx handling (recorded in
+`ParsedResponse.interimResponses`, doc 04 §2). Fixture files for the parser round-trip/edit tests
+live in `Tests/Fixtures/http/` and are authored as part of M1 (doc §2 lists the malformed cases).
 
-- recall: every P0 check finds its vulnerable endpoint;
-- precision: no issue of severity ≥ Low is reported on `/safe/*`;
+**Determinism prerequisites.** For the accuracy test to be stable, VulnLab must make its planted
+issues explicit rather than incidental:
+
+- **Security-header/cookie baseline**: VulnLab sends a *correct* baseline (CSP, X-Content-Type-
+  Options, cookie `HttpOnly`/`SameSite`, etc.) on **every** route by default, so a passive
+  missing-header/weak-cookie issue fires **only** on the specific routes that deliberately omit it.
+  Each such planted route is enumerated in a machine-readable fixture manifest
+  (`Fixtures/vulnlab-issues.json`: route → expected issue type ids) that the test asserts against,
+  instead of a vague "exactly the planted issues".
+- **Plaintext-localhost checks**: HSTS-absent, `Secure`-cookie-absent, cleartext-password-submission
+  and mixed-content can't be meaningfully tested on the HTTP `:8088` listener (they'd fire on every
+  route including `/safe/*`). Exercise these only on the HTTPS `:8443` listener, which serves a
+  vulnerable/`/safe/` pair for them; on the plaintext listener they are suppressed (or emitted at
+  Info and excluded from the precision assertion).
+- **OAST wiring**: the OAST-based P0 checks (SSRF, OS-command, XXE) only fire when a Beacon is
+  configured (BCN-004 is off by default). The test run **must** start the dev Beacon (`make beacon
+  --dev` equivalent, F10 BCN-024) and point the scan config at it; otherwise those three have no
+  recall path.
+
+**Scanner accuracy test** (`IntegrationTests/ScannerAccuracyTests`): with the dev Beacon running,
+crawl and audit VulnLab with the "Thorough" configuration, then assert:
+
+- recall: every P0 check finds its vulnerable endpoint (per the fixture manifest), including the
+  three OAST checks via the dev Beacon;
+- precision: no issue of severity ≥ Low is reported on `/safe/*` (plaintext-only passive checks are
+  excluded per above);
 - the results are written to `.build/scanner-accuracy.json` so changes are tracked over time.
+
+### 3.1 Phase F fixtures (added with F25–F32, M21+)
+
+The table above is the **v1** VulnLab (M0–M20). Each Phase F feature **extends VulnLab with its own
+fixtures** — building that target is part of the feature's milestone, and the feature's own
+Acceptance tests section is the authoritative list. VulnLab stays 127.0.0.1-only. The targets each
+post-1.0 feature adds (every vulnerable route gets a `/safe/*` twin unless noted):
+
+| Feature (milestone) | VulnLab fixtures to add |
+|---|---|
+| F25 SSO (M21) | An **OIDC** authorization server: `/oidc/authorize`, `/oidc/token`, `/oidc/userinfo`, `/.well-known/openid-configuration`, JWKS — a vulnerable instance (over-accepts `redirect_uri`, missing/static `state`, PKCE downgradable to `plain`, implicit-flow token leak via `Referer`) and a hardened twin. A **SAML** SP `/saml/acs` that accepts a signature-stripped/XSW assertion, with a signature-validating twin. |
+| F26 WebSocket (M22) | Reuses `/ws/chat`; adds a socket that authorizes **only at handshake** (+ per-message-authz twin), a socket that **upgrades on a cross-origin `Origin`** returning authenticated data (+ Origin-checking twin, for CSWSH), and a socket whose messages reach a **blind sink** (command/SSRF) that calls the dev Beacon, for OAST-correlated WS injection. |
+| F27 JS Recon (M23) | A **minified JS bundle with an exposed `.map`**, `/api/internal/*` routes referenced only from JS (not linked), a bundled **known-vulnerable JS library** version, and a second **versioned capture** of the bundle (adds an endpoint) for the asset-diff test. |
+| F28 Cache (M24) | `/cache/reflect` that reflects **`X-Forwarded-Host`** into a cacheable response (+ non-caching twin) — and when that reflected header value is fetched server-side it reaches the dev Beacon, giving the cache-amplified **SSRF-into-cache** path (OAST-correlated); and an `/account` endpoint cacheable as **`/account.css`** (cache deception) with a `Cache-Control: private` twin. |
+| F30 Drift & Retest (M25) | No new routes required — reuses existing endpoints, plus a **config toggle** on one planted vuln so a fixture can flip vulnerable→patched between runs (for the Fixed/Still-Vulnerable verdict test). |
+| F32 LLM (M26) | `/ai/chat` (SSE) vulnerable to **direct prompt injection** (+ guarded twin); a stored-note path the assistant later ingests for **indirect injection + OAST exfil**; an endpoint that renders model **Markdown into HTML** (XSS sink) with a sanitizing twin. |
+
+(F29 Governor and F31 Journal need no VulnLab fixtures — their acceptance tests drive Gulp's own
+tooling against existing endpoints.)
 
 ## 4. Third-party targets for manual testing (optional, Docker)
 

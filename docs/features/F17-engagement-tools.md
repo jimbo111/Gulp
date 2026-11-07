@@ -14,7 +14,7 @@ the "Engagement tools ▸" context menu (UI-040) and/or its own panel.
 | ETL-001 | P0 | **Search** (project-wide): the global FTS/regex search (F05 HIS-050) surfaced as an engagement tool with grouped results and export. |
 | ETL-002 | P0 | **Find references**: given a selected value (token, filename, parameter), find every request/response in the project that contains it (F05 HIS-053). |
 | ETL-003 | P0 | **Discover content**: a guided content-discovery run (directory/file brute force) seeded from a URL, using wordlists + observed extensions, recursive, scope-gated — effectively a specialized Fuzzer config with a tree-style results view of found paths (status, length). |
-| ETL-004 | P1 | **Find scripts/comments**: extract all JavaScript files and HTML comments seen for a host (useful for secrets/endpoints); link to the secret scanner (F23). |
+| ETL-004 | P1 | **Find scripts/comments**: extract all JavaScript files and HTML comments seen for a host (useful for secrets/endpoints); link to the secret scanner (F23). *(The extraction is M16; the secret-scanner link activates when F23/M19 lands — later: M19.)* |
 | ETL-005 | P1 | **Analyze target**: the per-host analysis panel (F04 TGT-008) — dynamic URLs, parameters, interesting observations. |
 | ETL-006 | P1 | **Schedule tasks**: run a scan/crawl/fuzz at a time or on an interval, and auto-pause/resume; a simple scheduler with a task list (useful for long engagements). |
 | ETL-007 | P1 | **Generate CSRF PoC**: from a request, generate an HTML form/fetch PoC that reproduces it cross-site (auto-handles method, params, content-type: form, multipart, or a fetch for JSON with the right mode), with options (auto-submit, include cookies note). Export HTML. |
@@ -33,10 +33,19 @@ Dashboard tasks.
 
 - Content discovery and "copy as" reuse existing engines (Fuzzer engine + wordlists; a request→code
   serializer). Keep the serializers in a small `RequestExport` helper used by UI-040 everywhere.
-- CSRF PoC generator inspects the request's method/content-type to choose form vs. multipart vs.
-  fetch; for JSON it emits a `fetch(..., {method, body, credentials:'include', mode:'no-cors'?})`
-  with a clear note about when a simple HTML form suffices vs. when CORS blocks it.
-- Scheduler is a lightweight actor persisting scheduled jobs in the project; it drives existing task
+- CSRF PoC generator inspects the request's method/content-type to choose the right shape:
+  - form-urlencoded / multipart / text-plain bodies → an auto-submitting HTML `<form>` (these are
+    CORS "simple" content types and need no preflight) — the reliable, classic CSRF PoC.
+  - A body that *requires* `Content-Type: application/json` → a simple form or `no-cors` fetch
+    **cannot** set that header (no-cors restricts Content-Type to the simple set, and a custom type
+    triggers a CORS preflight), so such an endpoint is generally **not** CSRF-able via a cross-site
+    PoC. The generator must say exactly that (and why — preflight), rather than emit a `no-cors`
+    JSON fetch that silently won't send the JSON body. It emits a working `fetch` PoC only when the
+    endpoint accepts a simple content type, or when observed CORS (`Access-Control-Allow-Origin` +
+    credentials) actually permits the cross-site request.
+- Scheduler is a lightweight actor persisting scheduled jobs in the project as a `SchedulerSettings`
+  group in the `settings` table (doc 04 §6; same pattern as proxy/intercept rules — no dedicated
+  table needed); it drives existing task
   APIs. Don't over-engineer — time/interval triggers only.
 
 ## 5. Edge cases

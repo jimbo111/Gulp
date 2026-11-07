@@ -44,7 +44,7 @@ testing).
 
 | ID | Pri | Requirement |
 |---|---|---|
-| SES-030 | P1 | **Recorded login** via the Gulp Browser (F16): the user logs in once in the managed browser; Gulp records the navigations/requests and builds a replayable login (a macro or a browser-replay) usable by automated tools. Credentials stored in the Keychain. |
+| SES-030 | P1 | **Recorded login** via the Gulp Browser (F16): the user logs in once in the managed browser; Gulp records the navigations/requests and builds a replayable login (a macro or a browser-replay) usable by automated tools. Credentials stored in the Keychain. *(later: M13 — needs F16, which lands in M13; the rest of Sessions is M12.)* |
 | SES-031 | P2 | Browser-based re-auth: when a macro replay can't reproduce a JS-heavy login, re-run the recorded browser login headlessly to refresh cookies. |
 | SES-040 | P1 | Upstream **client certificates** (mTLS) per host (F02 TLS-011), selectable per identity. |
 | SES-041 | P2 | Platform auth (Basic/Digest/NTLM) per host/identity (F03 HTTP-012). |

@@ -14,14 +14,34 @@
 ## 2. Core Swift types (GulpCore)
 
 ```swift
-public struct Bytes: Sendable, Hashable, RandomAccessCollection { /* [UInt8] storage, cheap slices */ }
-
-public struct RawRequest: Sendable, Hashable {
-    public var bytes: Bytes
-    public var parsed: ParsedRequest { get }      // cached lazily; invalidated on mutation
+// Bytes wraps [UInt8] with copy-on-write storage and cheap slices. Minimum API GulpCore relies on:
+public struct Bytes: Sendable, Hashable, RandomAccessCollection {
+    public typealias Element = UInt8
+    public typealias SubSequence = Bytes
+    public init(_ bytes: [UInt8])
+    public init(_ string: String)                 // UTF-8
+    public var startIndex: Int { get }; public var endIndex: Int { get }
+    public subscript(position: Int) -> UInt8 { get }
+    public subscript(bounds: Range<Int>) -> Bytes { get }
+    public func string(lossy: Bool = true) -> String   // UTF-8 view for display
+    public mutating func replaceSubrange(_ r: Range<Int>, with new: Bytes)
 }
 
-public struct ParsedRequest: Sendable {
+public struct RawRequest: Sendable, Hashable {
+    public var bytes: Bytes { get }               // the canonical bytes (see init/edit below)
+    public var parsed: ParsedRequest { get }      // parsed once at init and memoized (see note)
+    public init(_ bytes: Bytes)                   // parses eagerly; `parsed` is stored, not recomputed
+    /// Serializing is the identity: `RawRequest(b).serialize() == b` (doc 06 §2 round-trip test).
+    public func serialize() -> Bytes
+    /// Splice new bytes over a parsed byte range (e.g. a header value), returning a re-parsed value;
+    /// only those bytes change, everything else is preserved (doc 06 §2 edit test).
+    public func replacing(_ range: Range<Int>, with new: Bytes) -> RawRequest
+}
+// Memoization note: `parsed` is computed in `init` and stored, so there is no "mutate then
+// invalidate" problem — these are value types and any edit (`replacing`) returns a NEW value whose
+// `parsed` is recomputed from the spliced bytes. `bytes` is get-only for the same reason.
+
+public struct ParsedRequest: Sendable, Hashable {  // Hashable so the enclosing RawRequest can be
     public var method: Range<Int>                 // byte ranges into RawRequest.bytes
     public var target: Range<Int>                 // request-target (origin/absolute/authority/asterisk form)
     public var version: Range<Int>
@@ -32,9 +52,51 @@ public struct ParsedRequest: Sendable {
     public var warnings: [ParseWarning]           // e.g. obsolete line folding, bare LF, invalid chars
 }
 
-public struct HeaderField: Sendable { public var name: Range<Int>; public var value: Range<Int>; public var line: Range<Int> }
+// `value` is trimmed of surrounding optional whitespace (OWS) but still points at the real body
+// bytes; `line` is the whole field line (terminator excluded). Obsolete line folding extends the
+// previous field's `value`/`line` to cover the continuation.
+public struct HeaderField: Sendable, Hashable { public var name: Range<Int>; public var value: Range<Int>; public var line: Range<Int> }
 
-public struct RawResponse: Sendable, Hashable { public var bytes: Bytes; public var parsed: ParsedResponse { get } }
+public struct ParsedResponse: Sendable, Hashable {  // Hashable so RawResponse can be; mirror of ParsedRequest
+    public var version: Range<Int>                // e.g. "HTTP/1.1"
+    public var statusCode: Int                    // parsed integer, e.g. 200
+    public var reasonPhrase: Range<Int>
+    public var headers: [HeaderField]             // in order, duplicates allowed
+    public var headerBlockEnd: Int                // index after CRLFCRLF (or LFLF, tolerated)
+    public var body: Range<Int>                   // the body as framed (raw; chunked stays chunked)
+    public var dechunkedBody: Bytes?              // decoded payload when framing == .chunked AND !incomplete;
+                                                  // nil otherwise. Chunk extensions and trailers are dropped from
+                                                  // this view (the raw bytes still hold them in `body`).
+    public var transferEncodingChunked: Bool
+    public var contentLength: Int?
+    public var bodyFraming: BodyFraming           // .contentLength / .chunked / .closeDelimited / .none
+    public var interimResponses: [ParsedResponse] // 1xx responses that preceded this final one (HTTP-002). The
+                                                  // single-message parser always leaves this []; the HTTP engine
+                                                  // accumulates it across the exchange and attaches it to the final.
+    public var lineEnding: LineEnding
+    public var warnings: [ParseWarning]
+    public var incomplete: Bool                   // declared body not fully present. Decidable from bytes for
+                                                  // Content-Length (short body) and chunked (no terminal chunk);
+                                                  // for .closeDelimited completeness is a connection fact, so the
+                                                  // stateless parser leaves this false and the engine sets it on close.
+}
+
+public struct RawResponse: Sendable, Hashable {
+    public var bytes: Bytes { get }               // the FINAL response's bytes
+    public var parsed: ParsedResponse { get }
+    public var interim: [RawResponse] { get }     // 1xx responses that preceded it, each with its own bytes
+    public var isHeadResponse: Bool { get }       // answers HEAD: bodyFraming .none, never incomplete
+    // Parses eagerly; `parsed` memoized as in RawRequest. Only the engine knows what preceded the
+    // response on the wire and which method was sent, so it passes `interim` and `headRequest`;
+    // `parsed.interimResponses` mirrors `interim.map(\.parsed)` (ranges into each interim's bytes).
+    public init(_ bytes: Bytes, interim: [RawResponse] = [], headRequest: Bool = false)
+    public func serialize() -> Bytes              // identity
+    public func replacing(_ range: Range<Int>, with new: Bytes) -> RawResponse   // keeps interim/HEAD
+    public func hasHeaderToken(_ name: String, _ token: String) -> Bool        // e.g. Connection: close
+}
+// Framing primitives the engine shares with the parser (public on `enum HTTP1`):
+//   headerBlockEnd(_:) -> (end, terminator)      terminator 4 = CRLFCRLF, 2 = LFLF, 0 = none
+//   scanChunked(_:from:) -> .complete(end:) / .needMore(resumeAt:) / .malformed   (exact, resumable)
 
 public struct HTTPTarget: Sendable, Hashable, Codable {
     public var scheme: Scheme            // .http / .https
@@ -54,13 +116,88 @@ public struct Exchange: Sendable, Identifiable {
     public var request: RawRequest
     public var response: RawResponse?              // nil while pending or failed
     public var state: ExchangeState                // .pending, .complete, .failed(GulpNetworkError), .dropped, .intercepted
-    public var timing: Timing                      // start, dnsMs, connectMs, tlsMs, ttfbMs, totalMs
+    public var timing: Timing                      // see Timing below (all phases of HTTP-010)
     public var clientAddress: String?              // for proxy traffic
     public var connectionID: UInt64                // groups requests on the same connection
     public var tls: TLSInfo?                       // negotiated version, cipher, ALPN, server cert chain fingerprint
     public var edited: EditInfo?                   // original request/response if modified by intercept or match&replace
     public var annotation: Annotation              // comment, highlight, tags
     public var derived: DerivedFields              // host, path, query, mime, status, lengths, title, param count, cookies set…
+}
+
+// ---- Supporting value types (all in GulpCore) ----
+// These are Hashable because ParsedRequest/ParsedResponse/HTTPTarget are (a type can only be
+// Hashable if every stored property is), so changing a conformance here is a breaking change.
+public enum Scheme: String, Sendable, Codable, Hashable { case http, https }
+public enum HTTPVersion: String, Sendable, Codable, Hashable { case http1_0 = "HTTP/1.0", http1_1 = "HTTP/1.1", http2 = "HTTP/2" }
+public enum LineEnding: Sendable, Hashable { case crlf, lf, mixed, none }  // .none = no line ending seen (empty header block)
+public enum BodyFraming: Sendable, Hashable { case contentLength, chunked, closeDelimited, none }
+public enum ExchangeState: Sendable, Equatable {  // Exchange.state
+    case pending, complete, dropped, intercepted
+    case failed(GulpNetworkError)
+}
+public enum Highlight: String, Sendable, Codable, CaseIterable {  // Annotation.highlight / `exchanges.highlight`
+    case red, orange, yellow, green, cyan, blue, purple, pink, gray
+}
+// The full warning set, defined once. The single-message parser emits the framing/line warnings;
+// `oversizedHeaders` is emitted by the engine's header-size guard (not the pure parser).
+public enum ParseWarning: Sendable, Equatable, Hashable {
+    case bareLF, obsoleteLineFolding, missingFinalCRLF, invalidCharInName, duplicateContentLength,
+         conflictingFraming, malformedStartLine, oversizedHeaders, nonUTF8Header
+}
+
+public struct Timing: Sendable, Codable {         // milliseconds per phase; all of HTTP-010
+    public var start: Date
+    public var dnsMs, connectMs, tlsMs, requestWriteMs, ttfbMs, downloadMs, totalMs: Double?
+}  // tlsMs/connectMs are nil for reused or plaintext connections; requestWriteMs + downloadMs added per HTTP-010.
+
+public struct TLSInfo: Sendable, Codable {        // Exchange.tls
+    public var version: String                    // e.g. "TLSv1.3"
+    public var cipherSuite: String
+    public var alpn: String?                       // "h2" / "http/1.1"
+    public var serverChainSHA256: [String]         // fingerprints, leaf first
+    public var validation: TLSValidation           // .ok / .failed(reason) / .notChecked
+}
+public enum TLSValidation: Sendable, Codable, Equatable { case ok, notChecked, failed(String) }
+
+public struct EditInfo: Sendable {                // Exchange.edited (set when intercept/match&replace changed bytes)
+    public var originalRequest: RawRequest?
+    public var originalResponse: RawResponse?
+    public var editedBy: ToolSource                // who changed it
+}
+
+public struct DerivedFields: Sendable, Codable {  // denormalized columns mirrored into `exchanges` (doc §4)
+    public var host: String; public var port: Int; public var scheme: Scheme
+    public var method: String?; public var path: String?; public var query: String?; public var ext: String?
+    public var status: Int?; public var responseLength: Int?; public var mime: String?; public var title: String?
+    public var paramCount: Int; public var hasCookies: Bool; public var setsCookies: Bool
+}
+
+public struct Annotation: Sendable, Codable {     // Exchange.annotation
+    public var comment: String?; public var highlight: Highlight?; public var tags: [String]
+}
+
+// ToolSource encodes to the TEXT column `exchanges.source` as a stable string: the simple cases are
+// their names ("proxy","repeater",…); `.extension(id)` encodes as "extension:<id>".
+public enum ToolSource: Sendable, Codable, Hashable {
+    case proxy, repeater, fuzzer, scanner, crawler, sequencer, session, browser, automation, ai
+    case extension(id: String)
+    public var rawValue: String { get }            // the TEXT encoding above
+    public init?(rawValue: String)
+}
+
+// Error model. GulpNetworkError is the typed failure stored in ExchangeState.failed and serialized
+// into `exchanges.error`; GulpError is the user-facing app error (message + recovery suggestion).
+public enum GulpNetworkError: Sendable, Codable, Equatable {
+    case cancelled, connectTimeout, tlsHandshakeTimeout, firstByteTimeout, idleTimeout, totalTimeout
+    case connectionRefused, connectionReset, dnsFailure(String), tlsFailure(String)
+    case tooLarge(limit: Int), incompleteResponse, upstreamProxyError(String), other(String)
+    public var code: String { get }                // the `exchanges.error` TEXT token, e.g. "connect_timeout"
+}
+public struct GulpError: Error, Sendable {         // thrown to the UI/CLI, never stored in an exchange
+    public var message: String                     // user-facing
+    public var recoverySuggestion: String?
+    public var underlying: GulpNetworkError?
 }
 ```
 
@@ -97,11 +234,18 @@ User-Agent: …
   re-parsing the text.
 
 ```swift
+// A header field for H2 raw mode. Named struct, NOT a tuple: Swift cannot synthesize Codable
+// for tuples or arrays of tuples, so the fields below must be a Codable element type.
+public struct H2Field: Sendable, Codable, Hashable {
+    public var name: Bytes      // bytes so illegal-in-H1 names (uppercase, etc.) are representable
+    public var value: Bytes
+}
+
 public struct H2RequestSpec: Sendable, Codable {
-    public var pseudoHeaders: [(name: String, value: Bytes)]   // ordered
-    public var headers: [(name: Bytes, value: Bytes)]          // ordered, case preserved (lowercased on wire unless "raw case" option)
+    public var pseudoHeaders: [H2Field]   // ordered; e.g. :method :scheme :authority :path
+    public var headers: [H2Field]         // ordered, case preserved (lowercased on wire unless "raw case")
     public var body: Bytes
-    public var dataFrameSplit: [Int]?                          // optional: split body into DATA frames of these sizes
+    public var dataFrameSplit: [Int]?     // optional: split body into DATA frames of these sizes
 }
 ```
 
@@ -155,11 +299,14 @@ CREATE TABLE ws_messages (
   direction INTEGER NOT NULL,              -- 0 client→server, 1 server→client
   opcode INTEGER NOT NULL, created_at REAL NOT NULL,
   payload_blob INTEGER REFERENCES blobs(id), original_payload_blob INTEGER REFERENCES blobs(id),
-  length INTEGER, highlight TEXT, comment TEXT
+  length INTEGER, highlight TEXT, comment TEXT,
+  frames_json TEXT                         -- per-message frame boundaries (offsets, fin bits, rsv/compression) for PRX-031
 );
 
-CREATE VIRTUAL TABLE fts_exchanges USING fts5(request_text, response_text, content='', tokenize='trigram');
--- contentless; rowid = exchanges.id; bodies truncated to the first 256 KB per message for indexing
+CREATE VIRTUAL TABLE fts_exchanges USING fts5(request_text, response_text, content='', contentless_delete=1, tokenize='trigram');
+-- contentless with delete support (SQLite >= 3.43); rowid = exchanges.id, supplied on insert.
+-- Bodies truncated to the first 256 KB per message for indexing. On older SQLite, drop
+-- contentless_delete and rebuild the index instead of deleting rows (see the FTS note below).
 
 CREATE TABLE scope_rules (id INTEGER PRIMARY KEY, kind TEXT CHECK(kind IN ('include','exclude')), enabled INTEGER, protocol TEXT, host_regex TEXT, port TEXT, path_regex TEXT, ordinal INTEGER);
 
@@ -168,8 +315,8 @@ CREATE TABLE issues (
   severity TEXT NOT NULL, confidence TEXT NOT NULL,
   host TEXT NOT NULL, path TEXT NOT NULL, insertion_point TEXT,
   dedup_key TEXT NOT NULL UNIQUE,
-  detail_md TEXT, background_md TEXT, remediation_md TEXT,
-  status TEXT NOT NULL DEFAULT 'open',      -- open | false_positive | accepted_risk | fixed
+  detail_md TEXT, background_md TEXT, remediation_md TEXT, references_md TEXT,   -- references_md backs SCN-001's "references"
+  status TEXT NOT NULL DEFAULT 'open',      -- open | false_positive | accepted_risk | fixed (SCN-001 uses these exact tokens)
   source_task_id INTEGER, created_at REAL, updated_at REAL
 );
 CREATE TABLE issue_evidence (id INTEGER PRIMARY KEY, issue_id INTEGER REFERENCES issues(id) ON DELETE CASCADE, exchange_id INTEGER REFERENCES exchanges(id), request_markers_json TEXT, response_markers_json TEXT, oast_interaction_id INTEGER, note TEXT);
@@ -187,12 +334,30 @@ CREATE TABLE fuzzer_results (attack_id INTEGER REFERENCES fuzzer_attacks(id) ON 
 CREATE TABLE oast_payloads (id INTEGER PRIMARY KEY, correlation_id TEXT UNIQUE, created_at REAL, context_json TEXT);   -- which tool, exchange and insertion point used it
 CREATE TABLE oast_interactions (id INTEGER PRIMARY KEY, payload_id INTEGER REFERENCES oast_payloads(id), protocol TEXT, remote_address TEXT, at REAL, raw_blob INTEGER, summary TEXT);
 
-CREATE TABLE notebook_items (id INTEGER PRIMARY KEY, kind TEXT, exchange_id INTEGER, title TEXT, status TEXT, body_md TEXT, created_at REAL, updated_at REAL, ordinal INTEGER);
+CREATE TABLE notebook_items (
+  id INTEGER PRIMARY KEY, kind TEXT,                                 -- kind: 'exchange' | 'note'
+  exchange_id INTEGER REFERENCES exchanges(id) ON DELETE SET NULL,   -- optional back-ref to the live exchange
+  request_blob INTEGER REFERENCES blobs(id),                         -- snapshot (NB-001), independent of history edits/deletion
+  response_blob INTEGER REFERENCES blobs(id),
+  target_json TEXT,                                                  -- scheme/host/port so the snapshot can be re-sent
+  title TEXT, status TEXT, body_md TEXT, tags TEXT, highlight TEXT,  -- tags = JSON array (NB-003)
+  issue_id INTEGER REFERENCES issues(id) ON DELETE SET NULL,         -- NB-005 link
+  created_at REAL, updated_at REAL, ordinal INTEGER
+);
 
-CREATE TABLE cookie_jar (domain TEXT, path TEXT, name TEXT, value TEXT, expires REAL, secure INTEGER, http_only INTEGER, same_site TEXT, identity_id INTEGER, PRIMARY KEY(domain, path, name, identity_id));
+CREATE TABLE cookie_jar (domain TEXT, path TEXT, name TEXT, value TEXT, expires REAL, secure INTEGER, http_only INTEGER, same_site TEXT, identity_id INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(domain, path, name, identity_id));
+-- identity_id is NOT NULL (0 = "no identity") because SQLite treats NULLs in a PRIMARY KEY as
+-- distinct, which would let duplicate no-identity cookies accumulate instead of being replaced.
 CREATE TABLE identities (id INTEGER PRIMARY KEY, name TEXT, color TEXT, config_json TEXT);       -- Authz Matrix, sessions
 CREATE TABLE macros (id INTEGER PRIMARY KEY, name TEXT, steps_json TEXT);
 CREATE TABLE session_rules (id INTEGER PRIMARY KEY, name TEXT, enabled INTEGER, ordinal INTEGER, config_json TEXT);
+-- Note: proxy intercept rules (PRX-013/014), match & replace rules (PRX-020+), listeners and upstream/
+-- pass-through config have no dedicated table; they are project config stored as Codable SettingsGroups
+-- in `settings` (doc §6), e.g. keys "proxy.intercept" / "proxy.matchReplace", ordered lists inside value_json.
+-- Proxy intercept rules (PRX-013/014), match & replace rules (PRX-020..025), listeners (PRX-001),
+-- upstream proxy rules (PRX-041) and TLS pass-through (PRX-007) have NO dedicated table: they are
+-- project config, stored as Codable SettingsGroups in `settings` (doc §6), e.g. key "proxy.intercept",
+-- "proxy.matchReplace". Ordered rule lists are arrays inside value_json (array order = rule order).
 
 CREATE TABLE sequencer_runs (id INTEGER PRIMARY KEY, name TEXT, config_json TEXT, tokens_blob INTEGER, results_json TEXT, created_at REAL);
 
@@ -200,12 +365,63 @@ CREATE TABLE settings (scope TEXT, key TEXT, value_json TEXT, PRIMARY KEY(scope,
 CREATE TABLE extension_state (extension_id TEXT, key TEXT, value BLOB, PRIMARY KEY(extension_id, key));
 ```
 
+### Post-1.0 expansion tables (Phase F, migration v2+)
+
+These back the Phase F features (F30 Drift & Retest, F31 Journal). They ship as **two** later additive
+migrations, not in schema v1, so each lands with its feature under the "never edit a shipped
+migration" rule: `v2_journal` at **M16** (the `journal_*` tables back JRN-006/JRN-008, both M16; the
+M9 coverage index JRN-001 needs no table) and `v3_drift` at M25 (the `drift_*`, `issue_proofs`,
+`retest_runs` tables). Defined here together so the schema stays centralized.
+
+```sql
+-- F30 Drift & Retest -------------------------------------------------------
+CREATE TABLE drift_baselines (id INTEGER PRIMARY KEY, name TEXT, created_at REAL, scope_json TEXT);
+CREATE TABLE drift_endpoints (                                 -- immutable per-endpoint snapshot (DRF-001)
+  id INTEGER PRIMARY KEY, baseline_id INTEGER REFERENCES drift_baselines(id) ON DELETE CASCADE,
+  target_json TEXT, request_blob INTEGER REFERENCES blobs(id), response_blob INTEGER REFERENCES blobs(id),
+  facts_json TEXT, mask_json TEXT                              -- extracted facts + per-endpoint noise masks (DRF-006)
+);
+CREATE TABLE drift_runs (id INTEGER PRIMARY KEY, baseline_id INTEGER REFERENCES drift_baselines(id) ON DELETE CASCADE, run_at REAL);
+CREATE TABLE drift_results (                                   -- one row per endpoint per run (DRF-004)
+  id INTEGER PRIMARY KEY,
+  run_id INTEGER REFERENCES drift_runs(id) ON DELETE CASCADE,
+  endpoint_id INTEGER REFERENCES drift_endpoints(id),          -- NULL for a `new` endpoint (no baseline row yet)
+  target_json TEXT,                                            -- identity of the endpoint even when endpoint_id is NULL (`new`)
+  status TEXT,                                                 -- unchanged | changed | new | removed | error
+  sample_request_blob INTEGER REFERENCES blobs(id), sample_response_blob INTEGER REFERENCES blobs(id),
+  diff_json TEXT
+);  -- a surrogate id + target_json so `new` endpoints (DRF-004) are first-class, not an implicit NULL-PK row.
+CREATE TABLE issue_proofs (                                    -- replayable proof per issue (DRF-003)
+  id INTEGER PRIMARY KEY, issue_id INTEGER REFERENCES issues(id) ON DELETE CASCADE,
+  target_json TEXT, request_blob INTEGER REFERENCES blobs(id),
+  steps_json TEXT,                                             -- ordered extra requests for multi-step proofs (smuggling/race/chains); request_blob is the primary one
+  identity_id INTEGER REFERENCES identities(id),               -- replay under a specific identity (DRF-008); NULL = scope-matched session rules
+  matcher_json TEXT, created_at REAL
+);
+CREATE TABLE retest_runs (                                     -- per-issue retest history (DRF-005)
+  id INTEGER PRIMARY KEY, issue_id INTEGER REFERENCES issues(id) ON DELETE CASCADE, run_at REAL,
+  verdict TEXT,                                                -- fixed | still_vulnerable | changed | needs_review
+  evidence_exchange_id INTEGER REFERENCES exchanges(id), note TEXT
+);  -- the verdict axis is retest-run history; issues.status is updated from it, not replaced by it.
+
+-- F31 Journal (coverage index is derived/rebuildable; only these need persistence) ---------------
+CREATE TABLE journal_checklists (                              -- per-endpoint methodology goals (JRN-006)
+  id INTEGER PRIMARY KEY, host TEXT, endpoint_key TEXT, category TEXT, done INTEGER NOT NULL DEFAULT 0, note TEXT
+);
+CREATE TABLE journal_markers (id INTEGER PRIMARY KEY, at REAL, label TEXT, note TEXT);  -- timeline pins (JRN-008)
+```
+
 ### Notes
 
 - **Migrations**: use GRDB's `DatabaseMigrator`, one registered migration per schema change, named
   `vN_description`. Never edit a migration that has shipped.
 - **Blob dedup**: identical responses (static assets) are stored once. A periodic vacuum task
-  (`Project → Compact`) removes unreferenced blobs.
+  (`Project → Compact`) removes unreferenced blobs. Its reference walk must enumerate **every**
+  blob-referencing column, not a hardcoded v1 list — including the Phase F ones
+  (`drift_endpoints.request_blob`/`response_blob`, `drift_results.sample_request_blob`/
+  `sample_response_blob`, `issue_proofs.request_blob`) — or it would vacuum the immutable snapshots
+  F30 promises. Derive the column list from the schema (or keep it beside the migration that adds
+  each blob column).
 - **Write coalescer**: `StoreWriter` actor gathers `PendingWrite`s and flushes them in one
   transaction every 50 ms or 500 items. A crash loses at most the last 50 ms of traffic; for proxy
   traffic that is acceptable, and the Settings "Durable mode" flushes on every write.
@@ -214,9 +430,11 @@ CREATE TABLE extension_state (extension_id TEXT, key TEXT, value BLOB, PRIMARY K
   back to a bounded `LIKE`/scan with progress (F05 HIS-052). Index only text-like MIME types.
   Indexing runs on a background queue after the insert. Bodies are indexed to the first 256 KB (this
   is deliberately smaller than the 2 MB cap used for in-memory body regex in F05 — the index favors
-  breadth over completeness; full-fidelity matching uses the regex/scan path). Create the
-  table with `contentless_delete=1` (SQLite ≥ 3.43) so rows can be deleted when exchanges are
-  deleted. If the system SQLite is older, use an external-content table instead.
+  breadth over completeness; full-fidelity matching uses the regex/scan path). The table uses
+  `contentless_delete=1` (SQLite ≥ 3.43) so rows can be deleted when exchanges are deleted — both the
+  macOS 14 system SQLite and the Linux CI image (`swift:6.0-noble`) satisfy that, so it is the
+  baseline, not a special case. Only if a build ever targets an older SQLite, drop the option and
+  rebuild the index after deletes.
 - **Temporary projects** use a file in `~/Library/Caches/Gulp/temp-<uuid>.gulp`, which is deleted on
   close unless the user saves it.
 

@@ -37,7 +37,8 @@ an MCP server so AI agents can drive it, and built-in access-control and API too
   the app is macOS only.
 - HTTP/3 (QUIC) interception. Browsers fall back to HTTP/2 when QUIC is blocked, and the Gulp
   Browser launches with `--disable-quic`.
-- A team server or multi-user collaboration (see Open Questions in doc 07).
+- A team server or multi-user collaboration. This is a settled non-goal (doc 07 decision #6):
+  Gulp is single-user, and sharing happens by exchanging `*.gulp` project files and reports.
 - Mobile app binary analysis (Gulp proxies mobile traffic but doesn't decompile apps).
 - Mac App Store distribution. The App Sandbox conflicts with launching browsers, changing system
   proxy settings and loading extensions, so Gulp ships signed and notarized outside the store.

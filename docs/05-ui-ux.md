@@ -14,8 +14,11 @@ support keyboard navigation everywhere.
 - **Detachable tools**: any Repeater tab, Fuzzer attack, Decoder or Comparer can be torn off into
   its own window (⌘⇧D "Detach").
 - **Settings window** (⌘,): SwiftUI `Settings` scene with tabs: General, Proxy, TLS, Network, HTTP,
-  Scanner, Beacon, Browser, Extensions, AI, Appearance, Shortcuts, Diagnostics. Each pane shows
-  whether a value is **User** or **Project** level (a small segmented "Applies to" control).
+  Scanner, Beacon, Browser, Extensions, Automation, AI, Appearance, Shortcuts, Updates, Diagnostics.
+  (Automation hosts the REST/MCP server controls, F21 §3; Updates hosts Sparkle, F24 MAC-026.) This
+  is the canonical pane list — doc 04 §6, F20 PRJ-021 and every feature that adds settings reference
+  it. Each pane shows whether a value is **User** or **Project** level (a small segmented "Applies
+  to" control).
 
 ## 2. Main window layout
 
@@ -68,7 +71,10 @@ support keyboard navigation everywhere.
 
 ## 4. Shared components (GulpUI)
 
-These are used everywhere. Build them once, in M2/M4, and reuse them.
+These are used everywhere. Build them once, in M2/M4, and reuse them. **Priority:** every `UI-xxx`
+component is **P0 for the milestone that first needs it** (the roadmap lists which — e.g. the
+`MessageEditor` in M4); they have no `Pri` column because they are shared infrastructure, not
+optional features. The same holds for the §5 shortcuts (they ship with the actions they trigger).
 
 | ID | Component | Description |
 |---|---|---|

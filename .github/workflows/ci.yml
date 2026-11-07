@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  # Every branch push runs CI (the repo currently has no `main`; work happens on feature branches).
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-linux:
+    name: Core (Linux, Swift 6)
+    runs-on: ubuntu-latest
+    container: swift:6.0-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SQLite with GRDB-required features (snapshot, FTS5)
+        # Ubuntu's libsqlite3 is built WITHOUT SQLITE_ENABLE_SNAPSHOT, so GRDB 7's
+        # DatabaseSnapshotPool/WALSnapshot fail to link (undefined sqlite3_snapshot_*).
+        # Build a SQLite with the flags GRDB expects and the project uses (FTS5 for HIS-050),
+        # installed to /usr/local so the linker resolves -lsqlite3 to it. (docs/07 ADR)
+        run: |
+          apt-get update && apt-get install -y build-essential curl libsqlite3-dev zlib1g-dev
+          curl -fsSL https://www.sqlite.org/2024/sqlite-autoconf-3460100.tar.gz -o /tmp/sqlite.tar.gz
+          mkdir -p /tmp/sqlite-src
+          tar xzf /tmp/sqlite.tar.gz -C /tmp/sqlite-src --strip-components=1
+          cd /tmp/sqlite-src
+          CFLAGS="-O2 -DSQLITE_ENABLE_SNAPSHOT=1 -DSQLITE_ENABLE_FTS5=1 -DSQLITE_ENABLE_RTREE=1 -DSQLITE_ENABLE_JSON1=1" \
+            ./configure --prefix=/usr/local
+          make -j"$(nproc)"
+          make install
+          ldconfig
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            Packages/GulpKit/.build
+            Beacon/.build
+          key: spm-linux-${{ hashFiles('Packages/GulpKit/Package.resolved', 'Beacon/Package.resolved') }}
+          restore-keys: spm-linux-
+      - name: Build GulpKit
+        run: swift build --package-path Packages/GulpKit -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+      - name: Test GulpKit
+        run: swift test --package-path Packages/GulpKit --parallel -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+      - name: M1 Definition of Done (gulp-cli + VulnLab byte fidelity)
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/m1-dod.sh
+      - name: M2 Definition of Done (proxy -> store, 10k requests, reopen)
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/m2-dod.sh
+      - name: Build Beacon
+        run: swift build --package-path Beacon -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+      - name: Test Beacon
+        run: swift test --package-path Beacon --parallel -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+
+  macos:
+    name: App + full test (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app
+      - name: Install tools
+        run: brew install xcodegen swift-format
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: Packages/GulpKit/.build
+          key: spm-macos-${{ hashFiles('Packages/GulpKit/Package.resolved') }}
+          restore-keys: spm-macos-
+      - name: Lint
+        run: make lint
+      - name: Generate project
+        run: make generate
+      - name: Core tests
+        run: make test-core
+      - name: Build app
+        run: make build
+      - name: App + UI tests
+        run: make test
+
+  release:
+    name: Release (tag)
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-15
+    needs: [core-linux, macos]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Note
+        run: echo "Release packaging runs Scripts/release.sh with signing secrets (docs/02 §8)."

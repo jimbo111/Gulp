@@ -18,7 +18,7 @@ public struct SendOptions: Sendable {
     public var followRedirects: RedirectPolicy = .never           // .never, .onSite, .inScope, .always (+ maxHops, + process cookies)
     public var updateContentLength = false
     public var normalizeLineEndings = false
-    public var timeouts = Timeouts(connect: .seconds(10), firstByte: .seconds(30), total: .seconds(120))
+    public var timeouts = Timeouts()   // all phases of HTTP-005 (see type below)
     public var maxResponseBytes = 50 * 1024 * 1024
     public var decompressForHooks = true
     public var tlsProfile: TLSProfile? = nil
@@ -36,6 +36,37 @@ public protocol HTTPEngine: Sendable {
 
 public enum GroupSendMode: Sendable { case sequentialSingleConnection, sequentialSeparateConnections, parallel, singlePacket }
 ```
+
+Supporting types for the API above:
+
+```swift
+public struct Timeouts: Sendable {                 // every phase named by HTTP-005
+    public var connect: Duration = .seconds(10)
+    public var tlsHandshake: Duration = .seconds(10)
+    public var firstByte: Duration = .seconds(30)
+    public var idleBetweenBytes: Duration = .seconds(30)
+    public var total: Duration = .seconds(120)
+}
+public struct ExchangeResult: Sendable {
+    public var exchange: Exchange                  // the final record (recorded per options.recordAs)
+    public var redirectChain: [Exchange]           // empty unless followRedirects produced hops
+    public var error: GulpNetworkError?            // nil on success; also reflected in exchange.state
+}
+public struct GroupItem: Sendable {                // one request in a group send (F03 §3.3)
+    public var request: RawRequest
+    public var target: HTTPTarget
+}
+```
+
+`WebSocketSession` is the live-socket handle returned by `openWebSocket`; its full surface (send/
+receive frames, close, reconnect) is specified in F01 §2.4 / F26 — for M1 the `openWebSocket` method
+and `WebSocketSession` type are declared but not implemented (WebSockets are M4), so in M1 calling
+`openWebSocket` throws `GulpError(message: "WebSockets are implemented in M4", underlying: nil)`.
+Because `openWebSocket` lives on the engine, the WebSocket frame codec (RFC 6455 framing +
+permessage-deflate) is implemented **in `GulpHTTP`** when WebSockets land at M4 — not in a
+higher-layer module. `GulpProxy`, the WS Repeater (F26) and any other consumer use that one codec;
+nothing lower than `GulpHTTP` needs it, so there is no upward import (doc 01 §3). F26 §4's note about
+the codec "currently housed" elsewhere defers to this placement.
 
 `ExchangeResult` contains the final `Exchange` (recorded or not, depending on options), the redirect
 chain if one was followed, and timing.
@@ -65,11 +96,11 @@ chain if one was followed, and timing.
 | ID | Pri | Requirement |
 |---|---|---|
 | HTTP-020 | P0 | ALPN negotiation (`h2`, `http/1.1`) and HTTP/2 prior knowledge (h2c) support. |
-| HTTP-021 | P0 | Convert an HTTP/1-style editor message to HTTP/2 (doc 04 §3): request line → pseudo-headers, `Host` → `:authority`, drop connection-specific headers (`Connection`, `Keep-Alive`, `Transfer-Encoding: chunked` unless the user explicitly keeps it — which is an attack, see ADV smuggling), lowercase names unless "raw case". |
+| HTTP-021 | P0 | Convert an HTTP/1-style editor message to HTTP/2 (doc 04 §3): request line → pseudo-headers, `Host` → `:authority`, drop connection-specific headers (`Connection`, `Keep-Alive`, `Upgrade`, `Proxy-Connection`, `Transfer-Encoding: chunked` unless the user explicitly keeps it — which is an attack, see ADV smuggling), normalize `TE` (in h2 its only legal value is `trailers`; drop otherwise), lowercase names unless "raw case". |
 | HTTP-022 | P0 | Responses from HTTP/2 are stored in the HTTP/1-style text form `HTTP/2 200` + headers + body (DATA frames concatenated), and the frame list is kept when "keep frames" is on. |
 | HTTP-023 | P0 | One HTTP/2 connection per pool key, multiplexing streams (respect `SETTINGS_MAX_CONCURRENT_STREAMS`). |
 | HTTP-024 | P0 | Handle `GOAWAY`, `RST_STREAM`, flow control (window updates for large downloads), server push (refuse via SETTINGS_ENABLE_PUSH=0). |
-| HTTP-025 | P1 | Header values or names with characters that are illegal in HTTP/1 (CR, LF, colon in names, uppercase) can be sent when the `H2RequestSpec` asks for them. swift-nio-http2 validates headers by default — **disable its validation** (`headerValidation` / `contentLengthValidation` options) for raw mode. |
+| HTTP-025 | P1 | Header names/values that are illegal in HTTP/1 (CR, LF, colon in names, uppercase) can be sent when the `H2RequestSpec` asks for them. The stock `NIOHTTP2Handler`/inline multiplexer enforce RFC 9113 header rules via the connection state machine and expose **no** public toggle to disable that in released versions, so raw mode drives the **low-level `HTTP2FrameEncoder` + HPACK encoder** directly (emit raw `HEADERS`/`DATA` frames, bypassing the normalizing state machine). Verify against the pinned `swift-nio-http2` version; do **not** assume a `headerValidation`/`contentLengthValidation` option on the normal handler. This path is what makes raw-H2 smuggling tests (ADV) and extended CONNECT (PRX-030) possible, since stock validation would reject `:protocol` and illegal headers. |
 | HTTP-026 | P1 | Show HTTP/2 connection-level events (SETTINGS, GOAWAY codes) in the Logger's connection detail. |
 
 ### 3.3 Group sends and race conditions
@@ -95,12 +126,25 @@ chain if one was followed, and timing.
 
 - Channel pipeline for an HTTP/1 client connection: `[TLS?] → RawResponseFramer → EngineConnectionHandler`.
   Write the request with `channel.writeAndFlush(ByteBuffer(bytes: request))` (no NIOHTTP1 encoder).
+- **HEAD framing is an engine-layer decision, not a parser one.** `GulpCore`'s stateless
+  `HTTP1.parseResponse` frames a response from the response bytes alone and so can only recognize the
+  self-evident bodyless cases (1xx, 204, 304). A HEAD response carries body-framing headers
+  (`Content-Length`/`Transfer-Encoding`) describing the body the GET *would* have had, but there is
+  no body — only the engine, which knows the request method, may override the framing to "no body"
+  and must **not** wait for `Content-Length` bytes. The `RawResponseFramer` is told the method when it
+  is created; it treats a HEAD response as framed-complete at the header block.
 - Use `NIOAsyncChannel` to bridge to async/await, or write the handlers directly with promises
   where performance matters (Turbo mode).
 - HTTP/2: `NIOHTTP2Handler(mode: .client)` with the inline stream multiplexer
   (`configureAsyncHTTP2Pipeline` or `configureHTTP2Pipeline`). Send `HTTP2Frame.FramePayload.headers`
   and `.data` on stream channels yourself (don't use `HTTP2FramePayloadToHTTP1ClientCodec`, because
-  it normalizes).
+  it normalizes). For raw mode (HTTP-025) drop to `HTTP2FrameEncoder`/HPACK so illegal headers,
+  `:protocol` (extended CONNECT, PRX-030) and smuggling shapes aren't rejected by the state machine.
+- Single-packet coalescing (HTTP-033): `write()` the withheld final frame to each stream child
+  channel **without flushing**, then call `flush()` on the **parent** connection channel exactly
+  once — per-child flushes defeat coalescing. If the server's `SETTINGS_MAX_CONCURRENT_STREAMS`
+  (HTTP-024) is below the group size, not all streams can be in flight at once and the single-packet
+  effect degrades: detect this, warn, and fall back to the HTTP/1 last-byte-sync mode (HTTP-034).
 - Hooks pipeline (`RequestHook` protocol): `func willSend(_ req: inout OutgoingRequest, context: HookContext) async throws`.
   Order: session rules (F15) → transform tags (F12) → match & replace (tool flag) → extensions
   (F18) → content-length fixer. `ResponseHook`: extensions → session cookie jar update.

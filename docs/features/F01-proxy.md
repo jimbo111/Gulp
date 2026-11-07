@@ -41,7 +41,7 @@ editing (intercept), rewrite them automatically (match & replace), and feeds the
 | PRX-010 | P0 | Global intercept toggle (toolbar + ⌘⇧I). When on, matching requests are held in an **intercept queue**. |
 | PRX-011 | P0 | Intercept UI: queue list (method, URL, time waiting) and the selected message in an editable MessageEditor with Inspector. Actions: Forward (⌥⌘F), Drop (⌥⌘X), Forward all, Drop all, Send to…, "Intercept response to this request". |
 | PRX-012 | P0 | Edited messages are forwarded with the edited bytes; the original is kept (`original_request_blob`) and the row shows an "edited" marker. |
-| PRX-013 | P0 | Intercept rules (request): ordered conditions joined by AND/OR. Fields: domain, IP, protocol, method, URL, file extension, request contains params, header, body, in scope. Matching: matches/doesn't match regex. Default rules: skip images/CSS/fonts/JS (`^(gif|jpg|png|css|js|ico|svg|woff2?)$`), only in-scope. |
+| PRX-013 | P0 | Intercept rules (request): ordered conditions joined by AND/OR. Fields: domain, IP, protocol, method, URL, file extension, request contains params, header, body, in scope. Matching: matches/doesn't match regex. Default rules: skip images/CSS/fonts/JS (`^(gif\|jpg\|png\|css\|js\|ico\|svg\|woff2?)$`), only in-scope. |
 | PRX-014 | P0 | Intercept responses (separate toggle and rule set: status, MIME, header, body, "request was intercepted"). |
 | PRX-015 | P1 | Rules can also be written as a GulpQL expression (F05) instead of the rule builder. |
 | PRX-016 | P1 | Timeout policy: optionally auto-forward intercepted items after N seconds. The queue shows countdowns. |
@@ -69,7 +69,7 @@ editing (intercept), rewrite them automatically (match & replace), and feeds the
 | PRX-032 | P0 | WebSockets history view: connection list + message table + editor; filter by direction/opcode/text. |
 | PRX-033 | P1 | Intercept WebSocket messages (separate toggle and rules); edit and forward/drop. |
 | PRX-034 | P1 | Decompress `permessage-deflate` for display and editing; re-compress on forward (or negotiate it away via a match-replace preset removing `Sec-WebSocket-Extensions`). |
-| PRX-035 | P1 | Send a WS message to Repeater: Repeater opens a WS session (F06 REP-030) on a new connection with the same upgrade request. |
+| PRX-035 | P1 | Send a WS message to Repeater: Repeater opens a WS session (F06 REP-012) on a new connection with the same upgrade request. |
 | PRX-036 | P2 | Socket.IO / STOMP / GraphQL-WS / JSON-RPC message pretty-printing. |
 
 ## 3. UI
@@ -100,6 +100,20 @@ editing (intercept), rewrite them automatically (match & replace), and feeds the
 > and normalizes. It rejects or rewrites malformed requests, which a security proxy must forward as-is
 > when possible. Our decoder frames messages (it finds the end of headers and applies the body
 > framing rules) but keeps the bytes exactly as received.
+
+**Framing-ambiguity policy (required).** To know where one request ends and the next pipelined one
+begins, the decoder must pick a *definite* body length even for hostile input, while still forwarding
+the original bytes unchanged. Rules: if both `Content-Length` and `Transfer-Encoding` are present,
+prefer `Transfer-Encoding: chunked` for *our* delimiting (and flag the exchange as smuggling-relevant
+so it's visible, since the upstream may disagree — that disagreement is the bug); reject/again-flag
+conflicting duplicate `Content-Length` values; accept bare-LF and obsolete line folding for framing
+but record a warning. This policy is a security feature — surface what was ambiguous, don't silently
+"fix" it.
+
+**Hop-by-hop headers (forward-proxy path, PRX-002).** Raw-bytes-are-truth has one documented
+exception on forward: strip the proxy-management hop-by-hop headers (`Proxy-Connection`,
+`Proxy-Authorization`, and any header named in `Connection`) before sending to the origin, since they
+are meant for the proxy, not the server. Everything else is forwarded byte-for-byte.
 
 ### 4.2 Request pipeline (async, on the connection's event loop, then hop to a Task)
 
@@ -135,8 +149,13 @@ and re-encodes (or drops `Content-Encoding` when the "simplify encoding" option 
 - `CONNECT` to non-TLS ports (for example a WebSocket over plain TCP): detect TLS by the first byte
   `0x16`; if it isn't TLS, treat the stream as plain HTTP inside the tunnel.
 - Clients that send HTTP/2 with prior knowledge (cleartext h2c preface `PRI * HTTP/2.0`).
-- Upstream TLS failures: return a `502` with an HTML explanation page to the client and log the
-  error event.
+- Upstream TLS failures: two cases. (a) After the client handshake has completed (e.g. a later
+  request on a reused MITM connection) → return a `502` with an HTML explanation page and log the
+  event. (b) **During ALPN pre-connect** (PRX-008 opens/finishes the upstream handshake *before* the
+  client handshake, to mirror ALPN) → no client TLS session exists yet, so a 502 is impossible;
+  abort the client handshake with a TLS alert (it surfaces to the browser as a generic secure-
+  connection error) and log the real cause. Bound the upstream connect/handshake with the F03
+  timeouts so a slow upstream can't stall the client handshake indefinitely.
 - Client certificate requests from upstream: use the configured client certificate (F15 SES-040).
 - Loop detection: a request to the proxy's own listener address → serve the landing page (PRX-046)
   instead of looping.

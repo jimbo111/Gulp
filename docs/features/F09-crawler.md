@@ -18,7 +18,7 @@ output fills the site map and feeds the active Scanner ("crawl and audit").
 | CRL-003 | P0 | A crawl **frontier**: a queue with dedup by normalized URL, depth limit, page budget, and per-host concurrency. Normalization handles default ports, trailing slashes, fragment removal, and (configurable) ignoring volatile query params. |
 | CRL-004 | P0 | Form handling: discover forms, fill inputs with safe plausible values (configurable field→value heuristics), and submit GET forms by default; POST forms only in "submit forms" mode with a confirmation and a "never submit matching" exclude list (e.g. logout, delete). |
 | CRL-005 | P0 | Robots/sitemap: read `/robots.txt` and `/sitemap.xml` for additional URLs (as hints; obeying `Disallow` is a setting, default off for authorized testing but clearly labeled). |
-| CRL-006 | P0 | Session awareness: run session rules/macros (F15) so the crawl stays logged in; detect logout (by a configurable signal) and re-authenticate. |
+| CRL-006 | P0 | Session awareness: run session rules/macros (F15) so the crawl stays logged in; detect logout (by a configurable signal) and re-authenticate. *(Build the re-auth hook point in M11; the session-rule/macro wiring is completed in M12 when F15 lands. The M11 crawler runs unauthenticated.)* |
 | CRL-007 | P1 | Duplicate-content detection: collapse near-identical pages (hash of structure) to avoid crawling pagination/calendars forever; a "crawl similar pages up to N" cap. |
 | CRL-008 | P1 | Coverage controls: max depth, max pages, max per-directory, max duration, and request throttling (shared pool). |
 | CRL-009 | P1 | Parameter discovery during crawl: record every param name/value seen to inform the site map's analysis (F04 TGT-008) and the Scanner. |
@@ -53,7 +53,12 @@ output fills the site map and feeds the active Scanner ("crawl and audit").
   network-idle heuristic, `Runtime.evaluate` to collect links and to fill forms; enforce scope on
   every navigation (cancel out-of-scope loads).
 - "Crawl and audit" hands each discovered in-scope request to the Scanner's insertion-point engine
-  (F08), deduping endpoints so the same URL isn't audited many times.
+  (F08). The **audit dedup key** is `(method, normalized-path-template, param-name-set)` — path
+  templates collapse numeric/UUID segments to `{id}` (as TGT-006) and the key ignores parameter
+  *values* — so each distinct parameter is audited once regardless of value, and infinite
+  value-spaces (pagination, search) don't explode the insertion-point set. This is deliberately
+  different from the crawl frontier's URL dedup (CRL-003), which keeps distinct values to discover
+  content.
 
 ## 5. Edge cases
 

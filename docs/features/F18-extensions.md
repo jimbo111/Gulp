@@ -65,7 +65,9 @@ permission):
   (`JSContextGroup`/`isValid` checks or a cooperative yield + timer).
 - Process host: a `JSONRPCConnection` over the child's stdio; map events to RPC notifications and API
   calls to requests; supervise with a restart/backoff; isolate crashes.
-- Enforce permissions centrally in an `APIGate` that every call passes through; scope-gate any send;
+- Enforce permissions centrally in an `ExtensionPermissionGate` (distinct from the agent-tool-surface
+  `APIGate` of doc 01 §3 rule 6 — that one is orchestration-layer and governs F21/F22; this one is in
+  `GulpExtensions` and governs extension calls) that every call passes through; scope-gate any send;
   never expose raw filesystem/network unless `filesystem`/`network-direct` is granted.
 - UI for out-of-process extensions: a declarative view schema (fields, tables, buttons) rendered by
   `GulpFeatures`, with actions routed back over RPC.
