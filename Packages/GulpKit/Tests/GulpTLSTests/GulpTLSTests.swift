@@ -2,6 +2,7 @@ import Foundation
 import NIOCore
 import NIOPosix
 import NIOSSL
+import NIOTLS
 import SwiftASN1
 import Testing
 import X509

@@ -159,6 +159,7 @@ let package = Package(
                 .product(name: "X509", package: "swift-certificates"),
                 .product(name: "SwiftASN1", package: "swift-asn1"),
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
+                .product(name: "NIOTLS", package: "swift-nio"),
             ]),
         .testTarget(name: "GulpHTTPTests", dependencies: ["GulpHTTP"] + nioCore + nioConcurrency),
         .testTarget(name: "GulpProxyTests", dependencies: ["GulpProxy"] + nioCore + nioConcurrency),
