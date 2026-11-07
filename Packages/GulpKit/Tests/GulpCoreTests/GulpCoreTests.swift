@@ -15,15 +15,15 @@ struct BytesTests {
         var c = b
         c.replaceSubrange(0..<5, with: Bytes("HELLO"))
         #expect(c.string() == "HELLO world")
-        #expect(b.string() == "hello world")           // original unchanged (value semantics)
+        #expect(b.string() == "hello world")  // original unchanged (value semantics)
     }
 
     @Test("strict vs lossy UTF-8")
     func utf8() {
         #expect(Bytes("café").validUTF8() == "café")
-        let invalid = Bytes([0x66, 0x6F, 0x6F, 0xFF])   // "foo" + a lone 0xFF
+        let invalid = Bytes([0x66, 0x6F, 0x6F, 0xFF])  // "foo" + a lone 0xFF
         #expect(invalid.validUTF8() == nil)
-        #expect(invalid.string().hasPrefix("foo"))       // lossy: substitutes U+FFFD, never nil
+        #expect(invalid.string().hasPrefix("foo"))  // lossy: substitutes U+FFFD, never nil
     }
 }
 
@@ -45,8 +45,8 @@ struct RoundTripTests {
         #expect(req.bytes[req.parsed.version].string() == "HTTP/1.1")
         #expect(req.parsed.headers.count == 3)
         #expect(req.bytes[req.parsed.body].string() == "q=1")
-        #expect(req.headerValue("host")?.string() == "h")      // case-insensitive lookup
-        #expect(req.headerValue("x-dup")?.string() == "2")     // last duplicate wins for lookup
+        #expect(req.headerValue("host")?.string() == "h")  // case-insensitive lookup
+        #expect(req.headerValue("x-dup")?.string() == "2")  // last duplicate wins for lookup
     }
 
     @Test("editing splices bytes and re-parses without touching the rest")
@@ -55,7 +55,7 @@ struct RoundTripTests {
         let req = RawRequest(Bytes(raw))
         let edited = req.replacing(req.parsed.target, with: Bytes("/bb"))
         #expect(edited.bytes[edited.parsed.target].string() == "/bb")
-        #expect(edited.headerValue("host")?.string() == "example.com")   // untouched
+        #expect(edited.headerValue("host")?.string() == "example.com")  // untouched
         #expect(edited.serialize().string() == "GET /bb HTTP/1.1\r\nHost: example.com\r\n\r\n")
     }
 }
@@ -82,7 +82,8 @@ struct FramingTests {
 
     @Test("chunked framing decodes dechunkedBody")
     func chunked() {
-        let r = resp("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n")
+        let r = resp(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n")
         #expect(r.bodyFraming == .chunked)
         #expect(r.transferEncodingChunked == true)
         #expect(r.incomplete == false)
