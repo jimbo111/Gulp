@@ -191,7 +191,8 @@ enum ProxyConnection {
         let escaped = message.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
         let body = "<html><body><h1>Gulp: \(status) \(reason)</h1><p>\(escaped)</p></body></html>\n"
-        let head = "HTTP/1.1 \(status) \(reason)\r\nContent-Type: text/html; charset=utf-8\r\n"
+        let head =
+            "HTTP/1.1 \(status) \(reason)\r\nContent-Type: text/html; charset=utf-8\r\n"
             + "Content-Length: \(body.utf8.count)\r\n\r\n"
         return Array((head + body).utf8)
     }

@@ -59,7 +59,8 @@ enum ForwardRewrite {
         guard let separator = firstIndex(of: Array("://".utf8), in: raw) else { return nil }
         let afterAuthority = separator + 3
         var origin: [UInt8] = Array("/".utf8)
-        if let start = raw[afterAuthority...].firstIndex(where: { $0 == 0x2F || $0 == 0x3F }) {  // '/' or '?'
+        // The path starts at the first '/' (0x2F) or, for "http://host?q", at '?' (0x3F).
+        if let start = raw[afterAuthority...].firstIndex(where: { $0 == 0x2F || $0 == 0x3F }) {
             origin = raw[start] == 0x2F ? Array(raw[start...]) : origin + raw[start...]
         }
         return (request.replacing(targetRange, with: Bytes(origin)), target)
@@ -73,7 +74,7 @@ enum ForwardRewrite {
         let fields = request.parsed.headers
         for field in fields where request.bytes[field.name].string().lowercased() == "connection" {
             for token in request.bytes[field.value].string().split(separator: ",") {
-                let name = token.trimmedOf(" \t").lowercased()
+                let name = String(token).trimmedOf(" \t").lowercased()
                 if !name.isEmpty, name != "close", name != "keep-alive" { names.insert(name) }
             }
         }

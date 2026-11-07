@@ -106,13 +106,15 @@ struct ProxyTests {
         let origin = try await Origin.start(reply: okReply)
         let (proxy, proxyTarget) = try await startProxy(recorder: Recorded())
         let client = NIOHTTPEngine()
-        let sent = "GET http://127.0.0.1:\(origin.port)/p/a?q=1 HTTP/1.1\r\n"
+        let sent =
+            "GET http://127.0.0.1:\(origin.port)/p/a?q=1 HTTP/1.1\r\n"
             + "Host: 127.0.0.1\r\nX-Case: KeEp\r\n"
             + "Proxy-Connection: keep-alive\r\nProxy-Authorization: Basic dTpw\r\nConnection: X-Hop\r\n"
             + "X-Hop: drop me\r\n\r\n"
         let result = await client.send(RawRequest(Bytes(sent)), to: proxyTarget, options: clientOptions())
         #expect(result.exchange.response?.bytes.string() == okReply)
-        let expected = "GET /p/a?q=1 HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Case: KeEp\r\n"
+        let expected =
+            "GET /p/a?q=1 HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Case: KeEp\r\n"
             + "Connection: X-Hop\r\n\r\n"
         #expect(Bytes(origin.received()).string() == expected)
         await client.shutdown()
