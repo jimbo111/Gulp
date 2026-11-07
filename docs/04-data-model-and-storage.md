@@ -111,6 +111,13 @@ public enum Scheme: String, Sendable, Codable { case http, https }
 public enum HTTPVersion: String, Sendable, Codable { case http1_0 = "HTTP/1.0", http1_1 = "HTTP/1.1", http2 = "HTTP/2" }
 public enum LineEnding: Sendable { case crlf, lf, mixed }
 public enum BodyFraming: Sendable { case contentLength, chunked, closeDelimited, none }
+public enum ExchangeState: Sendable, Equatable {  // Exchange.state
+    case pending, complete, dropped, intercepted
+    case failed(GulpNetworkError)
+}
+public enum Highlight: String, Sendable, Codable, CaseIterable {  // Annotation.highlight / `exchanges.highlight`
+    case red, orange, yellow, green, cyan, blue, purple, pink, gray
+}
 public enum ParseWarning: Sendable, Equatable {
     case bareLF, obsoleteLineFolding, missingFinalCRLF, invalidCharInName, duplicateContentLength,
          conflictingFraming, oversizedHeaders, nonUTF8

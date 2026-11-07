@@ -60,8 +60,8 @@ public struct GroupItem: Sendable {                // one request in a group sen
 
 `WebSocketSession` is the live-socket handle returned by `openWebSocket`; its full surface (send/
 receive frames, close, reconnect) is specified in F01 §2.4 / F26 — for M1 the `openWebSocket` method
-and `WebSocketSession` type are declared but not implemented (WebSockets are M4), so M1 ships the
-type as an unimplemented stub that throws `.unsupported` if called.
+and `WebSocketSession` type are declared but not implemented (WebSockets are M4), so in M1 calling
+`openWebSocket` throws `GulpError(message: "WebSockets are implemented in M4", underlying: nil)`.
 
 `ExchangeResult` contains the final `Exchange` (recorded or not, depending on options), the redirect
 chain if one was followed, and timing.

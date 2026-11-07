@@ -195,8 +195,8 @@ same type, which is why the headless and GUI modes behave the same.
 ### 5.3 Event bus
 
 `EventBus` is a typed broadcast built on `AsyncStream`. Producers never block: each subscriber has
-a bounded buffer, and if it overflows the subscriber gets a `.lagged(count)` marker and should
-re-query the store.
+a bounded buffer, and if it overflows the subscriber receives a `Delivery` with `lagged > 0` (see
+the API below) and should re-query the store.
 
 ```swift
 public enum GulpEvent: Sendable {
