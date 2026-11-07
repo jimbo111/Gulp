@@ -105,6 +105,14 @@ public struct MintedLeaf: Sendable {
     public let der: [UInt8]
     /// The leaf's private key (shared across leaves by default, TLS-004).
     public let key: SigningKey
+
+    /// A leaf from its parts (the minter builds these; tests can present any certificate).
+    public init(subject: CertificateSubject, certificate: Certificate, der: [UInt8], key: SigningKey) {
+        self.subject = subject
+        self.certificate = certificate
+        self.der = der
+        self.key = key
+    }
 }
 
 /// The Gulp certificate authority.
