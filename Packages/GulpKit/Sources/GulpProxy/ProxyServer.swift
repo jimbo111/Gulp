@@ -109,7 +109,8 @@ final class ProxyConnectionHandler: ChannelInboundHandler {
             requests.yield(next.request)
         }
         if RequestFramer.headerTooLarge(buffer) {
-            write(ProxyConnection.errorPage(431, "Request header block too large"), context: context)
+            let page = ProxyConnection.errorPage(431, "Request header block too large", close: true)
+            write(page, context: context)
             context.close(promise: nil)
         } else if !sentContinue, !buffer.isEmpty, RequestFramer.awaitsContinue(buffer) {
             // The client waits for this before sending its body (F01 §5 Expect: 100-continue).
@@ -162,11 +163,12 @@ enum ProxyConnection {
             || request.hasHeaderToken("proxy-connection", "close")
             || (version == "HTTP/1.0" && !request.hasHeaderToken("connection", "keep-alive"))
         if method == "CONNECT" {
-            return (errorPage(501, "HTTPS interception (CONNECT) arrives in milestone M3."), true)
+            let message = "HTTPS interception (CONNECT) arrives in milestone M3."
+            return (errorPage(501, message, close: true), true)
         }
         guard let rewritten = ForwardRewrite.originForm(request) else {
             let message = "Gulp is a forward proxy: configure it as your HTTP proxy (absolute-form requests)."
-            return (errorPage(400, message), clientWantsClose)
+            return (errorPage(400, message, close: clientWantsClose), clientWantsClose)
         }
         let (originForm, target) = rewritten
         var options = SendOptions(recordAs: .proxy)
@@ -181,11 +183,12 @@ enum ProxyConnection {
         }
         let reason = result.error?.userDescription ?? "no response"
         let message = "Gulp could not complete the request to \(target.host): \(reason)."
-        return (errorPage(502, message), clientWantsClose)
+        return (errorPage(502, message, close: clientWantsClose), clientWantsClose)
     }
 
-    /// A small HTML error response.
-    static func errorPage(_ status: Int, _ message: String) -> [UInt8] {
+    /// A small HTML error response. `close` announces that the proxy will close the connection after
+    /// it, so a keep-alive client doesn't reuse a connection that is about to go away.
+    static func errorPage(_ status: Int, _ message: String, close: Bool = false) -> [UInt8] {
         let reasons = [400: "Bad Request", 431: "Request Header Fields Too Large", 501: "Not Implemented"]
         let reason = reasons[status] ?? "Bad Gateway"
         let escaped = message.replacingOccurrences(of: "&", with: "&amp;")
@@ -193,7 +196,7 @@ enum ProxyConnection {
         let body = "<html><body><h1>Gulp: \(status) \(reason)</h1><p>\(escaped)</p></body></html>\n"
         let head =
             "HTTP/1.1 \(status) \(reason)\r\nContent-Type: text/html; charset=utf-8\r\n"
-            + "Content-Length: \(body.utf8.count)\r\n\r\n"
+            + "Content-Length: \(body.utf8.count)\r\n" + (close ? "Connection: close\r\n" : "") + "\r\n"
         return Array((head + body).utf8)
     }
 }

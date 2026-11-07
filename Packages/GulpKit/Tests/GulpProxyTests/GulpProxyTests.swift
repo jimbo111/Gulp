@@ -183,7 +183,8 @@ struct ProxyTests {
         #expect(tunnel.exchange.response?.parsed.statusCode == 501)
         let originForm = RawRequest(Bytes("GET / HTTP/1.1\r\nHost: x\r\n\r\n"))
         let refused = await client.send(originForm, to: proxyTarget, options: clientOptions())
-        #expect(refused.exchange.response?.parsed.statusCode == 400)
+        let status = refused.exchange.response?.parsed.statusCode
+        #expect(status == 400, "error: \(String(describing: refused.error))")
         await client.shutdown()
         await proxy.stopAll()
     }
