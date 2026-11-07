@@ -11,29 +11,39 @@ import SwiftUI
 
 /// Proxy → HTTP History.
 public struct ProxyHistoryView: View {
-    @State private var model: HistoryModel
+    let store: ProjectStore
+    let events: EventBus
+    /// Built once when the view appears: `View.init` runs on every parent re-render, and a model
+    /// owns an event subscription and runs queries.
+    @State private var model: HistoryModel?
     @AppStorage("gulp.history.sideBySide") private var sideBySide = true
 
     /// A History view over `store`, live-updated from `events`.
     public init(store: ProjectStore, events: EventBus) {
-        _model = State(initialValue: HistoryModel(store: store, events: events))
+        self.store = store
+        self.events = events
     }
 
     public var body: some View {
-        VSplitView {
-            VStack(spacing: 0) {
-                HistoryFilterBar(model: model)
-                Divider()
-                HistoryTableView(model: model)
+        if let model {
+            VSplitView {
+                VStack(spacing: 0) {
+                    HistoryFilterBar(model: model)
+                    Divider()
+                    HistoryTableView(model: model)
+                }
+                .frame(minHeight: 180)
+                messages(model)
+                    .frame(minHeight: 160)
             }
-            .frame(minHeight: 180)
-            messages
-                .frame(minHeight: 160)
+            .navigationTitle("HTTP History")
+        } else {
+            ProgressView()
+                .task { model = HistoryModel(store: store, events: events) }
         }
-        .navigationTitle("HTTP History")
     }
 
-    @ViewBuilder private var messages: some View {
+    @ViewBuilder private func messages(_ model: HistoryModel) -> some View {
         let request = model.selected?.request.bytes
         let response = model.selected?.response?.wireBytes
         Group {
@@ -70,7 +80,7 @@ struct HistoryFilterBar: View {
             Toggle("Hide assets", isOn: $model.filter.hideStaticAssets)
             Toggle("Has params", isOn: $model.filter.onlyWithParams)
             Toggle("Annotated", isOn: $model.filter.onlyAnnotated)
-            ForEach(2...5, id: \.self) { statusClass in
+            ForEach(1...5, id: \.self) { statusClass in
                 Toggle("\(statusClass)xx", isOn: statusBinding(statusClass))
             }
             Spacer()
@@ -144,13 +154,7 @@ struct MessageViewer: View {
         let shown = bytes.count > Self.displayLimit ? bytes[0..<Self.displayLimit] : bytes
         switch mode {
         case .raw:
-            ScrollView {
-                Text(shown.string())
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(6)
-            }
+            RawTextView(text: shown.string())
         case .hex:
             let lines = (shown.count + 15) / 16
             ScrollView {
@@ -179,6 +183,29 @@ struct MessageViewer: View {
         }
         let padding = String(repeating: "   ", count: 16 - (end - start))
         return String(format: "%08x  ", start) + hex + padding + " " + ascii
+    }
+}
+
+/// Read-only monospaced text in an `NSTextView` with non-contiguous layout, so a megabyte-sized
+/// message lays out only what is on screen instead of blocking the main thread.
+struct RawTextView: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSTextView.scrollableTextView()
+        if let view = scroll.documentView as? NSTextView {
+            view.isEditable = false
+            view.isSelectable = true
+            view.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+            view.textContainerInset = NSSize(width: 4, height: 4)
+            view.layoutManager?.allowsNonContiguousLayout = true
+        }
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        guard let view = scroll.documentView as? NSTextView, view.string != text else { return }
+        view.string = text
     }
 }
 

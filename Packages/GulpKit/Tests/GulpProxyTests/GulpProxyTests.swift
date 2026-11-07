@@ -269,7 +269,8 @@ struct ProxyTests {
 
     @Test("Hop-by-hop stripping never removes framing or routing headers named in Connection")
     func test_hopByHopProtected() {
-        let text = "GET / HTTP/1.1\r\nHost: h\r\nConnection: content-length, host, x-drop\r\n"
+        let text =
+            "GET / HTTP/1.1\r\nHost: h\r\nConnection: content-length, host, x-drop\r\n"
             + "Content-Length: 0\r\nX-Drop: 1\r\n\r\n"
         let stripped = ForwardRewrite.strippingHopByHop(RawRequest(Bytes(text)))
         let out = stripped.bytes.string()

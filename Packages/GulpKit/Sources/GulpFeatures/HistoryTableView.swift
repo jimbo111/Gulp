@@ -144,6 +144,7 @@ struct HistoryTableView: NSViewRepresentable {
         let model: HistoryModel
         weak var table: NSTableView?
         private var shownRevision = -1
+        private var restoring = false
         let rowMenu = NSMenu()
 
         init(model: HistoryModel) {
@@ -155,9 +156,22 @@ struct HistoryTableView: NSViewRepresentable {
         func sync(revision: Int, rowCount: Int) {
             guard let table, revision != shownRevision else { return }
             shownRevision = revision
-            let selected = table.selectedRowIndexes
+            // Rows move when traffic arrives or rows are deleted: keep the *exchanges* selected,
+            // not the row positions (HIS-004).
+            let keep = Set(model.selectedIDs)
+            restoring = true
             table.reloadData()
-            table.selectRowIndexes(selected, byExtendingSelection: false)
+            var indexes = IndexSet()
+            if !keep.isEmpty {
+                let visible = table.rows(in: table.visibleRect)
+                let lower = max(0, visible.location - 200)
+                let window = lower..<max(lower, min(rowCount, visible.location + visible.length + 200))
+                for row in window where model.loadedRow(row).map({ keep.contains($0.id) }) == true {
+                    indexes.insert(row)
+                }
+            }
+            table.selectRowIndexes(indexes, byExtendingSelection: false)
+            restoring = false
             if model.autoScroll, rowCount > 0, model.sort == .idAscending {
                 table.scrollRowToVisible(rowCount - 1)
             }
@@ -186,9 +200,9 @@ struct HistoryTableView: NSViewRepresentable {
         }
 
         func tableView(_ tableView: NSTableView, didAdd rowView: NSTableRowView, forRow row: Int) {
-            if let highlight = model.row(row)?.highlight {
-                rowView.backgroundColor = highlight.color.withAlphaComponent(0.3)
-            }
+            // Row views are reused: always set the colour, or a highlight sticks to another row.
+            rowView.backgroundColor =
+                model.loadedRow(row)?.highlight.map { $0.color.withAlphaComponent(0.3) } ?? .clear
         }
 
         func tableView(
@@ -201,22 +215,26 @@ struct HistoryTableView: NSViewRepresentable {
         }
 
         func tableViewSelectionDidChange(_ notification: Notification) {
-            model.select(selectedIDs())
+            guard !restoring, let table else { return }
+            let rows = table.selectedRowIndexes
+            let loaded = rows.compactMap { model.loadedRow($0)?.id }
+            if loaded.count == rows.count {
+                model.select(loaded)
+            } else {
+                let model = self.model
+                Task { model.select(await model.ids(forRows: rows)) }
+            }
         }
 
-        func selectedIDs() -> [ExchangeID] {
-            guard let table else { return [] }
-            return table.selectedRowIndexes.compactMap { model.row($0)?.id }
-        }
-
-        /// Rows a menu action applies to: the selection, or the clicked row.
-        func targetIDs() -> [ExchangeID] {
+        /// Rows a menu action applies to: the clicked row if it is outside the selection, otherwise
+        /// the whole selection (resolved through the store, so unloaded pages count too).
+        func targetIDs() async -> [ExchangeID] {
             guard let table else { return [] }
             let clicked = table.clickedRow
             if clicked >= 0, !table.selectedRowIndexes.contains(clicked) {
-                return model.row(clicked).map { [$0.id] } ?? []
+                return await model.ids(forRows: IndexSet(integer: clicked))
             }
-            return selectedIDs()
+            return await model.ids(forRows: table.selectedRowIndexes)
         }
 
         // MARK: menus (HIS-004/005)
@@ -271,16 +289,20 @@ struct HistoryTableView: NSViewRepresentable {
 
         @objc func setHighlight(_ sender: NSMenuItem) {
             let color = (sender.representedObject as? String).flatMap(Highlight.init(rawValue:))
-            model.highlight(targetIDs(), color)
+            Task { model.highlight(await targetIDs(), color) }
         }
 
         @objc func editComment() {
-            let ids = targetIDs()
+            Task { await editComment(ids: await targetIDs()) }
+        }
+
+        private func editComment(ids: [ExchangeID]) async {
             guard !ids.isEmpty else { return }
             let alert = NSAlert()
             alert.messageText = ids.count == 1 ? "Comment" : "Comment \(ids.count) items"
             let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-            field.stringValue = ids.count == 1 ? (model.row(table?.clickedRow ?? -1)?.comment ?? "") : ""
+            let existing = ids.count == 1 ? model.loadedRow(table?.clickedRow ?? -1)?.comment : nil
+            field.stringValue = existing ?? ""
             alert.accessoryView = field
             alert.addButton(withTitle: "Save")
             alert.addButton(withTitle: "Cancel")
@@ -290,17 +312,16 @@ struct HistoryTableView: NSViewRepresentable {
         }
 
         @objc func copyURLs() {
-            let ids = targetIDs()
             let model = self.model
             Task {
-                let text = await model.urls(ids)
+                let text = await model.urls(await targetIDs())
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
             }
         }
 
         @objc func deleteRows() {
-            model.delete(targetIDs())
+            Task { model.delete(await targetIDs()) }
         }
     }
 }
