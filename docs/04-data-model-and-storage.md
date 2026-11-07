@@ -209,8 +209,12 @@ CREATE TABLE extension_state (extension_id TEXT, key TEXT, value BLOB, PRIMARY K
 - **Write coalescer**: `StoreWriter` actor gathers `PendingWrite`s and flushes them in one
   transaction every 50 ms or 500 items. A crash loses at most the last 50 ms of traffic; for proxy
   traffic that is acceptable, and the Settings "Durable mode" flushes on every write.
-- **FTS**: the trigram tokenizer gives substring search (`LIKE '%abc%'` semantics) in milliseconds.
-  Index only text-like MIME types. Indexing runs on a background queue after the insert. Create the
+- **FTS**: the trigram tokenizer gives substring search (`LIKE '%abc%'` semantics) in milliseconds,
+  but it only matches queries of **3+ characters** — 1–2 char queries can't use the index and fall
+  back to a bounded `LIKE`/scan with progress (F05 HIS-052). Index only text-like MIME types.
+  Indexing runs on a background queue after the insert. Bodies are indexed to the first 256 KB (this
+  is deliberately smaller than the 2 MB cap used for in-memory body regex in F05 — the index favors
+  breadth over completeness; full-fidelity matching uses the regex/scan path). Create the
   table with `contentless_delete=1` (SQLite ≥ 3.43) so rows can be deleted when exchanges are
   deleted. If the system SQLite is older, use an external-content table instead.
 - **Temporary projects** use a file in `~/Library/Caches/Gulp/temp-<uuid>.gulp`, which is deleted on

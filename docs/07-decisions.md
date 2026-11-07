@@ -81,6 +81,32 @@ accepted ones; supersede them.
 
 ---
 
+## ADR-010: Platform-specific engines are injected via protocols, never imported upward
+
+- **Context**: `GulpBrowser`, `GulpScript` and the UI modules are macOS-only, but their consumers
+  (`GulpCrawler`, `GulpScanner`, `GulpWorkspace`) must build and test on Linux. A direct target
+  dependency on a macOS-only module is linked unconditionally by SwiftPM and breaks the Linux build;
+  it also inverts the layering (an engine reaching "sideways" into a platform module).
+- **Decision**: Lower modules define a protocol for the capability (e.g. `BrowserDriver` in
+  `GulpCrawler`). The concrete implementation lives in the platform module and is injected by
+  `GulpWorkspace`, which is the *only* module that conditionally depends on platform engines
+  (`condition: .when(platforms: [.macOS])` + `#if os(macOS)`). On Linux the capability is absent and
+  the feature degrades (static-only crawling).
+- **Consequences**: Clean layering, Linux CI stays green. Costs a little injection boilerplate.
+- **Supersedes**: the earlier "`GulpCrawler` → `GulpBrowser`" edge in doc 01 §3.
+
+## ADR-011: Scope evaluation is last-match-wins
+
+- **Context**: The first draft of TGT-020 described scope as both "no later exclude rule" and
+  "exclude wins", which are different and ambiguous semantics.
+- **Decision**: Enabled rules are evaluated top-to-bottom; the **last** matching rule decides. No
+  match ⇒ out of scope (so an empty rule set is "nothing in scope"). This is predictable, order is
+  fully user-controlled, and the UI surfaces the deciding rule.
+- **Consequences**: Simple to implement and explain; users order excludes after the includes they
+  carve out of.
+
+---
+
 ## Small decisions (append here)
 
 | Date | Decision | Where |
@@ -89,6 +115,10 @@ accepted ones; supersede them.
 | — | Default proxy listener `127.0.0.1:8080` | F01 |
 | — | Payload position marker `§` (U+00A7) | F07 |
 | — | Transform Tag delimiters `«…»` (⌥\ and ⌥⇧\ on a US keyboard) | F12 |
+| 2026-11-07 | `GulpQuery` stays storage-agnostic: `sqlLowering()` returns a neutral `SQLBinding` enum, not GRDB's `DatabaseValue` | F05 §4 |
+| 2026-11-07 | FTS trigram search needs 3+ chars; shorter queries fall back to a bounded scan | doc 04 §4, F05 HIS-050/052 |
+| 2026-11-07 | Beacon binds privileged ports 53/443 via `CAP_NET_BIND_SERVICE` or privilege-drop, documented in deploy | F10 |
+| 2026-11-07 | Single-packet send is best-effort (one `write`/flush, small payload), not a guaranteed single segment | F03 HTTP-033 |
 
 ---
 

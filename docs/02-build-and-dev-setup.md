@@ -103,6 +103,18 @@ Platform-only targets: put macOS-only targets in a conditional block
 (`#if os(macOS) targets += [...] #endif`). This works because `Package.swift` is ordinary Swift
 evaluated on the host.
 
+**Conditional dependencies.** A plain `.target(name:)` dependency is linked on every platform, so a
+Linux-buildable module must never list a macOS-only module as a dependency (it would break the Linux
+build). Two rules follow:
+- `GulpWorkspace` is the only orchestration module allowed to touch macOS-only engines, and it does
+  so behind `#if os(macOS)` both in its target dependency list
+  (`.target(name: "GulpBrowser", condition: .when(platforms: [.macOS]))`) and in its imports. It
+  injects the concrete `BrowserDriver` (from `GulpBrowser`) into `GulpCrawler`/`GulpScanner`, which
+  only know the protocol (architecture §3 rule 5). On Linux the driver is nil and static crawling is
+  used.
+- `GulpExtensions` lists no JavaScriptCore dependency; its JS host is guarded by
+  `#if canImport(JavaScriptCore)` so the JSON-RPC runtime still builds on Linux.
+
 ## 6. Building on Linux (core modules only)
 
 Use this for CI or for Claude cloud sessions that run on Linux.

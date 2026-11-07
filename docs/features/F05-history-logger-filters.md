@@ -47,7 +47,7 @@ SQLite FTS for substring matching across millions of messages.
 
 | ID | Pri | Requirement |
 |---|---|---|
-| HIS-050 | P0 | Global search (⌘⇧F) across requests and responses using FTS5 trigram index; results grouped by tool with match previews; click to open. |
+| HIS-050 | P0 | Global search (⌘⇧F) across requests and responses using the FTS5 trigram index; results grouped by tool with match previews; click to open. Queries under 3 characters (below the trigram minimum) fall back to a bounded scan (HIS-052) with a "narrow your search" hint. |
 | HIS-051 | P0 | Search scope selector: current table, whole project, in-scope only; and a field selector (request/response/both, headers/body). |
 | HIS-052 | P1 | Regex search mode (slower; runs over the candidate set returned by a trigram prefilter where possible, else a scan with progress and cancel). |
 | HIS-053 | P1 | "Find references" to a value (token, filename) across the project. |
@@ -78,7 +78,10 @@ range     := number ".." number
 
 Implementation: a hand-written lexer and a Pratt/recursive-descent parser → a `GulpQLExpression`
 AST (Sendable, Codable). Two evaluators: `evaluate(_:Exchange) -> Bool` and
-`sqlLowering() -> (sql: String?, bindings: [DatabaseValue], residual: GulpQLExpression?)`.
+`sqlLowering() -> (sql: String?, bindings: [SQLBinding], residual: GulpQLExpression?)`, where
+`SQLBinding` is a small neutral enum (`.text/.int/.double/.blob/.null`) owned by `GulpQuery`.
+`GulpQuery` must **not** import GRDB (or any storage type) — `GulpStore` maps `SQLBinding` to its
+own driver values. This keeps the query language a pure, Linux-testable lower-layer module.
 
 ## 5. Edge cases
 

@@ -55,6 +55,11 @@ Beacon health.
 - Client polling: a single background task per project polls at the configured interval and
   dispatches matches; in interactsh mode, implement the register/poll/deregister flow and AES-GCM
   decryption exactly to interoperate.
+- **Privileged ports**: the DNS listener must bind UDP/TCP **53** and HTTPS **443**, both privileged
+  (<1024). Don't run the whole server as root: grant the binary `CAP_NET_BIND_SERVICE`
+  (`setcap`, or systemd `AmbientCapabilities=`), or start as root and drop privileges after binding,
+  or map the ports with the Docker image (BCN-025). The deploy docs and Dockerfile must cover this,
+  since "DNS interactions never arrive" is the most likely misconfiguration.
 - The Beacon server uses Hummingbird for HTTP and a small DNS server (a Swift DNS library or a
   hand-rolled UDP/TCP responder) that answers A/AAAA/CNAME/TXT for the zone and logs the queried
   name and source. Keep the server dependency set small so it builds and runs on a cheap VPS.

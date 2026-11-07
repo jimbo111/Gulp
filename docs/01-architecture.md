@@ -112,7 +112,11 @@ Rules:
 1. A module may import only modules in the **same or lower** layers. Engines may import each other
    only where this table allows it:
    - `GulpScanner` → `GulpOAST`, `GulpCrawler`, `GulpSession`
-   - `GulpCrawler` → `GulpBrowser` (optional, macOS-only code path), `GulpSession`
+   - `GulpCrawler` → `GulpSession`. It must **not** import `GulpBrowser` (that would pull a
+     macOS-only module into the Linux build and invert the layering). Browser-backed crawling is
+     reached through a `BrowserDriver` protocol defined in `GulpCrawler`; the concrete CDP
+     implementation lives in `GulpBrowser` and is injected by `GulpWorkspace` on macOS (rule 5). On
+     Linux the driver is simply absent and only static-mode crawling is available.
    - `GulpFuzzer` → `GulpOAST`, `GulpSession`
    - `GulpExtensions` → any engine (it exposes them to extensions)
    - `GulpAI` → `GulpReport` (to draft reports)
