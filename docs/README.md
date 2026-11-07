@@ -43,6 +43,47 @@
 | F23 | [Advanced testing tools (Authz Matrix, JWT, smuggling, GraphQL…)](features/F23-advanced-tools.md) | M19 |
 | F24 | [macOS integration](features/F24-macos-integration.md) | M3, M20 |
 
+### Post-1.0 expansion (M21+)
+
+Added after the v1 review (see `docs/07-decisions.md` ADR-013). These build on the v1 engines and
+ship after release; a few parts could be pulled earlier where noted in each spec.
+
+| ID | Feature | Milestone |
+|---|---|---|
+| F25 | [SSO Workbench (OAuth/OIDC/SAML flow testing)](features/F25-sso-workbench.md) | M21 |
+| F26 | [WebSocket Security Workbench](features/F26-websocket-workbench.md) | M22 |
+| F27 | [JS Recon Studio (source-map recovery & API inventory)](features/F27-js-recon-studio.md) | M23 |
+| F28 | [Web Cache Poisoning & Deception scanner](features/F28-cache-poisoning.md) | M24 |
+| F29 | [Governor (global resource control + panic stop)](features/F29-governor.md) | M11, M16 |
+| F30 | [Drift & Retest (baselines, regression, remediation)](features/F30-drift-retest.md) | M25 |
+| F31 | [Journal (coverage map & engagement timeline)](features/F31-journal.md) | M9, M16 |
+| F32 | [LLM/AI-feature security testing](features/F32-llm-security.md) | M26 |
+
+### Backlog (proposed, not yet specified)
+
+Strong candidates from the feature review, held for a future pass (one-liners only; promote to a
+full `Fxx` spec when scheduled):
+
+- **CSP Auditor & Bypass Finder** — parse/grade CSP and actively find gadget bypasses on allowlisted
+  origins (beyond F08's passive "weak CSP" flag).
+- **Deserialization & Object-Injection Workbench** — detect/decode Java/.NET/PHP/pickle/Ruby
+  serialized objects and safe OAST-correlated detection probes (beyond F08 signposting).
+- **gRPC & Protobuf Workbench** — schema-less protobuf decode, `.proto`/reflection import, gRPC-Web
+  framing (promotes F23 ADV-053 to a first-class tool).
+- **Arsenal** — cross-project payload/wordlist library and reusable test cases (promotes the per-
+  attack UI-080 list to a managed asset).
+- **Share Packs** — file-based async collaboration: export/import curated findings + comment threads
+  with a review/merge gate (within the no-team-server decision).
+- **Privacy Guard** — capture-time masking + egress gate for AI/OAST/clipboard (beyond F19 export
+  redaction).
+- **Interop Hub** — paste-to-Repeater (cURL/fetch/raw), Postman/Insomnia/mitmproxy import, HAR/`.http`
+  export (consolidates scattered import/export).
+- **Perspectives** — saved workspace layouts / context switching.
+- **Dojo** — in-app guided onboarding and lessons driven against VulnLab.
+- **Access Pack** — colorblind-safe palettes + non-color encodings beyond the doc 05 §7 baseline.
+- **Target TLS/HTTPS config scanner** — testssl.sh-style protocol/cipher/chain audit of the target
+  (distinct from F02, which is Gulp's own CA/MITM).
+
 ## Format of a feature spec
 
 Every `Fxx` file has the same sections, so it is easy to scan:

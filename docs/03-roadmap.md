@@ -18,6 +18,9 @@ Build the milestones **in order**. Each one ends with a usable, tested app. Requ
 | DEC | F12 Decoder | CMP | F13 Comparer |
 | NB | F14 Notebook | | |
 
+Post-1.0 expansion prefixes (M21+, see Phase F): `SSO` (F25), `WSX` (F26), `JSR` (F27), `WCP` (F28),
+`GOV` (F29), `DRF` (F30), `JRN` (F31), `LLM` (F32).
+
 "All P0 of Fxx" means every requirement in that spec marked P0. P1 items are part of the milestone
 unless the spec marks them "(later: Mxx)".
 
@@ -173,3 +176,37 @@ that exercises a deferred part (e.g. F07 test 4's OAST column) runs only in the 
 - [ ] Accessibility audit (VoiceOver labels, keyboard navigation), localization-ready strings.
 - [ ] Performance budget verification (doc 01 §9).
 - **DoD:** A notarized DMG installs and auto-updates from a test appcast.
+
+## Phase F — Post-1.0 expansion (M21+)
+
+Added after the v1 spec review (ADR-013). These build on the v1 engines; each spec notes where parts
+could be pulled earlier. Schedule/prioritize with the owner — the order below is the suggested value
+ranking, not a hard sequence. **Two have P0 parts that belong earlier and should be built then:**
+F29 Governor's shared limiter + panic stop in **M11** (when the first active tools ship) with the
+full panel in M16, and F31 Journal's coverage index in **M9** with the full tool in M16.
+
+### M21 — SSO Workbench
+- [ ] All P0/P1 of F25. **DoD:** reconstructs a VulnLab OIDC auth-code flow and flags an over-accepted `redirect_uri`; a signature-stripped/XSW SAML assertion is accepted by the vulnerable SP and rejected by the safe twin.
+
+### M22 — WebSocket Security Workbench
+- [ ] All P0/P1 of F26. **DoD:** WS Repeater + Fuzzer work against VulnLab `/ws/chat`; a cross-origin handshake is flagged CSWSH; a replayed privileged message under a stripped session is caught.
+
+### M23 — JS Recon Studio
+- [ ] All P0/P1 of F27. **DoD:** reconstructs a source tree from an exposed `.map`, mines `/api/internal/*` endpoints not found by crawling, and feeds them to a scan.
+
+### M24 — Web Cache Poisoning & Deception
+- [ ] All P0/P1 of F28. **DoD:** confirms an `X-Forwarded-Host` poisoning vector victim-safely and a `/account.css` deception; safe twins clean.
+
+### M25 — Drift & Retest
+- [ ] All P0/P1 of F30. **DoD:** an issue proof re-run flips Still-Vulnerable→Fixed after a patch; `gulp retest --fail-on regression` exits non-zero on a regression.
+
+### M26 — LLM/AI-feature security testing
+- [ ] All P0/P1 of F32. **DoD:** a VulnLab chat endpoint is flagged for direct prompt injection and for indirect injection with an OAST-correlated exfil; the guarded twins are clean.
+
+### (Folded into earlier milestones)
+- **F29 Governor** — shared limiter + panic stop in **M11**, live panel/quiet-hours in **M16**.
+- **F31 Journal** — coverage index in **M9**, full coverage/timeline/map tool in **M16**.
+
+Backlog features (CSP Auditor, Deserialization, gRPC, Arsenal, Share Packs, Privacy Guard, Interop
+Hub, Perspectives, Dojo, Access Pack, target TLS scanner) are listed in `docs/README.md`; promote
+each to a full `Fxx` spec and a milestone here when scheduled.

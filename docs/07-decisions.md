@@ -118,6 +118,21 @@ accepted ones; supersede them.
   restriction on use, so the "authorized testing only" guidance (doc 00 §6) is a usage expectation
   enforced in-app (the acknowledgment and ScopeGuard), not a license term.
 
+## ADR-013: Post-1.0 feature expansion (F25–F32) is additive, after release
+
+- **Context**: An independent feature review proposed many capabilities beyond the v1 set (F01–F24).
+  The owner asked to add features.
+- **Decision**: Add eight as full specs — F25 SSO Workbench, F26 WebSocket Security, F27 JS Recon
+  Studio, F28 Cache Poisoning, F29 Governor, F30 Drift & Retest, F31 Journal, F32 LLM-feature
+  testing — scheduled in **Phase F (M21+)**, after the v1 release (M20). They are **additive**: each
+  builds on existing v1 engines and reuses ScopeGuard/Governor/OAST, so none changes v1 scope or
+  architecture. Two have P0 parts that belong earlier and are folded in: F29's shared limiter +
+  panic stop in M11 and F31's coverage index in M9. Further candidates are a named backlog in
+  `docs/README.md`, promoted to specs when scheduled.
+- **Consequences**: v1 ships on the original M0–M20 plan unchanged; the expansion is clearly fenced
+  and owner-prioritized. The one structural touch the review forced — the shared agent tool surface
+  in `GulpWorkspace` (ADR-010-adjacent, doc 01 rule 6) — was needed by v1 (F21/F22) regardless.
+
 ---
 
 ## Small decisions (append here)
