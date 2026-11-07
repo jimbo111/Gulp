@@ -38,7 +38,11 @@ A "resume" card appears on project open.
   The two things that *do* need persistence — per-endpoint checklists (JRN-006) and timeline markers
   (JRN-008) — use `journal_checklists` and `journal_markers` (doc 04 §4 Post-1.0 tables).
 - The timeline reads a curated subset of `GulpEvent`/stored actions; keep it cheap by querying the
-  store with the existing indexes, not by holding everything in memory.
+  store with the existing indexes, not by holding everything in memory. Events that aren't otherwise
+  persisted as rows — notably **scope changes** (`GulpEvent.scopeChanged`, since `scope_rules` holds
+  only the current rules, not history) — are captured as `log`/`LogEntry` records so the timeline can
+  show them; everything else (sends, issues, notes, baselines) is reconstructable from timestamped
+  rows.
 - Reuse Swift Charts (already used by the Dashboard/Sequencer) for the treemap.
 - Pure read/aggregation over data Gulp already stores — no network sends.
 

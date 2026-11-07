@@ -7,7 +7,7 @@
 | 00 | [00-vision.md](00-vision.md) | Product vision, goals and non-goals, naming map (Burp → Gulp), principles, ethics |
 | 01 | [01-architecture.md](01-architecture.md) | Tech stack, repository layout, modules, dependency rules, concurrency, data flow |
 | 02 | [02-build-and-dev-setup.md](02-build-and-dev-setup.md) | Toolchain, Makefile, building on macOS and Linux, CI, signing, notarization, releases |
-| 03 | [03-roadmap.md](03-roadmap.md) | Ordered milestones M0–M20 with tasks and Definition of Done |
+| 03 | [03-roadmap.md](03-roadmap.md) | Ordered milestones M0–M20 (v1) + M21–M26 (Phase F) with tasks and Definition of Done |
 | 04 | [04-data-model-and-storage.md](04-data-model-and-storage.md) | Core Swift types, SQLite schema, project file format |
 | 05 | [05-ui-ux.md](05-ui-ux.md) | Window layout, navigation, shared components, shortcuts, visual design |
 | 06 | [06-testing-strategy.md](06-testing-strategy.md) | Unit, integration and UI tests, VulnLab, performance budgets |

@@ -114,7 +114,10 @@ that exercises a deferred part (e.g. F07 test 4's OAST column) runs only in the 
 - [ ] Logger tool showing every tool's traffic (HIS-040…HIS-045).
 - [ ] Global search with FTS5 (HIS-050…HIS-054).
 - [ ] Notebook (all P0/P1 of F14).
-- **DoD:** `resp.status >= 500 and req.host ~ "api"` filters 1M rows in < 2 s (it is index-assisted where possible).
+- [ ] **F31 Journal — coverage index (JRN-001)**: record per-endpoint tool coverage from `ToolSource`
+  (Repeater/Fuzzer/Notebook sources exist now; Scanner columns populate at M10/M11). The full
+  coverage/timeline/map tool is M16. (Phase F fold-in.)
+- **DoD:** `resp.status >= 500 and req.host ~ "api"` filters 1M rows in < 2 s (index-assisted where possible); the coverage index reflects which tools touched each endpoint.
 
 ## Phase C — Automation (M10–M14)
 
@@ -134,7 +137,11 @@ that exercises a deferred part (e.g. F07 test 4's OAST column) runs only in the 
 - [ ] Active checks catalog (F08 §3.2), at least every check marked P0.
 - [ ] Beacon client + interactsh client; Beacon server (Beacon package) (all P0 of F10).
 - [ ] Check Recipes (YAML custom checks) (SCN-060…SCN-066).
-- **DoD:** A "Crawl and audit" of VulnLab finds every P0 vulnerability planted there, with zero false positives on the "safe twin" endpoints (doc 06 §3).
+- [ ] **F29 Governor — shared limiter + panic stop (GOV-001/002/003/007)**: the global + per-host
+  rate/concurrency limiter (consolidating F03 HTTP-013) and the one-key panic stop that halts all
+  active tools, built now because M11 ships the first active tools (Scanner/Crawler/Beacon). The full
+  Governor panel/quiet-hours/watchpoints are M16. (Phase F fold-in.)
+- **DoD:** A "Crawl and audit" of VulnLab finds every P0 vulnerability planted there, with zero false positives on the "safe twin" endpoints (doc 06 §3); the panic stop halts a running crawl+audit with zero in-flight requests, and global/per-host caps bound aggregate throughput.
 
 ### M12 — Sessions, authentication, macros
 - [ ] All P0/P1 of F15.
@@ -156,7 +163,12 @@ that exercises a deferred part (e.g. F07 test 4's OAST column) runs only in the 
 
 ### M16 — Reporting, engagement tools, project polish
 - [ ] All P0/P1 of F17, F19, and the remaining items of F20.
-- **DoD:** A self-contained HTML report of the VulnLab scan opens offline; a CSRF PoC is generated for a VulnLab form.
+- [ ] **F29 Governor — full control surface**: the live throughput panel (GOV-006), resource
+  watchpoints (GOV-004), quiet hours (GOV-005), dry-run preview (GOV-008) and layered-settings caps
+  (GOV-009), on top of the M11 limiter/panic-stop. (Phase F fold-in.)
+- [ ] **F31 Journal — full tool**: the coverage view, activity timeline, attack-surface map and
+  "resume where I left off" (JRN-002…JRN-009), on top of the M9 coverage index. (Phase F fold-in.)
+- **DoD:** A self-contained HTML report of the VulnLab scan opens offline; a CSRF PoC is generated for a VulnLab form; the Governor panel shows live throughput and the Journal shows per-endpoint coverage.
 
 ### M17 — Automation: CLI, REST API, MCP server
 - [ ] All P0/P1 of F21.

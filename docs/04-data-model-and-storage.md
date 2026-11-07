@@ -223,8 +223,10 @@ CREATE TABLE extension_state (extension_id TEXT, key TEXT, value BLOB, PRIMARY K
 
 ### Post-1.0 expansion tables (Phase F, migration v2+)
 
-These back the Phase F features (F30 Drift & Retest, F31 Journal). They ship as a later additive
-migration (`v2_phasef`), not in schema v1, but are defined here so the schema stays centralized.
+These back the Phase F features (F30 Drift & Retest, F31 Journal). They ship as **two** later additive
+migrations, not in schema v1, so each lands with its feature under the "never edit a shipped
+migration" rule: `v2_journal` at M9/M16 (the `journal_*` tables) and `v3_drift` at M25 (the `drift_*`,
+`issue_proofs`, `retest_runs` tables). Defined here together so the schema stays centralized.
 
 ```sql
 -- F30 Drift & Retest -------------------------------------------------------
@@ -236,14 +238,20 @@ CREATE TABLE drift_endpoints (                                 -- immutable per-
 );
 CREATE TABLE drift_runs (id INTEGER PRIMARY KEY, baseline_id INTEGER REFERENCES drift_baselines(id) ON DELETE CASCADE, run_at REAL);
 CREATE TABLE drift_results (                                   -- one row per endpoint per run (DRF-004)
-  run_id INTEGER REFERENCES drift_runs(id) ON DELETE CASCADE, endpoint_id INTEGER REFERENCES drift_endpoints(id),
+  id INTEGER PRIMARY KEY,
+  run_id INTEGER REFERENCES drift_runs(id) ON DELETE CASCADE,
+  endpoint_id INTEGER REFERENCES drift_endpoints(id),          -- NULL for a `new` endpoint (no baseline row yet)
+  target_json TEXT,                                            -- identity of the endpoint even when endpoint_id is NULL (`new`)
   status TEXT,                                                 -- unchanged | changed | new | removed | error
   sample_request_blob INTEGER REFERENCES blobs(id), sample_response_blob INTEGER REFERENCES blobs(id),
-  diff_json TEXT, PRIMARY KEY(run_id, endpoint_id)
-);
+  diff_json TEXT
+);  -- a surrogate id + target_json so `new` endpoints (DRF-004) are first-class, not an implicit NULL-PK row.
 CREATE TABLE issue_proofs (                                    -- replayable proof per issue (DRF-003)
   id INTEGER PRIMARY KEY, issue_id INTEGER REFERENCES issues(id) ON DELETE CASCADE,
-  target_json TEXT, request_blob INTEGER REFERENCES blobs(id), matcher_json TEXT, created_at REAL
+  target_json TEXT, request_blob INTEGER REFERENCES blobs(id),
+  steps_json TEXT,                                             -- ordered extra requests for multi-step proofs (smuggling/race/chains); request_blob is the primary one
+  identity_id INTEGER REFERENCES identities(id),               -- replay under a specific identity (DRF-008); NULL = scope-matched session rules
+  matcher_json TEXT, created_at REAL
 );
 CREATE TABLE retest_runs (                                     -- per-issue retest history (DRF-005)
   id INTEGER PRIMARY KEY, issue_id INTEGER REFERENCES issues(id) ON DELETE CASCADE, run_at REAL,
@@ -263,7 +271,12 @@ CREATE TABLE journal_markers (id INTEGER PRIMARY KEY, at REAL, label TEXT, note 
 - **Migrations**: use GRDB's `DatabaseMigrator`, one registered migration per schema change, named
   `vN_description`. Never edit a migration that has shipped.
 - **Blob dedup**: identical responses (static assets) are stored once. A periodic vacuum task
-  (`Project → Compact`) removes unreferenced blobs.
+  (`Project → Compact`) removes unreferenced blobs. Its reference walk must enumerate **every**
+  blob-referencing column, not a hardcoded v1 list — including the Phase F ones
+  (`drift_endpoints.request_blob`/`response_blob`, `drift_results.sample_request_blob`/
+  `sample_response_blob`, `issue_proofs.request_blob`) — or it would vacuum the immutable snapshots
+  F30 promises. Derive the column list from the schema (or keep it beside the migration that adds
+  each blob column).
 - **Write coalescer**: `StoreWriter` actor gathers `PendingWrite`s and flushes them in one
   transaction every 50 ms or 500 items. A crash loses at most the last 50 ms of traffic; for proxy
   traffic that is acceptable, and the Settings "Durable mode" flushes on every write.
