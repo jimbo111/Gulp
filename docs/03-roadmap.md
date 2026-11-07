@@ -61,10 +61,11 @@ that exercises a deferred part (e.g. F07 test 4's OAST column) runs only in the 
 - **DoD:** `make bootstrap generate build test lint` pass on macOS; `swift test` for GulpKit passes on Linux; the app launches and shows the empty sidebar.
 
 ### M1 — Core model and raw HTTP engine (HTTP/1.x)
-- [ ] GulpCore: `Bytes`, `RawRequest`/`RawResponse`, the raw-preserving HTTP/1 parser (doc 04 §2), `HTTPTarget`, `Exchange`, `ToolSource`, `EventBus`, `GulpError`.
-- [ ] GulpHTTP: HTTP/1.1 client that sends raw bytes over TCP/TLS, plus response framing (Content-Length, chunked, close-delimited, 1xx, HEAD/204/304), connection pool and timeouts (F03 HTTP-001…HTTP-010).
-- [ ] gulp-vulnlab: first endpoints (echo, redirect, chunked, gzip, slow, large; doc 06 §3).
-- [ ] Parser fuzz tests and round-trip property tests (doc 06 §2).
+- [x] GulpCore: `Bytes`, `RawRequest`/`RawResponse`, the raw-preserving HTTP/1 parser (doc 04 §2), `HTTPTarget`, `Exchange`, `ToolSource`, `EventBus`, `GulpError`.
+- [x] GulpHTTP: HTTP/1.1 client that sends raw bytes over TCP/TLS, plus response framing (Content-Length, chunked, close-delimited, 1xx, HEAD/204/304), connection pool and timeouts (F03 HTTP-001…HTTP-010).
+- [x] gulp-vulnlab: first endpoints (echo, redirect, chunked, gzip, slow, large; doc 06 §3).
+- [x] Parser fuzz tests and round-trip property tests (doc 06 §2).
+- *Done (CI run 42398666124, both platforms; DoD enforced by `Scripts/m1-dod.sh`). TLS is M3 per the DoD note; carry-overs: HTTP-007 brotli/zstd decoders, SOCKS5 credentials (see PROGRESS).*
 - **DoD:** `gulp-cli send --raw request.txt --target http://127.0.0.1:8088/echo` prints the exact response bytes, and `--target http://127.0.0.1:8089/echo-raw` round-trips a malformed request byte-for-byte; all HTTP-0xx P0 tests pass. (HTTPS/`:8443` and TLS trust are **not** exercised until M3 — M1 is plaintext HTTP/1 only.)
 
 ### M2 — Plain-HTTP proxy, storage, history UI

@@ -6,21 +6,18 @@ order; within a milestone, do P0 first.
 
 ## Current status
 
-- **Phase**: **M0 DONE — CI is green on both platforms** (run on commit `6e17d38`); M1 in progress.
-- **Active milestone**: **M1 — Core model + raw HTTP/1 engine** (the GulpCore byte-fidelity
-  foundation is CI-verified; the rest of the model + `GulpHTTP` remain).
-- **Build verification (resolved)**: the authoring container still has no Swift toolchain
-  (`download.swift.org` blocked), so builds are verified by **CI** (`.github/workflows/ci.yml`), which
-  is now green: the `core-linux` job (`swift:6.0-noble`) runs `swift build`/`swift test` over the whole
-  GulpKit graph + Beacon, and the `macos` job runs `make lint generate test-core build test`
-  (`swift format --strict`, `xcodegen`, Xcode app build, core + UI tests). Getting there fixed four
-  real M0/dependency defects CI surfaced that static review could not: GRDB needs a SQLite built with
-  `SQLITE_ENABLE_SNAPSHOT`/FTS5 on Linux; `swift format --strict` was never satisfied (code, manifests,
-  tests); `GulpAppUITests` had no Info.plist; and the XCUITest needed `@MainActor` under Swift 6.
-- **Next action**: continue **M1** — the GulpCore byte-fidelity foundation (`Bytes`, raw HTTP/1
-  parser + framer, with tests) is written and **CI-verified** (compiles + tests pass on Linux and
-  macOS). Next: the remaining GulpCore model types (`HTTPTarget`, `Exchange`, events, scope, errors)
-  and the `GulpHTTP` engine.
+- **Phase**: **M1 DONE** — CI green on both platforms (run 42398666124, commit `cd84c2a`), and the
+  M1 DoD is an executable check (`Scripts/m1-dod.sh`, run by the Linux job): PASS. M0 done earlier.
+- **Active milestone**: **M2 — Plain-HTTP proxy, storage, history UI** (next).
+- **Build verification**: the authoring container has no Swift toolchain (`download.swift.org` is
+  blocked), so CI (`.github/workflows/ci.yml`) is the gate and runs on **every branch push**:
+  `core-linux` (`swift:6.0-noble`: build + all tests + the M1 DoD script) and `macos`
+  (`make lint generate test-core build test`).
+- **M1 carry-overs** (tracked, not silently dropped): HTTP-007 brotli and zstd decoders (gzip/deflate
+  ship; `br`/`zstd` throw `.unsupported`); SOCKS5 username/password (NIOSOCKS client is no-auth only).
+  Redirect following is declared but `.never`-only until the Repeater (M5); TLS/HTTP/2 are M3.
+- **Next action**: start **M2** — GulpStore schema v1 + write coalescer (implements the engine's
+  `ExchangeRecorder`), projects, the HTTP/1 forward proxy, and the History UI.
 - **Product decisions**: resolved by the owner and recorded in `docs/07-decisions.md` §"Product
   decisions" (MIT license; macOS 14 min; Claude-only AI in v1; OAST off until configured;
   `com.gulp.app` placeholder bundle id; no team server). Build to those.
@@ -106,7 +103,7 @@ for behavior.
 ## Milestone checklist (summary — details in docs/03-roadmap.md)
 
 - [x] M0 — Scaffolding (repo layout, Package.swift, project.yml, Makefile, CI, empty app window) — **CI green both platforms (`6e17d38`)**
-- [ ] M1 — Core model + raw HTTP/1 engine (GulpCore byte-fidelity foundation done + CI-verified; rest pending)
+- [x] M1 — Core model + raw HTTP/1 engine — **CI green both platforms + executable DoD PASS (`cd84c2a`)**
 - [ ] M2 — Plain-HTTP proxy, storage, history UI
 - [ ] M3 — TLS interception + CA + HTTP/2
 - [ ] M4 — Intercept, Match & Replace, message editor, WebSockets
@@ -181,6 +178,21 @@ for behavior.
     `GENERATE_INFOPLIST_FILE` in `project.yml`.
   - **Swift 6 concurrency:** XCUITest APIs are `@MainActor`; annotated the test class.
   Verified via `workflow_dispatch` runs on the branch (CI triggers on push-to-main/PR/dispatch).
+- 2026-11-07 — **M1 DONE** (CI run 42398666124, `cd84c2a`; DoD `Scripts/m1-dod.sh`: PASS):
+  - GulpCore: full doc 04 §2 model (`HTTPTarget`, `Exchange` + supporting types, `ToolSource`
+    TEXT encoding, `GulpNetworkError`/`GulpError`), the `EventBus` actor (lag markers on `Delivery`),
+    exact resumable chunk scanner, HEAD/interim-aware `RawResponse`, `H2RequestSpec`.
+  - GulpHTTP: `NIOHTTPEngine` — raw-byte writes, full HTTP/1 framing, pool, DNS overrides, typed
+    timeouts, opt-in Content-Length/line-ending rewrites, cancellation, timing, hooks, recorder,
+    group sends, upstream HTTP/CONNECT/SOCKS5 proxies + rules, gzip/deflate helpers.
+  - gulp-vulnlab (raw-NIO fixtures :8088 + verbatim echo :8089) and `gulp-cli send --raw`.
+  - Tests: 80 (fixture corpus, seeded fuzz, every HTTP-0xx requirement against an in-process
+    server, scripted proxies incl. SOCKS5).
+  - Real bugs CI caught along the way: `TCP_NODELAY` set at `SOL_SOCKET` (= `SO_DEBUG`; EACCES on
+    Linux, silently wrong on macOS); negative TTFB from stamping write completion off-loop;
+    ArgumentParser's sync entry point refusing an async command; NIO's async `writeAndFlush`
+    overload shadowing the future-returning one. Plus, from fuzz-test design: chunk-size overflow
+    and the `0`-line chunk heuristic.
 
 ## How to pick up work (reminder)
 
