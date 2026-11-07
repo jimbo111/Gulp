@@ -13,6 +13,7 @@
 | 06 | [06-testing-strategy.md](06-testing-strategy.md) | Unit, integration and UI tests, VulnLab, performance budgets |
 | 07 | [07-decisions.md](07-decisions.md) | Architecture Decision Records (ADRs) and open questions |
 | — | [PROGRESS.md](PROGRESS.md) | Live progress tracker; Claude updates it as work lands |
+| — | [REVIEW.md](REVIEW.md) | Review dossier: the objective DoD, every independent review + verdict, and the build-ready judgment |
 
 ## Feature specifications (`features/`)
 
