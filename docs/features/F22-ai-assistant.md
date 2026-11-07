@@ -28,7 +28,7 @@ provider.
 | AI-009 | P1 | **Report drafting** (F19 RPT-013): draft the executive summary and per-issue narratives from the real findings; user edits before use; marked as AI-drafted. |
 | AI-010 | P1 | **Cost/limits**: show token usage and an optional budget cap; a kill switch; streaming with cancel. |
 | AI-011 | P2 | **Local model support** (Ollama/llama.cpp via an OpenAI-compatible endpoint) as a first-class provider for fully-offline use. |
-| AI-012 | P2 | **Explmain mode for beginners**: deeper, didactic explanations of vulns/traffic (fits the "teach me" use case) with links to the issue catalog. |
+| AI-012 | P2 | **Explain mode for beginners**: deeper, didactic explanations of vulns/traffic (fits the "teach me" use case) with links to the issue catalog. |
 
 ## 3. UI
 

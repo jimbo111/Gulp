@@ -60,8 +60,8 @@ bar presence, Shortcuts/Services integration, Quick Look, and the usual Mac nice
 - **Menu bar extra**: `MenuBarExtra` (SwiftUI) gated by a setting; keep it lightweight.
 - **App Intents**: define intents in the app target that call into `ProjectSession`/CLI-equivalent
   services; keep them headless-safe.
-- **No App Sandbox** (ADR-005) is what makes MAC-010/016/browser launching possible; keep Hardened
-  Runtime entitlements minimal and documented.
+- **No App Sandbox** (ADR-005) is what makes the system-proxy toggle (MAC-010/011) and browser
+  launching (F16) possible; keep Hardened Runtime entitlements minimal and documented.
 
 ## 5. Edge cases
 

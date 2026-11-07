@@ -189,7 +189,16 @@ CREATE TABLE fuzzer_results (attack_id INTEGER REFERENCES fuzzer_attacks(id) ON 
 CREATE TABLE oast_payloads (id INTEGER PRIMARY KEY, correlation_id TEXT UNIQUE, created_at REAL, context_json TEXT);   -- which tool, exchange and insertion point used it
 CREATE TABLE oast_interactions (id INTEGER PRIMARY KEY, payload_id INTEGER REFERENCES oast_payloads(id), protocol TEXT, remote_address TEXT, at REAL, raw_blob INTEGER, summary TEXT);
 
-CREATE TABLE notebook_items (id INTEGER PRIMARY KEY, kind TEXT, exchange_id INTEGER, title TEXT, status TEXT, body_md TEXT, created_at REAL, updated_at REAL, ordinal INTEGER);
+CREATE TABLE notebook_items (
+  id INTEGER PRIMARY KEY, kind TEXT,                                 -- kind: 'exchange' | 'note'
+  exchange_id INTEGER REFERENCES exchanges(id) ON DELETE SET NULL,   -- optional back-ref to the live exchange
+  request_blob INTEGER REFERENCES blobs(id),                         -- snapshot (NB-001), independent of history edits/deletion
+  response_blob INTEGER REFERENCES blobs(id),
+  target_json TEXT,                                                  -- scheme/host/port so the snapshot can be re-sent
+  title TEXT, status TEXT, body_md TEXT, tags TEXT, highlight TEXT,  -- tags = JSON array (NB-003)
+  issue_id INTEGER REFERENCES issues(id) ON DELETE SET NULL,         -- NB-005 link
+  created_at REAL, updated_at REAL, ordinal INTEGER
+);
 
 CREATE TABLE cookie_jar (domain TEXT, path TEXT, name TEXT, value TEXT, expires REAL, secure INTEGER, http_only INTEGER, same_site TEXT, identity_id INTEGER, PRIMARY KEY(domain, path, name, identity_id));
 CREATE TABLE identities (id INTEGER PRIMARY KEY, name TEXT, color TEXT, config_json TEXT);       -- Authz Matrix, sessions
