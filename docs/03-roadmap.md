@@ -75,7 +75,7 @@ that exercises a deferred part (e.g. F07 test 4's OAST column) runs only in the 
 - [x] UI: Proxy → HTTP History table (NSTableView, paged), the message viewer (read-only Raw/Hex), a basic filter bar (F05 HIS-001…HIS-006), Settings → Proxy listeners.
 - **DoD:** Browse `http://localhost:8088` through Gulp; 10k requests are recorded and scroll smoothly; quitting and reopening the project shows the same history.
 
-### M3a — TLS interception and the certificate authority (HTTP/1.1)
+### M3a — TLS interception and the certificate authority (HTTP/1.1) — DONE
 Split from the original M3 after the 2026-11-07 feature review (docs/FEATURE-REVIEW.md): CA + CONNECT
 + MITM is one milestone, HTTP/2 the next, so each lands with a working DoD.
 - [x] GulpTLS: CA generation and storage (Keychain on macOS, 0600 file elsewhere), leaf minting with SNI/SAN, an LRU cache, CA export in PEM/DER (F02 TLS-001…TLS-010, TLS-012).
