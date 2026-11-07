@@ -57,6 +57,12 @@ targets:
     platform: macOS
     sources:
       - UITests
+    settings:
+      base:
+        # The UI-test bundle has no checked-in Info.plist, so let Xcode synthesize one
+        # (without this, code signing fails: "target does not have an Info.plist file").
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.gulp.app.uitests
     dependencies:
       - target: Gulp
 
