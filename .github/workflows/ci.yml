@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-linux:
+    name: Core (Linux, Swift 6)
+    runs-on: ubuntu-latest
+    container: swift:6.0-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SQLite headers
+        run: apt-get update && apt-get install -y libsqlite3-dev
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            Packages/GulpKit/.build
+            Beacon/.build
+          key: spm-linux-${{ hashFiles('Packages/GulpKit/Package.resolved', 'Beacon/Package.resolved') }}
+          restore-keys: spm-linux-
+      - name: Build GulpKit
+        run: swift build --package-path Packages/GulpKit
+      - name: Test GulpKit
+        run: swift test --package-path Packages/GulpKit --parallel
+      - name: Build Beacon
+        run: swift build --package-path Beacon
+      - name: Test Beacon
+        run: swift test --package-path Beacon --parallel
+
+  macos:
+    name: App + full test (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app
+      - name: Install tools
+        run: brew install xcodegen swift-format
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: Packages/GulpKit/.build
+          key: spm-macos-${{ hashFiles('Packages/GulpKit/Package.resolved') }}
+          restore-keys: spm-macos-
+      - name: Lint
+        run: make lint
+      - name: Generate project
+        run: make generate
+      - name: Core tests
+        run: make test-core
+      - name: Build app
+        run: make build
+      - name: App + UI tests
+        run: make test
+
+  release:
+    name: Release (tag)
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-15
+    needs: [core-linux, macos]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Note
+        run: echo "Release packaging runs Scripts/release.sh with signing secrets (docs/02 §8)."

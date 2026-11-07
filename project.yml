@@ -1,0 +1,73 @@
+name: Gulp
+options:
+  bundleIdPrefix: com.gulp
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  xcodeVersion: "16.0"
+
+packages:
+  GulpKit:
+    path: Packages/GulpKit
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "0.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""           # set your Apple Developer team id for signed builds
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  Gulp:
+    type: application
+    platform: macOS
+    sources:
+      - App
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gulp.app
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/Gulp.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        COMBINE_HIDPI_IMAGES: YES
+    dependencies:
+      - package: GulpKit
+        product: GulpFeatures
+      - package: GulpKit
+        product: GulpWorkspace
+      - package: Sparkle
+    # Embed the CLI so users can symlink it into their PATH (docs/02 §4).
+    postCompileScripts:
+      - script: |
+          # gulp-cli is built from the SwiftPM package; copy it in when available.
+          BIN="$BUILT_PRODUCTS_DIR/gulp-cli"
+          DEST="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
+          if [ -f "$BIN" ]; then mkdir -p "$DEST" && cp "$BIN" "$DEST/gulp"; fi
+        name: Embed gulp-cli
+
+  GulpAppUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - UITests
+    dependencies:
+      - target: Gulp
+
+schemes:
+  Gulp:
+    build:
+      targets:
+        Gulp: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - GulpAppUITests

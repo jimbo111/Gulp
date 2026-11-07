@@ -53,7 +53,7 @@ Settings → **TLS** pane:
 - Convert to NIOSSL types: serialize DER → `NIOSSLCertificate(bytes:format: .der)` and
   `NIOSSLPrivateKey(bytes:format: .der)`. Build one `NIOSSLContext` per leaf (cache the context, not
   just the cert, because creating contexts is expensive).
-- SNI: use `NIOTLS.SNIHandler` (swift-nio-extras), which peeks at the ClientHello without consuming
+- SNI: use `SNIHandler` (in `NIOSSL`, the swift-nio-ssl package), which peeks at the ClientHello without consuming
   it. Then insert `NIOSSLServerHandler(context: leafContext)`. Alternatively use
   `TLSConfiguration.sslContextCallback` (swift-nio-ssl) to select a context during the handshake.
   Either is fine; the SNIHandler approach also gives us the hostname early enough for ALPN mirroring

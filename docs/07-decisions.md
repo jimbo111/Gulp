@@ -88,11 +88,14 @@ accepted ones; supersede them.
   dependency on a macOS-only module is linked unconditionally by SwiftPM and breaks the Linux build;
   it also inverts the layering (an engine reaching "sideways" into a platform module).
 - **Decision**: Lower modules define a protocol for the capability (e.g. `BrowserDriver` in
-  `GulpCrawler`). The concrete implementation lives in the platform module and is injected by
-  `GulpWorkspace`, which is the *only* module that conditionally depends on platform engines
-  (`condition: .when(platforms: [.macOS])` + `#if os(macOS)`). On Linux the capability is absent and
-  the feature degrades (static-only crawling).
-- **Consequences**: Clean layering, Linux CI stays green. Costs a little injection boilerplate.
+  `GulpCrawler`). The concrete implementation lives in the platform module (`GulpBrowser`) and is
+  injected by `GulpWorkspace`. The platform modules are **defined on every platform** but wrap their
+  AppKit/JavaScriptCore code in `#if canImport(...)`, so on Linux they compile to empty shells; the
+  package manifest therefore has no platform branches and dependencies stay unconditional (M0
+  implementation; see doc 02 §5 for the trade-off vs. `.when(platforms:)`). On Linux the shell
+  provides no driver and the feature degrades (static-only crawling).
+- **Consequences**: Clean layering, branch-free manifest, Linux CI stays green. Costs a little
+  injection boilerplate and some empty-shell compile time on Linux.
 - **Supersedes**: the earlier "`GulpCrawler` → `GulpBrowser`" edge in doc 01 §3.
 
 ## ADR-011: Scope evaluation is last-match-wins

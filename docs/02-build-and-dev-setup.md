@@ -103,17 +103,22 @@ Platform-only targets: put macOS-only targets in a conditional block
 (`#if os(macOS) targets += [...] #endif`). This works because `Package.swift` is ordinary Swift
 evaluated on the host.
 
-**Conditional dependencies.** A plain `.target(name:)` dependency is linked on every platform, so a
-Linux-buildable module must never list a macOS-only module as a dependency (it would break the Linux
-build). Two rules follow:
-- `GulpWorkspace` is the only orchestration module allowed to touch macOS-only engines, and it does
-  so behind `#if os(macOS)` both in its target dependency list
-  (`.target(name: "GulpBrowser", condition: .when(platforms: [.macOS]))`) and in its imports. It
-  injects the concrete `BrowserDriver` (from `GulpBrowser`) into `GulpCrawler`/`GulpScanner`, which
-  only know the protocol (architecture §3 rule 5). On Linux the driver is nil and static crawling is
-  used.
+**Platform modules are empty shells on Linux (not conditional targets).** A module breaks the Linux
+build only if its *sources* fail to compile there (e.g. `import AppKit`). Rather than conditionalize
+the manifest, the macOS-capability modules (`GulpBrowser`, `GulpScript`, `GulpUI`, `GulpFeatures`)
+are **defined on every platform** and wrap their AppKit/JavaScriptCore code in `#if canImport(...)`,
+compiling to an empty shell on Linux. Consequences:
+- Every target and product exists identically on macOS and Linux; `Package.swift` has **no**
+  platform `#if` and dependencies on these modules are plain and unconditional. On Linux the shells
+  link as empty libraries (harmless); `swift build`/`swift test` run the whole graph.
+- `GulpWorkspace` depends on `GulpBrowser`/`GulpScript` directly and injects the concrete
+  `BrowserDriver` (from `GulpBrowser`) into `GulpCrawler`/`GulpScanner`, which only know the protocol
+  (architecture §3 rule 5). On Linux the shell provides no driver, so static crawling is used.
 - `GulpExtensions` lists no JavaScriptCore dependency; its JS host is guarded by
   `#if canImport(JavaScriptCore)` so the JSON-RPC runtime still builds on Linux.
+- Trade-off vs. `.when(platforms:)` conditional dependencies: empty shells build (fast, empty) on
+  Linux instead of being skipped. We accept that for a branch-free manifest; revisit if shell build
+  time ever matters.
 
 ## 6. Building on Linux (core modules only)
 

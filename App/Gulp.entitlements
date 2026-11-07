@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- No App Sandbox (ADR-005): Gulp launches browsers, binds ports, toggles the
+	     system proxy, loads extensions and spawns processes. Hardened Runtime is on
+	     (set in project.yml); add only the exceptions that prove necessary. -->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+	<!-- JavaScriptCore runs its interpreter without this; enable only if JIT is
+	     measured to matter for Snippets/extensions (docs/02 §4, docs/F18). -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<false/>
+</dict>
+</plist>
