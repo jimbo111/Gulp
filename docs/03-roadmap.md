@@ -179,9 +179,11 @@ that exercises a deferred part (e.g. F07 test 4's OAST column) runs only in the 
 
 ### M18 — Gulp Assistant (AI)
 - [ ] All P0/P1 of F22.
+- **DoD:** With AI disabled no provider call is possible; enabled (with consent), "Explain this issue" on a VulnLab finding returns a grounded answer citing the real exchange with the auth cookie masked in the redaction preview; an AI-initiated out-of-scope active action is blocked and audit-logged as `.ai`.
 
 ### M19 — Advanced testing tools
 - [ ] All P0/P1 of F23 (Authz Matrix, JWT Workbench, Param Discovery, Smuggling Probe, GraphQL Workbench, API import, secret scanner).
+- **DoD:** Authz Matrix flags the VulnLab IDOR (`/api/orders/{id}`) and `/admin` bypass with `/safe/*` twins "Enforced"; JWT `alg:none` and RS→HS confusion are accepted/rejected correctly; the GraphQL introspection + field-authz bug is found; importing `/openapi.json` creates requests for every `/api/*` operation; the secret scanner finds the planted key.
 
 ### M20 — macOS polish, packaging, release
 - [ ] Remaining items of F24 (system proxy toggle, menu bar extra, Shortcuts/App Intents, Quick Look).

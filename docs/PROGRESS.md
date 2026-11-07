@@ -46,12 +46,20 @@ and are pure Python over the Markdown.)
 | D12 | Each milestone's tasks need only capabilities built by then; forward deps marked "(later: Mxx)" | roadmap deferral list + per-spec notes | MET |
 | D13 | No contradictions across docs on load-bearing points | multi-panel independent review | MET (no Blockers/Majors) |
 | D14 | Prose has no misspellings (code/URLs excluded) | aspell with a verified technical-terms dictionary | MET (0 unknown real words) |
-| D15 | All Markdown tables are well-formed (in-cell `|` escaped) | table-shape check | MET |
+| D15 | All Markdown tables are well-formed (any in-cell pipe escaped as backslash-pipe) | table-shape check | MET |
 | D16 | Independent fresh-eyes review finds no Blocker/Major | 10 agent reviews incl. a final 2-reviewer panel + targeted re-verifications | MET |
 | C1 | The Swift code compiles and tests pass | `swift build`/`swift test`, `xcodebuild` | **DEFERRED — out of scope here**: no toolchain in this container and `download.swift.org` is blocked; this is a *code* gate enforced by CI (`.github/workflows/ci.yml`), not a Markdown property. |
 
 D1–D16 are MET. C1 is not a documentation criterion and cannot be run here; it is the CI gate for the
 code produced *from* these docs. By this objective standard the documentation is build-ready.
+
+**Independently audited (2026-11-07).** A fresh auditor re-derived all 16 criteria from the files
+(not trusting this status column) and returned **14/16 cleanly verified, FINAL JUDGMENT: BUILD-READY
+(no Blocker, no Major)**. It correctly caught that D8 and D15 had been over-claimed: M18/M19 lacked a
+`**DoD:**` line (D8), and the D15 row above itself had an unescaped in-cell pipe (D15). Both were
+Minor and both are now fixed (DoD lines added to roadmap M18/M19; this row reworded), so D8 and D15
+now genuinely hold. The independent judgment that the objective bar is met therefore stands with the
+status column accurate.
 
 ### Documentation verification (as of the last review)
 
