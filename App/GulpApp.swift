@@ -1,7 +1,8 @@
+import GulpWorkspace
 import SwiftUI
 
-// M0 app shell: an empty window with the tool sidebar from docs/05-ui-ux.md §2.
-// Feature screens (from the GulpFeatures package) are wired in starting at M2.
+// The Gulp app: one window per open project (F20 PRJ-004), each with its own ProjectSession.
+// Launch opens a temporary project (PRJ-001); File offers New/Open/Save As/Recent (PRJ-002).
 
 /// The Gulp application entry point.
 @main
@@ -9,11 +10,14 @@ struct GulpApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        WindowGroup {
-            RootView()
+        WindowGroup(for: ProjectRef.self) { $ref in
+            ProjectWindow(ref: ref)
                 .frame(minWidth: 1000, minHeight: 640)
+        } defaultValue: {
+            ProjectRef()
         }
         .commands {
+            ProjectCommands()
             CommandGroup(replacing: .appInfo) {
                 Button("About Gulp") {}  // real About panel in M16
             }
@@ -25,38 +29,20 @@ struct GulpApp: App {
     }
 }
 
-/// The main split view: a tool sidebar and the (currently empty) detail area.
-struct RootView: View {
-    @State private var selection: Tool? = .dashboard
-
-    var body: some View {
-        NavigationSplitView {
-            List(selection: $selection) {
-                ForEach(ToolSection.allCases) { section in
-                    Section(section.title) {
-                        ForEach(section.tools) { tool in
-                            Label(tool.title, systemImage: tool.symbol).tag(tool)
-                        }
-                    }
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 300)
-            .listStyle(.sidebar)
-        } detail: {
-            ContentUnavailableView(
-                selection?.title ?? "Gulp",
-                systemImage: selection?.symbol ?? "network",
-                description: Text("This tool arrives in a later milestone. See docs/03-roadmap.md.")
-            )
-        }
-    }
+/// Identifies what a window shows: a project file, or (no path) a new temporary project.
+struct ProjectRef: Codable, Hashable {
+    /// Project file path; nil for a new temporary project.
+    var path: String?
+    /// Distinguishes temporary-project windows from each other.
+    var id = UUID()
 }
 
-/// Placeholder Settings pane until the real panes land (docs/05-ui-ux.md §1).
+/// The app-level Settings window. Project settings (like the proxy listeners) live with the project:
+/// open them from the project window's toolbar.
 struct SettingsPlaceholderView: View {
     var body: some View {
-        Text("Settings arrive in later milestones.")
+        Text("Proxy listeners are project settings: use “Listeners…” in a project window's Proxy tool.")
             .padding()
-            .frame(width: 480, height: 320)
+            .frame(width: 480, height: 200)
     }
 }
