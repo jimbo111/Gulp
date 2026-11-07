@@ -21,6 +21,7 @@ let nioHTTP: [Target.Dependency] =
         .product(name: "NIOSSL", package: "swift-nio-ssl"),
         .product(name: "NIOExtras", package: "swift-nio-extras"),
     ]
+let nioConcurrency: [Target.Dependency] = [.product(name: "NIOConcurrencyHelpers", package: "swift-nio")]
 
 let package = Package(
     name: "GulpKit",
@@ -146,7 +147,7 @@ let package = Package(
         .testTarget(name: "GulpDiffTests", dependencies: ["GulpDiff"]),
         .testTarget(name: "GulpStoreTests", dependencies: ["GulpStore"]),
         .testTarget(name: "GulpTLSTests", dependencies: ["GulpTLS"]),
-        .testTarget(name: "GulpHTTPTests", dependencies: ["GulpHTTP"]),
+        .testTarget(name: "GulpHTTPTests", dependencies: ["GulpHTTP"] + nioCore + nioConcurrency),
         .testTarget(name: "GulpProxyTests", dependencies: ["GulpProxy"]),
         .testTarget(name: "GulpSessionTests", dependencies: ["GulpSession"]),
         .testTarget(name: "GulpRepeaterTests", dependencies: ["GulpRepeater"]),

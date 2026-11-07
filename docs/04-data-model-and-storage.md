@@ -82,12 +82,21 @@ public struct ParsedResponse: Sendable, Hashable {  // Hashable so RawResponse c
 }
 
 public struct RawResponse: Sendable, Hashable {
-    public var bytes: Bytes { get }
+    public var bytes: Bytes { get }               // the FINAL response's bytes
     public var parsed: ParsedResponse { get }
-    public init(_ bytes: Bytes)                   // parses eagerly; `parsed` memoized as in RawRequest
+    public var interim: [RawResponse] { get }     // 1xx responses that preceded it, each with its own bytes
+    public var isHeadResponse: Bool { get }       // answers HEAD: bodyFraming .none, never incomplete
+    // Parses eagerly; `parsed` memoized as in RawRequest. Only the engine knows what preceded the
+    // response on the wire and which method was sent, so it passes `interim` and `headRequest`;
+    // `parsed.interimResponses` mirrors `interim.map(\.parsed)` (ranges into each interim's bytes).
+    public init(_ bytes: Bytes, interim: [RawResponse] = [], headRequest: Bool = false)
     public func serialize() -> Bytes              // identity
-    public func replacing(_ range: Range<Int>, with new: Bytes) -> RawResponse
+    public func replacing(_ range: Range<Int>, with new: Bytes) -> RawResponse   // keeps interim/HEAD
+    public func hasHeaderToken(_ name: String, _ token: String) -> Bool        // e.g. Connection: close
 }
+// Framing primitives the engine shares with the parser (public on `enum HTTP1`):
+//   headerBlockEnd(_:) -> (end, terminator)      terminator 4 = CRLFCRLF, 2 = LFLF, 0 = none
+//   scanChunked(_:from:) -> .complete(end:) / .needMore(resumeAt:) / .malformed   (exact, resumable)
 
 public struct HTTPTarget: Sendable, Hashable, Codable {
     public var scheme: Scheme            // .http / .https

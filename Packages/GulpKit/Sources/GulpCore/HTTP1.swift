@@ -130,18 +130,40 @@ public struct RawRequest: Sendable, Hashable {
     public func headerValue(_ name: String) -> Bytes? {
         HTTP1.lastHeaderValue(name, parsed.headers, bytes)
     }
+    /// True if any `name` header lists `token` (comma-separated, case-insensitive), e.g.
+    /// `Connection: close`.
+    public func hasHeaderToken(_ name: String, _ token: String) -> Bool {
+        HTTP1.headerContains(bytes.rawBytes, parsed.headers, name: name, token: token)
+    }
 }
 
 /// An HTTP/1 response as raw bytes plus an eagerly-computed, re-computed-on-edit parsed view.
 public struct RawResponse: Sendable, Hashable {
-    /// The exact bytes of the message (the source of truth).
+    /// The exact bytes of the final response (the source of truth).
     public let bytes: Bytes
     /// The framed view, computed in `init` and recomputed by `replacing`.
     public let parsed: ParsedResponse
-    /// Parse `bytes` eagerly into `parsed`.
-    public init(_ bytes: Bytes) {
+    /// Interim (1xx) responses that preceded this final one on the wire, each with its own bytes
+    /// (HTTP-002). `parsed.interimResponses` mirrors their parsed views.
+    public let interim: [RawResponse]
+    /// True when this answers a HEAD request: such a response has no body whatever its framing
+    /// headers say (RFC 9112 §6.3), so `bodyFraming` is `.none` and it is never `incomplete`.
+    public let isHeadResponse: Bool
+
+    /// Parse `bytes` eagerly into `parsed`. The engine passes `interim` and `headRequest` because
+    /// only it knows what preceded the response on the wire and which method was sent.
+    public init(_ bytes: Bytes, interim: [RawResponse] = [], headRequest: Bool = false) {
+        var p = HTTP1.parseResponse(bytes)
+        if headRequest {
+            p.bodyFraming = .none
+            p.incomplete = false
+            p.dechunkedBody = nil
+        }
+        p.interimResponses = interim.map(\.parsed)
         self.bytes = bytes
-        self.parsed = HTTP1.parseResponse(bytes)
+        self.parsed = p
+        self.interim = interim
+        self.isHeadResponse = headRequest
     }
     /// Return the exact input bytes unchanged (HTTP-001 identity).
     public func serialize() -> Bytes { bytes }
@@ -149,11 +171,16 @@ public struct RawResponse: Sendable, Hashable {
     public func replacing(_ range: Range<Int>, with new: Bytes) -> RawResponse {
         var b = bytes
         b.replaceSubrange(range, with: new)
-        return RawResponse(b)
+        return RawResponse(b, interim: interim, headRequest: isHeadResponse)
     }
     /// The value bytes of the last header with this (case-insensitive) name, if any.
     public func headerValue(_ name: String) -> Bytes? {
         HTTP1.lastHeaderValue(name, parsed.headers, bytes)
+    }
+    /// True if any `name` header lists `token` (comma-separated, case-insensitive), e.g.
+    /// `Connection: close`.
+    public func hasHeaderToken(_ name: String, _ token: String) -> Bool {
+        HTTP1.headerContains(bytes.rawBytes, parsed.headers, name: name, token: token)
     }
 }
 
@@ -175,7 +202,7 @@ public enum HTTP1 {
     /// Locate the blank line that ends the header block. Returns the index just past it and the
     /// terminator length: 4 for CRLFCRLF, 2 for a tolerated LFLF (including CRLF+LF), or 0 when no
     /// blank line exists (then `end == a.count`: the whole input is headers, body empty).
-    static func headerBlockEnd(_ a: [UInt8]) -> (end: Int, terminator: Int) {
+    public static func headerBlockEnd(_ a: [UInt8]) -> (end: Int, terminator: Int) {
         var i = 0
         while i < a.count {
             if i + 3 < a.count, a[i] == CR, a[i + 1] == LF, a[i + 2] == CR, a[i + 3] == LF {
@@ -361,7 +388,7 @@ public enum HTTP1 {
             incomplete = (a.count - end) < cl
         }
         if framing == .chunked {
-            incomplete = !endsWithTerminalChunk(a, from: end)
+            incomplete = chunkedBodyEnd(a, from: end) == nil
         }
         // De-chunked view (HTTP-002): only when framed as chunked and the terminal chunk is present.
         let dechunked: Bytes? = (framing == .chunked && !incomplete) ? dechunk(a, from: end) : nil
@@ -438,20 +465,63 @@ public enum HTTP1 {
 
     static func lower(_ b: UInt8) -> UInt8 { (b >= 0x41 && b <= 0x5A) ? b + 0x20 : b }
 
-    /// True if the chunked body ending at `a.count` contains a terminating zero-length chunk.
-    static func endsWithTerminalChunk(_ a: [UInt8], from start: Int) -> Bool {
-        // Minimal check: a "0" chunk-size line somewhere after `start` followed by CRLF.
+    /// Result of scanning a chunked body.
+    public enum ChunkScan: Sendable, Equatable {
+        /// The body is complete; `end` is the index just past the trailer section's empty line.
+        case complete(end: Int)
+        /// More bytes are needed; resume scanning at `resumeAt` (the first incomplete chunk).
+        case needMore(resumeAt: Int)
+        /// The framing is broken (bad chunk size, or data not followed by a line break).
+        case malformed
+    }
+
+    /// Scan a chunked body that starts at `start` — every chunk, the last (zero-size) chunk, and the
+    /// trailer section up to its empty line. Exact: chunk data is skipped by its declared size, so a
+    /// body line that happens to read `0` is never mistaken for the last chunk. Resumable: pass a
+    /// previous `.needMore(resumeAt:)` as `start` so repeated scans of a growing buffer stay linear.
+    public static func scanChunked(_ a: [UInt8], from start: Int) -> ChunkScan {
         var i = start
-        while i < a.count {
-            let lineStart = i
-            while i < a.count, a[i] != LF { i += 1 }
-            let end = (i > lineStart && a[i - 1] == CR) ? i - 1 : i
-            let sizeHex = a[lineStart..<end].prefix { $0 != SEMI }  // ';' starts a chunk-ext
-            if sizeHex.allSatisfy({ $0 == 0x30 }) && !sizeHex.isEmpty { return true }  // all '0'
+        while true {
+            let chunkStart = i
+            guard let lf = firstLF(a, from: i) else { return .needMore(resumeAt: chunkStart) }
+            var sizeEnd = (lf > i && a[lf - 1] == CR) ? lf - 1 : lf
+            sizeEnd = a[i..<sizeEnd].firstIndex(of: SEMI) ?? sizeEnd  // ';' starts a chunk extension
+            while sizeEnd > i, a[sizeEnd - 1] == SP || a[sizeEnd - 1] == HT { sizeEnd -= 1 }
+            guard let size = hexValue(a, i..<sizeEnd) else { return .malformed }
+            i = lf + 1
+            if size == 0 {
+                // Trailer section: field lines until an empty line (CRLF or bare LF).
+                while true {
+                    guard let tlf = firstLF(a, from: i) else { return .needMore(resumeAt: chunkStart) }
+                    let isEmptyLine = tlf == i || (tlf == i + 1 && a[i] == CR)
+                    i = tlf + 1
+                    if isEmptyLine { return .complete(end: i) }
+                }
+            }
+            guard i + size <= a.count else { return .needMore(resumeAt: chunkStart) }
+            i += size
+            if i < a.count, a[i] == CR { i += 1 }
+            guard i < a.count else { return .needMore(resumeAt: chunkStart) }
+            guard a[i] == LF else { return .malformed }
             i += 1
-            if i >= a.count { break }
         }
-        return false
+    }
+
+    /// Index just past the end of a complete chunked body starting at `start`, or nil when more bytes
+    /// are needed or the framing is malformed (see `scanChunked`).
+    public static func chunkedBodyEnd(_ a: [UInt8], from start: Int) -> Int? {
+        if case .complete(let end) = scanChunked(a, from: start) { return end }
+        return nil
+    }
+
+    /// Index of the first LF at or after `from`, if any.
+    static func firstLF(_ a: [UInt8], from: Int) -> Int? {
+        var i = from
+        while i < a.count {
+            if a[i] == LF { return i }
+            i += 1
+        }
+        return nil
     }
 
     /// Decode a complete chunked body `[start, a.count)` into its payload bytes. Returns nil if the
