@@ -21,6 +21,19 @@ Build the milestones **in order**. Each one ends with a usable, tested app. Requ
 "All P0 of Fxx" means every requirement in that spec marked P0. P1 items are part of the milestone
 unless the spec marks them "(later: Mxx)".
 
+### Cross-milestone dependencies (why some requirements are deferred, not reordered)
+
+A few requirements need a cross-cutting capability — **OAST/Beacon** (F10, M11) or **Sessions**
+(F15, M12) — that a tool is built before. The build strategy is **layer the capability in when it
+lands**, not reorder the milestones, because reordering only moves the conflict: Sessions (F15)
+itself forward-depends on the Browser (F16, M13) for login recording, so pulling Sessions earlier
+would create a new forward dependency. So the tool is built first with a clean **hook point**, and
+the dependent requirement is finished in the later milestone and marked "(later: Mxx)" in its spec.
+The known cases are: FUZ-025 (M8 tool → OAST column in M11), CRL-006 (M11 crawler → session re-auth
+in M12), REP-008 (M5 Repeater → Transform Tags in M7), SES-030 (M12 Sessions → recorded login in
+M13). Each milestone's Definition of Done only checks what can work with the capabilities built so
+far (e.g. M11 validates an **unauthenticated** crawl+audit; M12 validates the authenticated one).
+
 ---
 
 ## Phase A — Foundation (M0–M3): "a proxy you can browse through"

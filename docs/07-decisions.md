@@ -1,4 +1,4 @@
-# 07 — Decisions (ADRs) and open questions
+# 07 — Decisions (ADRs) and product decisions
 
 Format: **Context → Decision → Consequences**. To add a decision, append a new ADR. Don't edit
 accepted ones; supersede them.
@@ -112,8 +112,8 @@ accepted ones; supersede them.
 
 - **Context**: The owner chose to open-source Gulp (2026-11-07 decision #2). The license governs
   whether the Extension Gallery and update feeds can be public and how extensions may be shared.
-- **Decision**: Release under the **MIT License**. Add a top-level `LICENSE` file and an SPDX header
-  policy is optional (not required by MIT).
+- **Decision**: Release under the **MIT License** with a top-level `LICENSE` file. SPDX per-file
+  headers are optional (MIT does not require them).
 - **Consequences**: Permissive reuse; the Gallery/update feeds may be public. Note that MIT places no
   restriction on use, so the "authorized testing only" guidance (doc 00 §6) is a usage expectation
   enforced in-app (the acknowledgment and ScopeGuard), not a license term.

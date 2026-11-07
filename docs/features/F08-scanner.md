@@ -99,7 +99,7 @@ Each entry = one or more issue definitions. Mark the P0 set that the VulnLab acc
   ones from a bundled, updatable dataset (no network calls required at scan time).
 - **Secrets in responses**: API keys/tokens via a regex ruleset (overlaps F23 secret scanner).
 
-### 3.4 Check Recipes (custom checks, M11)
+### 3.3 Check Recipes (custom checks, M11)
 
 | ID | Pri | Requirement |
 |---|---|---|
