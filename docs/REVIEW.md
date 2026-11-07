@@ -50,11 +50,16 @@ technical-terms dictionary) reports no misspellings.
 - **Does:** the Markdown is internally consistent, complete, and resolvable — a competent agent can
   implement milestone by milestone, with each acceptance test pointing at a defined fixture and each
   persisted requirement backed by a schema table. Independent reviewers concur: no Blockers/Majors.
-- **Does not:** prove the generated Swift compiles/passes tests (criterion **C1**). There is no Swift
-  toolchain in the authoring container and `download.swift.org` is network-blocked, so `swift build`,
-  `swift test` and `xcodebuild` cannot run here. C1 is a property of the **code produced from** these
-  docs, enforced by CI (`.github/workflows/ci.yml`: a Linux `swift build`/`swift test` job + a macOS
-  `make` job). It is the gate for M0, not a property of the Markdown.
+- **Does not:** prove the generated Swift compiles/passes tests (criterion **C1**). This was **not
+  skipped by choice — it is impossible in this container, verified by live probe (2026-11-07):** there
+  is no Swift toolchain installed, the apt "swift" package is OpenStack's object store (not the
+  language), and the language toolchain is distributed only from `download.swift.org`, which the
+  sandbox proxy blocks — fetching both the `swift-6.0-RELEASE-ubuntu24.04.tar.gz` toolchain and the
+  swiftly installer returns `403 CONNECT tunnel failed` (only `swift.org`, the marketing site, is
+  allowlisted). So `swift build`, `swift test` and `xcodebuild` cannot run here by construction. C1
+  is a property of the **code produced from** these docs, enforced by CI
+  (`.github/workflows/ci.yml`: a Linux `swift build`/`swift test` job on the `swift:6.0-noble` image
+  + a macOS `make` job). It is the gate for M0, not a property of the Markdown.
 - **Inherent limit:** "nearly perfect" is a subjective bar that cannot be *proven*; the strongest
   available evidence is the objective D1–D16 result plus independent agreement that no Blockers or
   Majors remain. Both are in place.

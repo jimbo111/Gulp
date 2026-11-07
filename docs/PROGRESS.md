@@ -48,7 +48,7 @@ and are pure Python over the Markdown.)
 | D14 | Prose has no misspellings (code/URLs excluded) | aspell with a verified technical-terms dictionary | MET (0 unknown real words) |
 | D15 | All Markdown tables are well-formed (any in-cell pipe escaped as backslash-pipe) | table-shape check | MET |
 | D16 | Independent fresh-eyes review finds no Blocker/Major | 10 agent reviews incl. a final 2-reviewer panel + targeted re-verifications | MET |
-| C1 | The Swift code compiles and tests pass | `swift build`/`swift test`, `xcodebuild` | **DEFERRED — out of scope here**: no toolchain in this container and `download.swift.org` is blocked; this is a *code* gate enforced by CI (`.github/workflows/ci.yml`), not a Markdown property. |
+| C1 | The Swift code compiles and tests pass | `swift build`/`swift test`, `xcodebuild` | **OUT OF SCOPE / ENVIRONMENT-IMPOSSIBLE (live-verified 2026-11-07)**: no toolchain installed; the apt `swift` package is OpenStack, not the language; and the toolchain host `download.swift.org` returns `403 CONNECT tunnel failed` through the sandbox proxy (toolchain tarball + swiftly both blocked; only `swift.org` allowlisted). This is a *code* gate enforced by CI (`.github/workflows/ci.yml`), not a Markdown property. |
 
 D1–D16 are MET. C1 is not a documentation criterion and cannot be run here; it is the CI gate for the
 code produced *from* these docs. By this objective standard the documentation is build-ready.
