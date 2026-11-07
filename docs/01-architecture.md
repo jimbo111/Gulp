@@ -172,7 +172,7 @@ This lets most of the engine be built and tested in Linux CI or cloud containers
 ```swift
 public actor ProjectSession {
     public let id: UUID
-    public let store: ProjectStore              // GulpStore
+    public private(set) var store: ProjectStore // GulpStore (var: Save As switches files, docs/07)
     public let settings: LayeredSettings        // user + project settings
     public let scope: ScopeService              // GulpCore
     public let events: EventBus                 // GulpCore

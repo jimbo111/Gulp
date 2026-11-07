@@ -54,12 +54,32 @@ public final class ProjectStore: Sendable {
         return ProjectStore(url: url, pool: pool, writer: writer)
     }
 
-    /// Flush pending writes and checkpoint the WAL into the main file.
+    /// Flush pending writes, checkpoint the WAL into the main file, and release the file. The store
+    /// must not be used afterwards.
     public func close() async throws {
         await writer.flush()
         try await pool.writeWithoutTransaction { db in
             try db.checkpoint(.truncate)
         }
+        try pool.close()
+    }
+
+    /// Write a consistent copy of the whole project to `url` (Save As, PRJ-002), using SQLite's
+    /// online backup so it is safe while the project is in use.
+    public func backup(to url: URL) async throws {
+        await writer.flush()
+        let destination = try DatabaseQueue(path: url.path)
+        try pool.backup(to: destination)
+        try destination.close()
+    }
+
+    /// Every project-scope settings value, by key (for "Use settings from…", PRJ-005).
+    public func allSettingsJSON() async throws -> [String: Data] {
+        let rows = try await pool.read { db in
+            try Row.fetchAll(db, sql: "SELECT key, value_json FROM settings WHERE scope = 'project'")
+                .map { (row: Row) -> (String, String) in (row["key"], row["value_json"] ?? "null") }
+        }
+        return Dictionary(rows.map { ($0.0, Data($0.1.utf8)) }, uniquingKeysWith: { _, last in last })
     }
 
     // MARK: reads
