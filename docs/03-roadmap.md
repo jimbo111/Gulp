@@ -94,6 +94,7 @@ that exercises a deferred part (e.g. F07 test 4's OAST column) runs only in the 
 ### M5 — Repeater (and the advanced HTTP engine)
 - [ ] All P0/P1 of F06 (tabs, groups, history, follow redirects, connection options).
 - [ ] F03 HTTP/2 raw mode, the "update Content-Length" option, group send modes including single-packet attack (HTTP-030…HTTP-036).
+- [ ] F03 remaining P1 engine features: HTTP/1 pipelining for Turbo mode, platform auth, and the shared global/per-host throttle (HTTP-011, HTTP-012, HTTP-013). The HTTP-013 limiter is the one the Governor later consolidates (F29, M11).
 - **DoD:** The VulnLab race-condition endpoint (doc 06 §3) can be exploited with a group send in single-packet mode.
 
 ### M6 — Target: site map and scope

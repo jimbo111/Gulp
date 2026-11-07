@@ -37,7 +37,7 @@ verdict + history) that also shows as a status column in the Dashboard issue lis
 
 ## 4. Implementation notes
 
-- Persistence is a **new additive schema** (doc 04 §4 "Post-1.0 expansion tables", migration v2):
+- Persistence is a **new additive schema** (doc 04 §4 "Post-1.0 expansion tables", the `v3_drift` migration):
   `drift_baselines`/`drift_endpoints` hold the immutable per-endpoint snapshots (DRF-001),
   `drift_runs`/`drift_results` the per-run verdicts (DRF-004), and `issue_proofs`/`retest_runs` the
   per-issue proof and retest history (DRF-003/005). Snapshots are blobs + facts JSON, independent of
