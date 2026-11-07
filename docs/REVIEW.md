@@ -32,10 +32,15 @@ fixed; the later rows re-verify earlier fixes.
 | Fixture re-verify | doc 06 §3.1 vs Phase F acceptance tests | **FIX COMPLETE** — every acceptance test maps to a defined/scoped fixture |
 | Rubric audit | re-derive D1–D16 independently | **14/16 verified + BUILD-READY**; caught D8/D15 over-claims → fixed |
 | D8/D15 re-verify | the two fixes above | **BOTH FIXED, NO REGRESSIONS** (all M0–M26 have a DoD; tables well-formed) |
+| Build dry run (M1) | implement M1 from the docs | **BUILDABLE, no Blockers**; 2 undefined public types + referenced-only types → defined |
+| Build sweep (M3–M14) | can each core milestone be built from the docs | **ALL BUILDABLE** |
+| Build sweep (M15–M26) | can each remaining milestone be built from the docs | **ALL BUILDABLE**; 2 cosmetic minors → fixed |
+| Holistic, own-standard | reviewer's *own* definition of "nearly perfect for an AI agent to build from" (no rubric given) | **VERDICT: NEARLY PERFECT FOR BUILDING** — no blocking issues; only the inherent "Swift not compiled here" (CI's job) |
 
-**Net:** every Blocker and Major any reviewer raised was fixed, and the final findings were
-independently re-verified. The last two independent reviewers (rubric audit, D8/D15 re-verify) both
-returned a clean, satisfied judgment.
+**Net:** every Blocker and Major any reviewer raised was fixed, and the findings were independently
+re-verified. Constructive "build it from the docs" confirmation spans the whole roadmap M0–M26, and a
+final reviewer judging against its *own* standard of "nearly perfect for building" returned exactly
+that. No remaining Blockers or Majors.
 
 ## Automated consistency checks (re-run after every edit; all green)
 
