@@ -12,6 +12,9 @@ enum GulpCLI {
     static let version = "0.1.0"
 }
 
+/// The root command. `@main` (in a file not named main.swift) is how ArgumentParser runs an async
+/// command; calling `main()` from top-level code picks the synchronous entry point, which refuses.
+@main
 struct GulpCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "gulp-cli", abstract: "Gulp, headless.", version: GulpCLI.version,
@@ -61,5 +64,3 @@ struct Send: AsyncParsableCommand {
         }
     }
 }
-
-await GulpCommand.main()
