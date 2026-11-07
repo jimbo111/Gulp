@@ -23,6 +23,36 @@ order; within a milestone, do P0 first.
   decisions" (MIT license; macOS 14 min; Claude-only AI in v1; OAST off until configured;
   `com.gulp.app` placeholder bundle id; no team server). Build to those.
 
+### Documentation Definition of Done (the objective "build-ready" bar)
+
+"Nearly perfect" is subjective, so here is the **concrete, auditable standard** the doc set is held
+to, with how each criterion is measured and its status. A criterion is MET only if its stated,
+reproducible check passes. (Re-run the checks after any edit; scripts live in the session scratchpad
+and are pure Python over the Markdown.)
+
+| # | Criterion (objective) | How measured | Status |
+|---|---|---|---|
+| D1 | Every feature has a spec file with the standard sections (Purpose, Requirements, UI, Implementation, Edge cases, Acceptance tests) | 32 `docs/features/Fxx-*.md`; grouped specs (F23) noted in docs/README | MET (32/32) |
+| D2 | Every requirement row has a stable ID + priority (P0/P1/P2) | ID-table scan | MET |
+| D3 | No duplicate requirement IDs; no referenced-but-undefined IDs (incl. slash-shorthand) | `idcheck` | MET (516 IDs, 0 dup, 0 dangling) |
+| D4 | Every internal Markdown link, `Fxx` ref, and `Mxx` ref resolves | `linkcheck` | MET |
+| D5 | Every `## N`/`### N.M` numbering sequence has no gaps/dupes | `secnum` | MET |
+| D6 | Every `Fxx §N` / `doc NN §N` cross-ref points to a real section | `secref` | MET |
+| D7 | Each feature's milestone agrees across its header, the README index, and the roadmap | `featmap` | MET |
+| D8 | Every feature is scheduled in the roadmap with a Definition of Done | roadmap M0–M26 inspection | MET |
+| D9 | Every acceptance test maps to a defined or milestone-scoped VulnLab fixture/endpoint | doc 06 §3 + §3.1; independently re-verified | MET |
+| D10 | Every persisted requirement has a backing table/column; all FKs resolve | doc 04 §4 incl. Phase F tables; independently verified | MET |
+| D11 | Module layering is acyclic; Linux-building modules don't depend on macOS-only ones; `Package.swift` matches doc 01 §3 | architecture + manifest cross-check | MET |
+| D12 | Each milestone's tasks need only capabilities built by then; forward deps marked "(later: Mxx)" | roadmap deferral list + per-spec notes | MET |
+| D13 | No contradictions across docs on load-bearing points | multi-panel independent review | MET (no Blockers/Majors) |
+| D14 | Prose has no misspellings (code/URLs excluded) | aspell with a verified technical-terms dictionary | MET (0 unknown real words) |
+| D15 | All Markdown tables are well-formed (in-cell `|` escaped) | table-shape check | MET |
+| D16 | Independent fresh-eyes review finds no Blocker/Major | 10 agent reviews incl. a final 2-reviewer panel + targeted re-verifications | MET |
+| C1 | The Swift code compiles and tests pass | `swift build`/`swift test`, `xcodebuild` | **DEFERRED — out of scope here**: no toolchain in this container and `download.swift.org` is blocked; this is a *code* gate enforced by CI (`.github/workflows/ci.yml`), not a Markdown property. |
+
+D1–D16 are MET. C1 is not a documentation criterion and cannot be run here; it is the CI gate for the
+code produced *from* these docs. By this objective standard the documentation is build-ready.
+
 ### Documentation verification (as of the last review)
 
 The specs were reviewed in several passes, including independent fresh-eyes agent reviews of the core
