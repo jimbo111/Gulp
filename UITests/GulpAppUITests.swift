@@ -2,6 +2,10 @@ import XCTest
 
 /// Smoke UI tests for the app shell (docs/06-testing-strategy.md §6).
 /// M0 only checks that the app launches and the tool sidebar is present.
+///
+/// `@MainActor` because `XCUIApplication`/`XCUIElement` are main-actor-isolated under Swift 6
+/// strict concurrency; without it the synchronous calls below are a compile error.
+@MainActor
 final class GulpAppUITests: XCTestCase {
     func test_M0_appLaunchesAndShowsSidebar() throws {
         let app = XCUIApplication()
