@@ -90,6 +90,25 @@ crawl and audit VulnLab with the "Thorough" configuration, then assert:
   excluded per above);
 - the results are written to `.build/scanner-accuracy.json` so changes are tracked over time.
 
+### 3.1 Phase F fixtures (added with F25–F32, M21+)
+
+The table above is the **v1** VulnLab (M0–M20). Each Phase F feature **extends VulnLab with its own
+fixtures** — building that target is part of the feature's milestone, and the feature's own
+Acceptance tests section is the authoritative list. VulnLab stays 127.0.0.1-only. The targets each
+post-1.0 feature adds (every vulnerable route gets a `/safe/*` twin unless noted):
+
+| Feature (milestone) | VulnLab fixtures to add |
+|---|---|
+| F25 SSO (M21) | An **OIDC** authorization server: `/oidc/authorize`, `/oidc/token`, `/oidc/userinfo`, `/.well-known/openid-configuration`, JWKS — a vulnerable instance (over-accepts `redirect_uri`, missing/static `state`, PKCE downgradable to `plain`, implicit-flow token leak via `Referer`) and a hardened twin. A **SAML** SP `/saml/acs` that accepts a signature-stripped/XSW assertion, with a signature-validating twin. |
+| F26 WebSocket (M22) | Reuses `/ws/chat`; adds a socket that authorizes **only at handshake** (+ per-message-authz twin) and a socket that **upgrades on a cross-origin `Origin`** returning authenticated data (+ Origin-checking twin, for CSWSH). |
+| F27 JS Recon (M23) | A **minified JS bundle with an exposed `.map`**, `/api/internal/*` routes referenced only from JS (not linked), a bundled **known-vulnerable JS library** version, and a second **versioned capture** of the bundle (adds an endpoint) for the asset-diff test. |
+| F28 Cache (M24) | `/cache/reflect` that reflects **`X-Forwarded-Host`** into a cacheable response (+ non-caching twin), and an `/account` endpoint cacheable as **`/account.css`** (cache deception) with a `Cache-Control: private` twin. |
+| F30 Drift & Retest (M25) | No new routes required — reuses existing endpoints, plus a **config toggle** on one planted vuln so a fixture can flip vulnerable→patched between runs (for the Fixed/Still-Vulnerable verdict test). |
+| F32 LLM (M26) | `/ai/chat` (SSE) vulnerable to **direct prompt injection** (+ guarded twin); a stored-note path the assistant later ingests for **indirect injection + OAST exfil**; an endpoint that renders model **Markdown into HTML** (XSS sink) with a sanitizing twin. |
+
+(F29 Governor and F31 Journal need no VulnLab fixtures — their acceptance tests drive Gulp's own
+tooling against existing endpoints.)
+
 ## 4. Third-party targets for manual testing (optional, Docker)
 
 `Scripts/targets/docker-compose.yml` with OWASP Juice Shop and DVWA, bound to localhost only. These
