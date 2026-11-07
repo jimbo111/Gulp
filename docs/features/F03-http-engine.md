@@ -65,11 +65,11 @@ chain if one was followed, and timing.
 | ID | Pri | Requirement |
 |---|---|---|
 | HTTP-020 | P0 | ALPN negotiation (`h2`, `http/1.1`) and HTTP/2 prior knowledge (h2c) support. |
-| HTTP-021 | P0 | Convert an HTTP/1-style editor message to HTTP/2 (doc 04 §3): request line → pseudo-headers, `Host` → `:authority`, drop connection-specific headers (`Connection`, `Keep-Alive`, `Transfer-Encoding: chunked` unless the user explicitly keeps it — which is an attack, see ADV smuggling), lowercase names unless "raw case". |
+| HTTP-021 | P0 | Convert an HTTP/1-style editor message to HTTP/2 (doc 04 §3): request line → pseudo-headers, `Host` → `:authority`, drop connection-specific headers (`Connection`, `Keep-Alive`, `Upgrade`, `Proxy-Connection`, `Transfer-Encoding: chunked` unless the user explicitly keeps it — which is an attack, see ADV smuggling), normalize `TE` (in h2 its only legal value is `trailers`; drop otherwise), lowercase names unless "raw case". |
 | HTTP-022 | P0 | Responses from HTTP/2 are stored in the HTTP/1-style text form `HTTP/2 200` + headers + body (DATA frames concatenated), and the frame list is kept when "keep frames" is on. |
 | HTTP-023 | P0 | One HTTP/2 connection per pool key, multiplexing streams (respect `SETTINGS_MAX_CONCURRENT_STREAMS`). |
 | HTTP-024 | P0 | Handle `GOAWAY`, `RST_STREAM`, flow control (window updates for large downloads), server push (refuse via SETTINGS_ENABLE_PUSH=0). |
-| HTTP-025 | P1 | Header values or names with characters that are illegal in HTTP/1 (CR, LF, colon in names, uppercase) can be sent when the `H2RequestSpec` asks for them. swift-nio-http2 validates headers by default — **disable its validation** (`headerValidation` / `contentLengthValidation` options) for raw mode. |
+| HTTP-025 | P1 | Header names/values that are illegal in HTTP/1 (CR, LF, colon in names, uppercase) can be sent when the `H2RequestSpec` asks for them. The stock `NIOHTTP2Handler`/inline multiplexer enforce RFC 9113 header rules via the connection state machine and expose **no** public toggle to disable that in released versions, so raw mode drives the **low-level `HTTP2FrameEncoder` + HPACK encoder** directly (emit raw `HEADERS`/`DATA` frames, bypassing the normalizing state machine). Verify against the pinned `swift-nio-http2` version; do **not** assume a `headerValidation`/`contentLengthValidation` option on the normal handler. This path is what makes raw-H2 smuggling tests (ADV) and extended CONNECT (PRX-030) possible, since stock validation would reject `:protocol` and illegal headers. |
 | HTTP-026 | P1 | Show HTTP/2 connection-level events (SETTINGS, GOAWAY codes) in the Logger's connection detail. |
 
 ### 3.3 Group sends and race conditions
@@ -100,7 +100,13 @@ chain if one was followed, and timing.
 - HTTP/2: `NIOHTTP2Handler(mode: .client)` with the inline stream multiplexer
   (`configureAsyncHTTP2Pipeline` or `configureHTTP2Pipeline`). Send `HTTP2Frame.FramePayload.headers`
   and `.data` on stream channels yourself (don't use `HTTP2FramePayloadToHTTP1ClientCodec`, because
-  it normalizes).
+  it normalizes). For raw mode (HTTP-025) drop to `HTTP2FrameEncoder`/HPACK so illegal headers,
+  `:protocol` (extended CONNECT, PRX-030) and smuggling shapes aren't rejected by the state machine.
+- Single-packet coalescing (HTTP-033): `write()` the withheld final frame to each stream child
+  channel **without flushing**, then call `flush()` on the **parent** connection channel exactly
+  once — per-child flushes defeat coalescing. If the server's `SETTINGS_MAX_CONCURRENT_STREAMS`
+  (HTTP-024) is below the group size, not all streams can be in flight at once and the single-packet
+  effect degrades: detect this, warn, and fall back to the HTTP/1 last-byte-sync mode (HTTP-034).
 - Hooks pipeline (`RequestHook` protocol): `func willSend(_ req: inout OutgoingRequest, context: HookContext) async throws`.
   Order: session rules (F15) → transform tags (F12) → match & replace (tool flag) → extensions
   (F18) → content-length fixer. `ResponseHook`: extensions → session cookie jar update.

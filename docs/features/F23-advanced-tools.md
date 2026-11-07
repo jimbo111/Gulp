@@ -1,7 +1,7 @@
 # F23 — Advanced testing tools
 
 > Milestone: M19 · Modules: `GulpFeatures/Advanced` + helpers in engines (`GulpScanner`,
-> `GulpHTTP`, `GulpSession`) · Depends on: F03, F06, F07, F08, F10, F15
+> `GulpHTTP`, `GulpSession`) · Depends on: F03, F06, F07, F08, F10, F12 (codec/JWT ops), F13 (diff/similarity for Authz verdicts), F15
 
 These are focused power-tools, each equivalent to a popular extension of the reference ecosystem.
 Build them as first-class tools sharing the common engines/components.

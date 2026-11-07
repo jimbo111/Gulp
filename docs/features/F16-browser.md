@@ -19,7 +19,7 @@ proof-of-concept.
 | BRW-002 | P0 | Trust the Gulp CA for that browser without modifying the system store: launch with `--ignore-certificate-errors-spki-list=<Gulp CA SPKI sha256 base64>` (and `--proxy-server=127.0.0.1:<port>`, `--proxy-bypass-list=<none>`). Fall back to a profile-local NSS store import if the flag is unavailable. |
 | BRW-003 | P0 | Launch flags for a clean test session: new isolated profile, `--disable-quic` (so HTTP/3 falls back to interceptable H2), `--no-first-run`, `--no-default-browser-check`, disable background networking/components/translate/update pings so history isn't polluted. |
 | BRW-004 | P0 | One-click "Open Browser" (⌘⇧O) from the toolbar and empty states; multiple browser windows allowed; closing Gulp cleans up launched browsers. |
-| BRW-005 | P1 | Connect over the **Chrome DevTools Protocol** (a WebSocket to `--remote-debugging-port` on a random port) for automation used by the Crawler (F09), login recording (F15), DOM Probe and Frame Kit. |
+| BRW-005 | P0 | Connect over the **Chrome DevTools Protocol** (a WebSocket to `--remote-debugging-port` on a random port) for automation used by the Crawler (F09), login recording (F15), DOM Probe and Frame Kit. *(P0 because the P0 DOM Probe (BRW-010/011) and browser-backed crawl depend on it.)* |
 | BRW-006 | P1 | Keep the test profile between runs (optional) so logins persist, or always-fresh (default). Manage the downloaded Chrome for Testing version and updates. |
 | BRW-007 | P2 | A built-in `WKWebView`-based lightweight browser as a fallback when no Chromium is available (limited: no CDP automation, trusts the CA via a per-view policy). Clearly labeled as limited. |
 

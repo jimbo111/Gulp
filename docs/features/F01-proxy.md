@@ -101,6 +101,20 @@ editing (intercept), rewrite them automatically (match & replace), and feeds the
 > when possible. Our decoder frames messages (it finds the end of headers and applies the body
 > framing rules) but keeps the bytes exactly as received.
 
+**Framing-ambiguity policy (required).** To know where one request ends and the next pipelined one
+begins, the decoder must pick a *definite* body length even for hostile input, while still forwarding
+the original bytes unchanged. Rules: if both `Content-Length` and `Transfer-Encoding` are present,
+prefer `Transfer-Encoding: chunked` for *our* delimiting (and flag the exchange as smuggling-relevant
+so it's visible, since the upstream may disagree — that disagreement is the bug); reject/again-flag
+conflicting duplicate `Content-Length` values; accept bare-LF and obsolete line folding for framing
+but record a warning. This policy is a security feature — surface what was ambiguous, don't silently
+"fix" it.
+
+**Hop-by-hop headers (forward-proxy path, PRX-002).** Raw-bytes-are-truth has one documented
+exception on forward: strip the proxy-management hop-by-hop headers (`Proxy-Connection`,
+`Proxy-Authorization`, and any header named in `Connection`) before sending to the origin, since they
+are meant for the proxy, not the server. Everything else is forwarded byte-for-byte.
+
 ### 4.2 Request pipeline (async, on the connection's event loop, then hop to a Task)
 
 1. Build `RawRequest`, compute `HTTPTarget` (absolute-form / CONNECT authority / Host header).
@@ -135,8 +149,13 @@ and re-encodes (or drops `Content-Encoding` when the "simplify encoding" option 
 - `CONNECT` to non-TLS ports (for example a WebSocket over plain TCP): detect TLS by the first byte
   `0x16`; if it isn't TLS, treat the stream as plain HTTP inside the tunnel.
 - Clients that send HTTP/2 with prior knowledge (cleartext h2c preface `PRI * HTTP/2.0`).
-- Upstream TLS failures: return a `502` with an HTML explanation page to the client and log the
-  error event.
+- Upstream TLS failures: two cases. (a) After the client handshake has completed (e.g. a later
+  request on a reused MITM connection) → return a `502` with an HTML explanation page and log the
+  event. (b) **During ALPN pre-connect** (PRX-008 opens/finishes the upstream handshake *before* the
+  client handshake, to mirror ALPN) → no client TLS session exists yet, so a 502 is impossible;
+  abort the client handshake with a TLS alert (it surfaces to the browser as a generic secure-
+  connection error) and log the real cause. Bound the upstream connect/handshake with the F03
+  timeouts so a slow upstream can't stall the client handshake indefinitely.
 - Client certificate requests from upstream: use the configured client certificate (F15 SES-040).
 - Loop detection: a request to the proxy's own listener address → serve the landing page (PRX-046)
   instead of looping.

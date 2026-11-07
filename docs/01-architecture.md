@@ -319,4 +319,5 @@ Gulp processes hostile input all day, so the tool itself is a target.
 | History table scroll with 1M rows | 60 fps, no hitches > 50 ms |
 | Open a 1M-exchange project | < 3 s to first paint |
 | Message editor: open a 5 MB response | < 300 ms to first paint (highlighting may continue in the background) |
+| Comparer: word/byte diff of two 1 MB responses (F13 CMP-004) | < 1 s |
 | Fuzzer throughput (HTTP/1 keep-alive, local) | ≥ 1,000 req/s; Turbo mode ≥ 5,000 req/s |

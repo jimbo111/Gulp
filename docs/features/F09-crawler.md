@@ -53,7 +53,12 @@ output fills the site map and feeds the active Scanner ("crawl and audit").
   network-idle heuristic, `Runtime.evaluate` to collect links and to fill forms; enforce scope on
   every navigation (cancel out-of-scope loads).
 - "Crawl and audit" hands each discovered in-scope request to the Scanner's insertion-point engine
-  (F08), deduping endpoints so the same URL isn't audited many times.
+  (F08). The **audit dedup key** is `(method, normalized-path-template, param-name-set)` — path
+  templates collapse numeric/UUID segments to `{id}` (as TGT-006) and the key ignores parameter
+  *values* — so each distinct parameter is audited once regardless of value, and infinite
+  value-spaces (pagination, search) don't explode the insertion-point set. This is deliberately
+  different from the crawl frontier's URL dedup (CRL-003), which keeps distinct values to discover
+  content.
 
 ## 5. Edge cases
 

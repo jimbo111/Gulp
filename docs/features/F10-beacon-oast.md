@@ -39,7 +39,7 @@ correlated back to the payload. Gulp calls this server **Beacon**.
 | BCN-021 | P0 | A polling API for the client (authenticated with the shared secret) returning new interactions since a cursor; data encrypted in transit (TLS) and, in interactsh-compat mode, with the client's key. |
 | BCN-022 | P0 | Automatic TLS for the HTTP listener (ACME/Let's Encrypt or user-provided cert) so https payloads work. |
 | BCN-023 | P1 | Retention/cleanup (interactions expire after N days), rate limiting, and abuse protection (it's internet-facing). Bind and log safely; no interaction data leaves the box except to authenticated pollers. |
-| BCN-024 | P1 | Dev mode (`make beacon --dev`): runs locally on high ports with a self-signed cert and an in-memory store, used by integration tests. VulnLab's SSRF/cmd/XXE endpoints point at it. |
+| BCN-024 | P1 | Dev mode (`make beacon`, which runs `gulp-beacon --dev`): runs locally on high ports with a self-signed cert and an in-memory store, used by integration tests. VulnLab's SSRF/cmd/XXE endpoints point at it. |
 | BCN-025 | P2 | A Docker image and a one-command deploy script; a minimal admin page (behind auth) showing recent interactions. |
 
 ## 3. UI
@@ -55,6 +55,15 @@ Beacon health.
 - Client polling: a single background task per project polls at the configured interval and
   dispatches matches; in interactsh mode, implement the register/poll/deregister flow and AES-GCM
   decryption exactly to interoperate.
+- **Token-model reconciliation (native Beacon vs interactsh).** BCN-001's per-request fully-unique
+  `<token>.<domain>` is the *native* Beacon scheme. interactsh instead uses a fixed per-session
+  **correlation-id prefix** plus a random per-payload suffix, i.e. `<random><correlationId>.<domain>`,
+  and its poll API returns interactions keyed by that correlation-id. So the two modes share one
+  interface but build/parse hostnames differently: in interactsh mode, generate payloads as
+  `<unique-suffix><correlation-id>.<domain>`, store the suffix→(tool, exchange, insertion point) map
+  locally, and on poll match the returned interaction's full subdomain back to the request by its
+  suffix. Keep this mapping in `oast_payloads.correlation_id` so correlation works identically for
+  the UI regardless of mode. Getting this wrong silently mis-attributes or drops interactsh hits.
 - **Privileged ports**: the DNS listener must bind UDP/TCP **53** and HTTPS **443**, both privileged
   (<1024). Don't run the whole server as root: grant the binary `CAP_NET_BIND_SERVICE`
   (`setcap`, or systemd `AmbientCapabilities=`), or start as root and drop privileges after binding,

@@ -62,11 +62,32 @@ tests can measure false positives.
 | Clickjacking | `/frameable` (no X-Frame-Options / frame-ancestors) | `/safe/frameable` | BRW (Frame Kit) |
 | SPA | `/app/` (client-side routing, links rendered by JS) | — | CRL |
 
-**Scanner accuracy test** (`IntegrationTests/ScannerAccuracyTests`): crawl and audit VulnLab with the
-"Thorough" configuration, then assert:
+**Determinism prerequisites.** For the accuracy test to be stable, VulnLab must make its planted
+issues explicit rather than incidental:
 
-- recall: every P0 check finds its vulnerable endpoint;
-- precision: no issue of severity ≥ Low is reported on `/safe/*`;
+- **Security-header/cookie baseline**: VulnLab sends a *correct* baseline (CSP, X-Content-Type-
+  Options, cookie `HttpOnly`/`SameSite`, etc.) on **every** route by default, so a passive
+  missing-header/weak-cookie issue fires **only** on the specific routes that deliberately omit it.
+  Each such planted route is enumerated in a machine-readable fixture manifest
+  (`Fixtures/vulnlab-issues.json`: route → expected issue type ids) that the test asserts against,
+  instead of a vague "exactly the planted issues".
+- **Plaintext-localhost checks**: HSTS-absent, `Secure`-cookie-absent, cleartext-password-submission
+  and mixed-content can't be meaningfully tested on the HTTP `:8088` listener (they'd fire on every
+  route including `/safe/*`). Exercise these only on the HTTPS `:8443` listener, which serves a
+  vulnerable/`/safe/` pair for them; on the plaintext listener they are suppressed (or emitted at
+  Info and excluded from the precision assertion).
+- **OAST wiring**: the OAST-based P0 checks (SSRF, OS-command, XXE) only fire when a Beacon is
+  configured (BCN-004 is off by default). The test run **must** start the dev Beacon (`make beacon
+  --dev` equivalent, F10 BCN-024) and point the scan config at it; otherwise those three have no
+  recall path.
+
+**Scanner accuracy test** (`IntegrationTests/ScannerAccuracyTests`): with the dev Beacon running,
+crawl and audit VulnLab with the "Thorough" configuration, then assert:
+
+- recall: every P0 check finds its vulnerable endpoint (per the fixture manifest), including the
+  three OAST checks via the dev Beacon;
+- precision: no issue of severity ≥ Low is reported on `/safe/*` (plaintext-only passive checks are
+  excluded per above);
 - the results are written to `.build/scanner-accuracy.json` so changes are tracked over time.
 
 ## 4. Third-party targets for manual testing (optional, Docker)

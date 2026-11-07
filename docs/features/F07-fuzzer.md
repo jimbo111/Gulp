@@ -93,6 +93,7 @@ Multiple attacks run as separate tabs; the Dashboard lists them as tasks.
    (measured), and finds the valid pair.
 3. Grep-extract pulls the CSRF token from each `/login` GET; recursive-grep uses it in the paired
    POST.
-4. A blind-injection payload set carrying Beacon tokens flags the row that triggered an out-of-band
-   DNS/HTTP interaction (OAST column).
+4. *(M11, not M8)* A blind-injection payload set carrying Beacon tokens flags the row that triggered
+   an out-of-band DNS/HTTP interaction (OAST column) — this exercises FUZ-025, which is deferred to
+   M11 with Beacon, so it is not part of the M8 Definition of Done.
 5. Turbo mode reaches the throughput budget (doc 01 §9) against VulnLab and can be cleanly cancelled.
