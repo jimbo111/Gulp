@@ -6,21 +6,21 @@ order; within a milestone, do P0 first.
 
 ## Current status
 
-- **Phase**: M0 scaffolding written; **awaiting first CI run to verify the builds**.
-- **Active milestone**: **M0 — Scaffolding** (files complete, verification pending).
-- **Verification caveat**: the authoring container has **no Swift toolchain** and
-  `download.swift.org` is blocked by its network policy, so `swift build`/`swift test` and
-  `xcodebuild` could not be run here. `Package.swift`, `project.yml`, `.swift-format` and the CI YAML
-  were statically checked (structure, YAML/JSON validity, target↔directory mapping, 110-col lint
-  limit). **CI (`.github/workflows/ci.yml`) is the real gate** — the `core-linux` job runs
-  `swift test` on Linux and the `macos` job runs `make generate lint test build`. Treat M0 as done
-  only once that workflow is green; fix anything it flags before starting M1. (The `macos` job runs
-`make bootstrap` then `make lint generate test-core build test`; the `core-linux` job runs
-`swift build`/`swift test` on the whole GulpKit graph.)
-- **Next action**: push, watch CI, fix any build fallout. **M1 has begun** — the GulpCore
-  byte-fidelity foundation (`Bytes`, raw HTTP/1 parser + framer, with tests) is written; it still
-  needs CI to compile/test it (no toolchain here) and then the remaining GulpCore model types
-  (`HTTPTarget`, `Exchange`, events, scope, errors) and the `GulpHTTP` engine.
+- **Phase**: **M0 DONE — CI is green on both platforms** (run on commit `6e17d38`); M1 in progress.
+- **Active milestone**: **M1 — Core model + raw HTTP/1 engine** (the GulpCore byte-fidelity
+  foundation is CI-verified; the rest of the model + `GulpHTTP` remain).
+- **Build verification (resolved)**: the authoring container still has no Swift toolchain
+  (`download.swift.org` blocked), so builds are verified by **CI** (`.github/workflows/ci.yml`), which
+  is now green: the `core-linux` job (`swift:6.0-noble`) runs `swift build`/`swift test` over the whole
+  GulpKit graph + Beacon, and the `macos` job runs `make lint generate test-core build test`
+  (`swift format --strict`, `xcodegen`, Xcode app build, core + UI tests). Getting there fixed four
+  real M0/dependency defects CI surfaced that static review could not: GRDB needs a SQLite built with
+  `SQLITE_ENABLE_SNAPSHOT`/FTS5 on Linux; `swift format --strict` was never satisfied (code, manifests,
+  tests); `GulpAppUITests` had no Info.plist; and the XCUITest needed `@MainActor` under Swift 6.
+- **Next action**: continue **M1** — the GulpCore byte-fidelity foundation (`Bytes`, raw HTTP/1
+  parser + framer, with tests) is written and **CI-verified** (compiles + tests pass on Linux and
+  macOS). Next: the remaining GulpCore model types (`HTTPTarget`, `Exchange`, events, scope, errors)
+  and the `GulpHTTP` engine.
 - **Product decisions**: resolved by the owner and recorded in `docs/07-decisions.md` §"Product
   decisions" (MIT license; macOS 14 min; Claude-only AI in v1; OAST off until configured;
   `com.gulp.app` placeholder bundle id; no team server). Build to those.
@@ -105,8 +105,8 @@ for behavior.
 
 ## Milestone checklist (summary — details in docs/03-roadmap.md)
 
-- [ ] M0 — Scaffolding (repo layout, Package.swift, project.yml, Makefile, CI, empty app window)
-- [ ] M1 — Core model + raw HTTP/1 engine
+- [x] M0 — Scaffolding (repo layout, Package.swift, project.yml, Makefile, CI, empty app window) — **CI green both platforms (`6e17d38`)**
+- [ ] M1 — Core model + raw HTTP/1 engine (GulpCore byte-fidelity foundation done + CI-verified; rest pending)
 - [ ] M2 — Plain-HTTP proxy, storage, history UI
 - [ ] M3 — TLS interception + CA + HTTP/2
 - [ ] M4 — Intercept, Match & Replace, message editor, WebSockets
@@ -168,6 +168,19 @@ for behavior.
     requirement ID (replaces the scaffolding marker test).
   - **Doc reconciled to code** (CLAUDE.md §4): doc 04 §2 `ParsedRequest`/`ParsedResponse`/`HeaderField`
     marked `Hashable` (their `RawRequest`/`RawResponse` already were, which requires it).
+- 2026-11-07 — **CI GREEN on both platforms** (commit `6e17d38`): M0's build gate is finally
+  satisfied, and the M1 GulpCore foundation compiles and its tests pass. Reaching green meant fixing
+  four real defects that only running CI could surface (none visible to the Markdown checkers or a
+  no-toolchain container):
+  - **GRDB/SQLite link (Linux):** GRDB 7 references `sqlite3_snapshot_*`, absent from Ubuntu's
+    `libsqlite3`. `core-linux` now builds SQLite with `SQLITE_ENABLE_SNAPSHOT`+FTS5 and links it.
+  - **Lint (`swift format --strict`):** never actually satisfied — fixed the new source, both
+    `Package.swift` manifests (applied the toolchain's own canonical output), and the test file;
+    disabled only `AlwaysUseLowerCamelCase` (ADR) to keep the spec's `http1_0`/byte-constant names.
+  - **`GulpAppUITests` Info.plist:** the UI-test target couldn't code-sign; set
+    `GENERATE_INFOPLIST_FILE` in `project.yml`.
+  - **Swift 6 concurrency:** XCUITest APIs are `@MainActor`; annotated the test class.
+  Verified via `workflow_dispatch` runs on the branch (CI triggers on push-to-main/PR/dispatch).
 
 ## How to pick up work (reminder)
 
