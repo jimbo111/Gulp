@@ -4,6 +4,7 @@
 #if canImport(AppKit)
 import AppKit
 import GulpCore
+import GulpProxy
 import GulpStore
 import GulpWorkspace
 import SwiftUI

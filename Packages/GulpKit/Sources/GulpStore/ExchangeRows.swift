@@ -47,6 +47,37 @@ public struct ExchangeSummary: Sendable, Hashable, Identifiable {
     /// End-to-end time in milliseconds.
     public var totalMs: Double?
 
+    /// Create a row (the store builds these from the `exchanges` table; tests and previews build
+    /// them directly).
+    public init(
+        id: ExchangeID, source: ToolSource, createdAt: Date, scheme: Scheme, host: String, port: Int,
+        method: String? = nil, path: String? = nil, query: String? = nil, status: Int? = nil,
+        responseLength: Int? = nil, mime: String? = nil, title: String? = nil, ext: String? = nil,
+        paramCount: Int = 0, highlight: Highlight? = nil, comment: String? = nil, state: String,
+        error: String? = nil, totalMs: Double? = nil
+    ) {
+        self.id = id
+        self.source = source
+        self.createdAt = createdAt
+        self.scheme = scheme
+        self.host = host
+        self.port = port
+        self.method = method
+        self.path = path
+        self.query = query
+        self.status = status
+        self.responseLength = responseLength
+        self.mime = mime
+        self.title = title
+        self.ext = ext
+        self.paramCount = paramCount
+        self.highlight = highlight
+        self.comment = comment
+        self.state = state
+        self.error = error
+        self.totalMs = totalMs
+    }
+
     /// The URL shown in the History table.
     public var url: String {
         let defaultPort = scheme == .https ? 443 : 80

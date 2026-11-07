@@ -127,13 +127,15 @@ let package = Package(
             ]),
 
         // ---- UI layer (macOS content; empty on Linux) ----
-        .target(name: "GulpFeatures", dependencies: ["GulpCore", "GulpWorkspace", "GulpUI", "GulpAI"]),
+        .target(
+            name: "GulpFeatures",
+            dependencies: ["GulpCore", "GulpStore", "GulpProxy", "GulpWorkspace", "GulpUI", "GulpAI"]),
 
         // ---- Executables ----
         .executableTarget(
             name: "gulp-cli",
             dependencies: [
-                "GulpWorkspace", "GulpAutomation", "GulpHTTP", "GulpCore",
+                "GulpWorkspace", "GulpAutomation", "GulpHTTP", "GulpProxy", "GulpStore", "GulpCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),
         .executableTarget(
