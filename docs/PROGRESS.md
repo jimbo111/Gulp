@@ -21,6 +21,27 @@ order; within a milestone, do P0 first.
   decisions" (MIT license; macOS 14 min; Claude-only AI in v1; OAST off until configured;
   `com.gulp.app` placeholder bundle id; no team server). Build to those.
 
+### Documentation verification (as of the last review)
+
+The specs were reviewed in several passes. Every core doc (00–07) and all 24 feature specs have been
+read end to end, and the following consistency checks all pass — re-run them after any doc edit:
+
+- **Requirement IDs**: 445 defined across the spec tables, no duplicates, and every `Fxx-NNN`
+  reference resolves to a defined ID (including slash-shorthand like `MAC-010/011`).
+- **Links**: every relative Markdown link resolves; every `Fxx` feature reference has a file; every
+  `Mxx` milestone reference is defined in the roadmap.
+- **Section numbering**: `## N.`/`### N.M` sequences have no gaps or duplicates in any doc.
+- **Section cross-refs**: every `Fxx §N` / `doc NN §N` points to a section that exists.
+- **Feature↔milestone**: each spec header, the roadmap body, and the README index agree.
+- **Make targets**: every `make <target>` mentioned in the docs exists in the Makefile.
+- **Tables**: all Markdown tables are well-formed (literal `|` in cells escaped as `\|`).
+- **Spelling**: aspell over the prose (code/URLs stripped) shows only legitimate technical terms.
+
+What is **not** verified here: the Swift code compiles/tests (no toolchain in the authoring
+container — CI is the gate, see the caveat above), and spec implementation-note API hints are
+best-effort guidance, not proven against the libraries; the acceptance tests are the source of truth
+for behavior.
+
 ## Milestone checklist (summary — details in docs/03-roadmap.md)
 
 - [ ] M0 — Scaffolding (repo layout, Package.swift, project.yml, Makefile, CI, empty app window)
