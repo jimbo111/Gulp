@@ -78,7 +78,8 @@ unless the spec marks them "(later: Mxx)".
 - **DoD:** A Base64 → URL → Gzip chain decodes correctly; Smart Decode solves the fixture set; Comparer word-diffs two 1 MB responses in < 1 s.
 
 ### M8 — Fuzzer
-- [ ] All P0/P1 of F07 except Turbo mode (that is M8b, same milestone, but optional to finish last).
+- [ ] All P0/P1 of F07 except Turbo mode (that is M8b, same milestone, but optional to finish last)
+  and except FUZ-025 (the OAST result column), which needs Beacon and is finished in M11.
 - **DoD:** A Cartesian attack with 2 positions × 100 payloads runs at ≥ 1,000 req/s against VulnLab; grep-extract pulls the CSRF token from every response.
 
 ### M9 — Logger, GulpQL, search, Notebook
@@ -97,7 +98,10 @@ unless the spec marks them "(later: Mxx)".
 - **DoD:** Browsing VulnLab produces the expected passive issues (fixture list in doc 06 §3) and no duplicates.
 
 ### M11 — Crawler, active scanner, Beacon
-- [ ] Crawler, static mode (all P0 of F09); the browser-backed mode comes in M13.
+- [ ] Crawler, static mode (all P0 of F09); the browser-backed mode comes in M13. Build CRL-006's
+  re-authentication **hook point** now, but its session-rule/macro wiring is completed in M12 when
+  F15 (Sessions) exists — until then the crawler runs unauthenticated. Unauthenticated crawl+audit
+  is what this milestone's DoD checks; authenticated crawling is validated in M12.
 - [ ] Insertion points, active check engine, scan configurations, the scan task UI (SCN-020…SCN-038).
 - [ ] Active checks catalog (F08 §5.2), at least every check marked P0.
 - [ ] Beacon client + interactsh client; Beacon server (Beacon package) (all P0 of F10).

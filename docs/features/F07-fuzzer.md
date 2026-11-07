@@ -39,7 +39,7 @@ content). It is used for brute force, parameter testing, enumeration, and inject
 | FUZ-022 | P0 | **Grep-extract**: capture text between delimiters or by regex group into a column (e.g. extract a token, a row count, a reflected value). |
 | FUZ-023 | P0 | **Baseline & anomalies**: mark a baseline response; highlight rows whose length/status/time deviate; a quick "length histogram" to spot outliers. |
 | FUZ-024 | P1 | Reflection column: whether the payload is reflected in the response (and encoded/raw), useful for XSS triage. |
-| FUZ-025 | P1 | OAST column: when a payload includes a Beacon token (F10), flag rows that caused an out-of-band interaction (blind injection detection). |
+| FUZ-025 | P1 | OAST column: when a payload includes a Beacon token (F10), flag rows that caused an out-of-band interaction (blind injection detection). *(later: M11 — needs Beacon, which lands in M11; the rest of the Fuzzer is M8.)* |
 | FUZ-026 | P1 | Save an attack and its results in the project; reopen later; export results (CSV/HTML). |
 | FUZ-027 | P2 | Charts: length and time scatter plots (Swift Charts) to eyeball clusters. |
 

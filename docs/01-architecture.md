@@ -28,7 +28,9 @@ Minimum OS: **macOS 14 Sonoma**. Development toolchain: the latest stable Xcode 
 Gulp/
 ├── CLAUDE.md
 ├── README.md
+├── LICENSE                          # MIT (docs/07 decision #2)
 ├── Makefile
+├── Brewfile                         # Homebrew deps for `make bootstrap` (xcodegen, swift-format)
 ├── project.yml                      # XcodeGen spec: Gulp.app target + GulpAppUITests
 ├── .swift-format                    # formatting rules
 ├── .github/workflows/ci.yml
