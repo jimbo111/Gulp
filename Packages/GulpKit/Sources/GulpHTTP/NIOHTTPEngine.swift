@@ -349,7 +349,13 @@ public final class NIOHTTPEngine: HTTPEngine {
             }
         let channel: any Channel
         do {
-            channel = try await bootstrap.connect(to: address).get()
+            do {
+                channel = try await bootstrap.connect(to: address).get()
+            } catch where Self.shouldTryOtherAddresses(error, host: host) {
+                // The resolver's first answer can be an address nobody listens on (`localhost` →
+                // `::1` while the server is bound to 127.0.0.1): let NIO try every address.
+                channel = try await bootstrap.connect(host: host, port: port).get()
+            }
         } catch {
             let mapped = HTTP1ClientHandler.networkError(error)
             // A connect cut short by the total budget is a total timeout, not a connect timeout.
@@ -372,6 +378,13 @@ public final class NIOHTTPEngine: HTTPEngine {
             channel.close(promise: nil)
             throw error
         }
+    }
+
+    /// A refused connection to a resolved *name* is retried over all its addresses.
+    static func shouldTryOtherAddresses(_ error: any Error, host: String) -> Bool {
+        guard HTTP1ClientHandler.networkError(error) == .connectionRefused else { return false }
+        if case .ip = CertificateSubject(host: host) { return false }
+        return true
     }
 
     /// TLS to the server (TLS-008/009), inserted under the HTTP handler on an open connection (direct,

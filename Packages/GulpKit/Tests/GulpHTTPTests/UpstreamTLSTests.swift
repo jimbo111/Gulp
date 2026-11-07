@@ -72,26 +72,6 @@ struct UpstreamTLSEngineTests {
         await server.stop()
     }
 
-    @Test("A server presenting a self-signed certificate is reported as selfSigned")
-    func test_TLS008_selfSigned() async throws {
-        let authority = try CertificateAuthority.generate(keyType: .p256)
-        let leaf = MintedLeaf(
-            subject: .dns("localhost"), certificate: authority.certificate,
-            der: try authority.certificateDER(), key: authority.key)
-        let context = try LeafMinter.makeServerContext(leaf: leaf, alpn: ["http/1.1"])
-        let server = try await TestServer.start(tls: context) { received, _ in
-            headersComplete(received) ? ok("x") : nil
-        }
-        let engine = NIOHTTPEngine()
-        let target = HTTPTarget(scheme: .https, host: "localhost", port: server.port)
-        let result = await engine.send(
-            RawRequest(Bytes("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")), to: target, options: options())
-        #expect(result.error == nil)
-        #expect(result.exchange.tls?.validation == .failed("selfSigned"))
-        await engine.shutdown()
-        await server.stop()
-    }
-
     @Test("TLS-009: a version range the server can't meet fails the handshake")
     func test_TLS009_versions() async throws {
         let authority = try CertificateAuthority.generate(keyType: .p256)

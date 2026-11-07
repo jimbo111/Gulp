@@ -3,6 +3,8 @@ import GulpHTTP
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
+import GulpTLS
+import NIOSSL
 import Testing
 
 @testable import GulpProxy
@@ -25,7 +27,7 @@ final class Origin: Sendable {
     func received(_ index: Int = 0) -> [UInt8] { log.withLockedValue { index < $0.count ? $0[index] : [] } }
 
     /// Replies `reply` to every complete request.
-    static func start(reply: String) async throws -> Origin {
+    static func start(reply: String, tls: NIOSSLContext? = nil) async throws -> Origin {
         let log = NIOLockedValueBox<[[UInt8]]>([])
         let bytes = Array(reply.utf8)
         let channel = try await ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton)
@@ -36,6 +38,9 @@ final class Origin: Sendable {
                     return list.count - 1
                 }
                 return channel.eventLoop.makeCompletedFuture(withResultOf: {
+                    if let tls {
+                        try channel.pipeline.syncOperations.addHandler(NIOSSLServerHandler(context: tls))
+                    }
                     let handler = OriginHandler(reply: bytes, log: log, index: index)
                     try channel.pipeline.syncOperations.addHandler(handler)
                 })
@@ -185,7 +190,7 @@ struct ProxyTests {
         #expect(!client.isActive)
     }
 
-    @Test("Unreachable upstream → 502; CONNECT → 501 until M3; origin-form → 400")
+    @Test("Unreachable upstream → 502; CONNECT without a CA → 502; origin-form → 400")
     func test_errors() async throws {
         let (proxy, proxyTarget) = try await startProxy(recorder: Recorded())
         let client = NIOHTTPEngine()
@@ -194,7 +199,7 @@ struct ProxyTests {
         #expect(bad.exchange.response?.parsed.statusCode == 502)
         let connect = RawRequest(Bytes("CONNECT example.test:443 HTTP/1.1\r\nHost: example.test:443\r\n\r\n"))
         let tunnel = await client.send(connect, to: proxyTarget, options: clientOptions())
-        #expect(tunnel.exchange.response?.parsed.statusCode == 501)
+        #expect(tunnel.exchange.response?.parsed.statusCode == 502)
         let originForm = RawRequest(Bytes("GET / HTTP/1.1\r\nHost: x\r\n\r\n"))
         let refused = await client.send(originForm, to: proxyTarget, options: clientOptions())
         let status = refused.exchange.response?.parsed.statusCode
@@ -279,4 +284,115 @@ struct ProxyTests {
         #expect(!out.contains("X-Drop"))
     }
 
+}
+
+@Suite("GulpProxy — CONNECT tunnels (PRX-005…PRX-007)", .serialized)
+struct TunnelTests {
+    /// A TLS origin for `localhost` with its own CA (so its certificate differs from Gulp's).
+    static func tlsOrigin() async throws -> (Origin, MintedLeaf) {
+        let minter = try LeafMinter(authority: CertificateAuthority.generate(keyType: .p256))
+        let context = try await minter.serverContext(for: "localhost", alpn: ["http/1.1"])
+        let origin = try await Origin.start(reply: okReply, tls: context)
+        return (origin, try await minter.leaf(for: "localhost"))
+    }
+
+    /// A proxy that intercepts with a fresh Gulp CA.
+    static func interceptingProxy(
+        recorder: Recorded, passThrough: [String] = []
+    ) async throws -> (ProxyServer, Int, LeafMinter) {
+        let minter = try LeafMinter(authority: CertificateAuthority.generate(keyType: .p256))
+        let proxy = ProxyServer(
+            engine: NIOHTTPEngine(recorder: recorder),
+            tls: ProxyTLSOptions(minter: minter, passThroughHosts: passThrough))
+        let port = try await proxy.start(ProxyListenerConfig(port: 0))
+        return (proxy, port, minter)
+    }
+
+    func viaProxy(_ port: Int) -> SendOptions {
+        var options = clientOptions()
+        options.upstreamProxy = .proxy(UpstreamProxy(kind: .http, host: "127.0.0.1", port: port))
+        return options
+    }
+
+    @Test("PRX-005/006: CONNECT + MITM — the client sees a Gulp-minted leaf; the exchange is decrypted")
+    func test_PRX006_mitm() async throws {
+        let (origin, originLeaf) = try await Self.tlsOrigin()
+        let recorded = Recorded()
+        let (proxy, port, minter) = try await Self.interceptingProxy(recorder: recorded)
+        let client = NIOHTTPEngine()
+        let target = HTTPTarget(scheme: .https, host: "localhost", port: origin.port)
+        let request = RawRequest(Bytes("GET /secret HTTP/1.1\r\nHost: localhost\r\n\r\n"))
+        let result = await client.send(request, to: target, options: viaProxy(port))
+        #expect(result.error == nil, "error: \(String(describing: result.error))")
+        #expect(result.exchange.response?.bytes.string().hasSuffix("ok") == true)
+        let gulpLeaf = try await minter.leaf(for: "localhost")
+        let presented = result.exchange.tls?.serverChainSHA256.first
+        #expect(presented == CertificateAuthority.fingerprint(gulpLeaf.der))
+        // The origin received the decrypted request bytes exactly.
+        #expect(origin.received() == Array("GET /secret HTTP/1.1\r\nHost: localhost\r\n\r\n".utf8))
+        // The proxy recorded the decrypted exchange, with the origin's own chain.
+        try await Task.sleep(for: .milliseconds(100))
+        let exchanges = await recorded.exchanges
+        let proxied = try #require(exchanges.first)
+        #expect(proxied.source == .proxy)
+        #expect(proxied.target.scheme == .https && proxied.target.port == origin.port)
+        #expect(proxied.tls?.serverChainSHA256.first == CertificateAuthority.fingerprint(originLeaf.der))
+        await client.shutdown()
+        await proxy.stopAll()
+        await origin.stop()
+    }
+
+    @Test("PRX-007: a pass-through host is spliced — the client sees the origin's real certificate")
+    func test_PRX007_passThrough() async throws {
+        let (origin, originLeaf) = try await Self.tlsOrigin()
+        let recorded = Recorded()
+        let (proxy, port, _) = try await Self.interceptingProxy(recorder: recorded, passThrough: ["local*"])
+        let client = NIOHTTPEngine()
+        let target = HTTPTarget(scheme: .https, host: "localhost", port: origin.port)
+        let request = RawRequest(Bytes("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"))
+        let result = await client.send(request, to: target, options: viaProxy(port))
+        #expect(result.error == nil, "error: \(String(describing: result.error))")
+        let presented = result.exchange.tls?.serverChainSHA256.first
+        #expect(presented == CertificateAuthority.fingerprint(originLeaf.der))
+        let exchanges = await recorded.exchanges
+        #expect(exchanges.isEmpty)  // not decrypted, so nothing to record as an exchange
+        await client.shutdown()
+        await proxy.stopAll()
+        await origin.stop()
+    }
+
+    @Test("F01 §5: plain HTTP inside a CONNECT tunnel is proxied and recorded")
+    func test_plainHTTPInTunnel() async throws {
+        let origin = try await Origin.start(reply: okReply)
+        let recorded = Recorded()
+        let (proxy, port, _) = try await Self.interceptingProxy(recorder: recorded)
+        let client = NIOHTTPEngine()
+        var options = clientOptions()
+        options.upstreamProxy = .proxy(
+            UpstreamProxy(kind: .http, host: "127.0.0.1", port: port, tunnelPlainHTTP: true))
+        let target = HTTPTarget(scheme: .http, host: "127.0.0.1", port: origin.port)
+        let request = RawRequest(Bytes("GET /plain HTTP/1.1\r\nHost: x\r\n\r\n"))
+        let result = await client.send(request, to: target, options: options)
+        #expect(result.error == nil, "error: \(String(describing: result.error))")
+        #expect(result.exchange.response?.parsed.statusCode == 200)
+        #expect(origin.received() == Array("GET /plain HTTP/1.1\r\nHost: x\r\n\r\n".utf8))
+        try await Task.sleep(for: .milliseconds(100))
+        let exchanges = await recorded.exchanges
+        #expect(exchanges.first?.target.port == origin.port)
+        await client.shutdown()
+        await proxy.stopAll()
+        await origin.stop()
+    }
+
+    @Test("CONNECT authority parsing")
+    func authority() {
+        func parse(_ text: String) -> (String, Int)? {
+            ProxyConnection.connectAuthority(RawRequest(Bytes("CONNECT \(text) HTTP/1.1\r\n\r\n")))
+                .map { ($0.host, $0.port) }
+        }
+        #expect(parse("example.com:443")! == ("example.com", 443))
+        #expect(parse("[::1]:8443")! == ("::1", 8443))
+        #expect(parse("example.com") == nil)
+        #expect(parse("example.com:0") == nil)
+    }
 }
