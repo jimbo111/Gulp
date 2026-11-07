@@ -33,6 +33,8 @@ actor ConnectionPool {
         let channel: any Channel
         let id: UInt64
         let since: NIODeadline
+        /// The server's own keep-alive deadline (`Keep-Alive: timeout=N`), if it announced one.
+        var expires: NIODeadline?
     }
 
     private var idle: [PoolKey: [Idle]] = [:]
@@ -78,20 +80,24 @@ actor ConnectionPool {
     func takeIdle(_ key: PoolKey) -> Idle? {
         let now = NIODeadline.now()
         while let candidate = idle[key]?.popLast() {
-            if candidate.channel.isActive && now - candidate.since < idleTimeout { return candidate }
+            let serverExpired = candidate.expires.map { now >= $0 } ?? false
+            if candidate.channel.isActive && now - candidate.since < idleTimeout && !serverExpired {
+                return candidate
+            }
             candidate.channel.close(promise: nil)
         }
         return nil
     }
 
-    /// Park a reusable connection.
-    func putIdle(_ key: PoolKey, channel: any Channel, id: UInt64) {
+    /// Park a reusable connection. `serverTimeout` is the server's announced keep-alive timeout.
+    func putIdle(_ key: PoolKey, channel: any Channel, id: UInt64, serverTimeout: TimeAmount? = nil) {
         var list = idle[key, default: []]
         guard list.count < maxPerKey, channel.isActive else {
             channel.close(promise: nil)
             return
         }
-        list.append(Idle(channel: channel, id: id, since: .now()))
+        let now = NIODeadline.now()
+        list.append(Idle(channel: channel, id: id, since: now, expires: serverTimeout.map { now + $0 }))
         idle[key] = list
     }
 

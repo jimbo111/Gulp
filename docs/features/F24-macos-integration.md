@@ -24,7 +24,7 @@ bar presence, Shortcuts/Services integration, Quick Look, and the usual Mac nice
 | ID | Pri | Requirement |
 |---|---|---|
 | MAC-010 | P1 | **System proxy toggle**: set/unset the macOS HTTP/HTTPS proxy to a Gulp listener for a chosen network service (via `networksetup`/SystemConfiguration), with a clear on/off indicator and automatic revert on quit/crash (restore previous settings). Requires admin; explain why. |
-| MAC-011 | P2 | Per-app proxying guidance (since macOS lacks per-app proxy natively): document using the Gulp Browser (F16) or environment variables for CLI tools; optionally a helper that launches a chosen app with proxy env vars set. |
+| MAC-011 | P2 | Per-app capture for apps that ignore the system proxy: v1 documents the Gulp Browser (F16) and proxy environment variables for CLI tools (plus a helper that launches an app with them set). **Post-1.0 (P1):** a per-app transparent proxy via Network Extension (`NETransparentProxyProvider`), which macOS does support, and a WireGuard-style mode for phones whose apps (e.g. Flutter) ignore the proxy setting. |
 | MAC-012 | P2 | Detect and warn about conflicting proxies/VPNs; detect when the system proxy points at a stopped listener. |
 
 ### 2.3 App integration (M20)

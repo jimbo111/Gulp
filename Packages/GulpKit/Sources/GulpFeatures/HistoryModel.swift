@@ -36,6 +36,8 @@ public final class HistoryModel {
     @ObservationIgnored private let store: ProjectStore
     @ObservationIgnored private var listener: Task<Void, Never>?
     @ObservationIgnored private var pendingRefresh: Task<Void, Never>?
+    /// Bumped whenever cached pages are dropped, so loads started before that are discarded.
+    @ObservationIgnored private var cacheGeneration = 0
 
     /// A model over `store`, live-updated from `events`.
     public init(store: ProjectStore, events: EventBus) {
@@ -61,6 +63,26 @@ public final class HistoryModel {
         let page = cache.page(for: index)
         if cache.beginLoading(page) { load(page) }
         return nil
+    }
+
+    /// The ids of table rows `rows` in the current filter and sort, read from the store, so bulk
+    /// actions also cover rows whose pages are not loaded (Select All on 10k rows, HIS-004).
+    public func ids(forRows rows: IndexSet) async -> [ExchangeID] {
+        let store = self.store
+        let filter = self.filter
+        let sort = self.sort
+        var ids: [ExchangeID] = []
+        for range in rows.rangeView {
+            let page = try? await store.summaries(
+                filter: filter, sort: sort, offset: range.lowerBound, limit: range.count)
+            ids += (page ?? []).map(\.id)
+        }
+        return ids
+    }
+
+    /// The row at `index` only if its page is already loaded (never triggers a load).
+    public func loadedRow(_ index: Int) -> ExchangeSummary? {
+        cache.row(index)
     }
 
     /// Select rows; loads the first selected exchange for the viewer (HIS-003).
@@ -107,15 +129,20 @@ public final class HistoryModel {
     // MARK: loading
 
     private func reset() {
-        cache.invalidate()
+        invalidateCache()
         refreshCount()
+    }
+
+    private func invalidateCache() {
+        cache.invalidate()
+        cacheGeneration += 1
     }
 
     private func mutate(_ change: @escaping @Sendable (ProjectStore) async throws -> Void) {
         let store = self.store
         Task {
             try? await change(store)
-            self.cache.invalidate()
+            self.invalidateCache()
             self.refreshCount()
         }
     }
@@ -135,6 +162,9 @@ public final class HistoryModel {
         Task {
             let count = (try? await store.count(filter: filter)) ?? 0
             guard filter == self.filter else { return }  // a newer filter is already loading
+            // New rows only append at the end when sorted oldest-first; any other order can shift
+            // every cached page, so drop them all (HIS-002 live updates).
+            if self.sort != .idAscending, count != self.rowCount { self.invalidateCache() }
             self.cache.setTotalCount(count)
             self.rowCount = count
             self.revision += 1
@@ -149,9 +179,15 @@ public final class HistoryModel {
             return source
         }()
         let pageSize = cache.pageSize
+        let generation = cacheGeneration
         Task {
-            let rows = (try? await source.load(page: page, pageSize: pageSize)) ?? []
-            guard source.filter == self.filter, source.sort == self.sort else { return }
+            let rows = try? await source.load(page: page, pageSize: pageSize)
+            // A page loaded before an edit, delete or filter change would show stale rows.
+            guard generation == self.cacheGeneration else { return }
+            guard let rows else {
+                self.cache.cancelLoading(page)  // let a later scroll retry it
+                return
+            }
             self.cache.store(rows, page: page)
             self.revision += 1
         }

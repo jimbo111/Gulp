@@ -8,7 +8,11 @@ order; within a milestone, do P0 first.
 
 - **Phase**: **M2 DONE** — CI green on both platforms (run 42416523505, commit `1acf39c`), and the M2 DoD
   is an executable check (`Scripts/m2-dod.sh`, run by the Linux job): PASS. M0 and M1 done earlier.
-- **Active milestone**: **M3 — TLS interception + CA + HTTP/2** (next).
+- **Active milestone**: **M3a — TLS interception + CA (HTTP/1.1)**, then M3b (HTTP/2). M3 was split
+  by the 2026-11-07 feature review (`docs/FEATURE-REVIEW.md`). GulpTLS (CA, minting, caches,
+  storage, ClientHello sniffer) has landed; upstream TLS, CONNECT/MITM and the CA install UI are next.
+- **Branching**: `main` holds merged milestones (PR jimbo111/Gulp#1 merged M0–M2). Work happens on
+  the session branch and is merged by PR once CI is green.
 - **Build verification**: the authoring container has no Swift toolchain (`download.swift.org` is
   blocked), so CI (`.github/workflows/ci.yml`) is the gate and runs on **every branch push**:
   `core-linux` (`swift:6.0-noble`: build + all tests + the M1 and M2 DoD scripts) and `macos`
@@ -18,10 +22,25 @@ order; within a milestone, do P0 first.
     SOCKS5 username/password (NIOSOCKS client is no-auth only). Redirect following is declared but
     `.never`-only until the Repeater (M5).
   - M2: PRJ-001 save/discard prompt on closing a temporary project (the file is kept in Caches
-    instead; needs an NSWindow close hook, M16 polish). The proxy answers CONNECT with 501 until M3
+    instead; needs an NSWindow close hook, M16 polish). The proxy answers CONNECT with 501 until M3a
     and origin-form (invisible) requests with 400 until PRX-040.
-- **Next action**: start **M3** — GulpTLS CA + leaf minting (TLS-001…TLS-010), CONNECT/SNI/ALPN in
-  GulpProxy (PRX-005…PRX-009), the macOS CA-install helpers (MAC-001…MAC-004), HTTP/2 (HTTP-020…026).
+  - M2, found by the 2026-11-07 code review (partial requirements, now stated honestly):
+    - **F01 §4.3 response streaming**: responses are buffered whole (50 MB / 120 s limits), so large
+      downloads and SSE/long-polling fail through the proxy. Planned with streaming exchanges (M4,
+      FEATURE-REVIEW A1). Request bodies are buffered too, capped at 256 MB (413 beyond).
+    - HIS-004: "add to scope" (needs M6) and "send to tools" (M5) are not there yet.
+    - HIS-005: comments are edited in a dialog, not inline (UI-041 lands with the editor, M4).
+    - HIS-006: in-scope (M6), MIME and method chips are missing from the UI (the query supports them).
+    - PRJ-005: "Use settings from…" has an API but no UI; import from a settings file is missing.
+    - PRJ-006 (P1): name/notes API only, no Project Info panel.
+    - F20 §4: `settingsChanged` is declared but never published.
+    - No app-terminate hook: on Cmd-Q the last ~50 ms of queued writes may be lost (window close is
+      fine). Exchange ids can be reused after the newest rows are deleted and the project reopened.
+- **Next action**: M3a — upstream TLS in GulpHTTP (TLS-008/009), CONNECT + MITM + pass-through in
+  GulpProxy (PRX-005…007), Settings → TLS with Keychain install/trust status (MAC-001/002), VulnLab
+  `:8443`, and the executable DoD. Then M3b (HTTP/2, trailers).
+- **Waiting on the owner**: the scope proposals in `docs/FEATURE-REVIEW.md` §3 (add, merge, defer,
+  cut). Nothing has been removed from the specs until they are decided.
 - **Product decisions**: resolved by the owner and recorded in `docs/07-decisions.md` §"Product
   decisions" (MIT license; macOS 14 min; Claude-only AI in v1; OAST off until configured;
   `com.gulp.app` placeholder bundle id; no team server). Build to those.
@@ -109,7 +128,8 @@ for behavior.
 - [x] M0 — Scaffolding (repo layout, Package.swift, project.yml, Makefile, CI, empty app window) — **CI green both platforms (`6e17d38`)**
 - [x] M1 — Core model + raw HTTP/1 engine — **CI green both platforms + executable DoD PASS (`cd84c2a`)**
 - [x] M2 — Plain-HTTP proxy, storage, history UI — **CI green both platforms + executable DoD PASS (`1acf39c`)**
-- [ ] M3 — TLS interception + CA + HTTP/2
+- [ ] M3a — TLS interception + CA (HTTP/1.1) — GulpTLS landed (`996d99d`)
+- [ ] M3b — HTTP/2 (client side + upstream, trailers)
 - [ ] M4 — Intercept, Match & Replace, message editor, WebSockets
 - [ ] M5 — Repeater + advanced HTTP engine (HTTP/2 raw, group/race sends)
 - [ ] M6 — Target: site map + scope + ScopeGuard
@@ -215,6 +235,24 @@ for behavior.
   - Caught by CI: a closing proxy error page without `Connection: close` (the client reused a dead
     connection); swift-format's `indentConditionalCompilationBlocks: false`; the synthesized
     memberwise init of a public struct being `internal`; undeclared transitive module imports.
+
+- 2026-11-07 — **Reviews after M2** (independent agents, no shared context):
+  - **Code review** of M0–M2: 1 Blocker, 10 Majors, ~10 Minors. Fixed: the Blocker
+    (Content-Length overflow trapped the process; unbounded request bodies) with a strict framer
+    (agreeing decimal Content-Length, chunked-final Transfer-Encoding, 400 on malformed chunking, 413
+    cap) and request framing warnings; proxy backpressure, ordered 100-continue/rejections, listener
+    stop closes clients, protected framing headers; a `flock` single-writer lock per project; Save As
+    holds recordings during the copy and refuses its own/an open destination; keep-alive reuse honours
+    HTTP/1.0 and `Keep-Alive: timeout`; History selection/bulk actions by id, live updates under any
+    sort, stale page loads dropped, reused row colours reset, model built once, lazy Raw view, bind
+    errors shown, LIKE wildcards escaped. Not fixed yet (listed under carry-overs): response
+    streaming, the HIS/PRJ partials, `settingsChanged`, the terminate hook, id reuse after delete.
+  - **Feature review** of F01–F32 → `docs/FEATURE-REVIEW.md`. Adopted: M3 split into M3a/M3b,
+    HTTP-027 (HTTP/2 trailers, P0), TLS-017 (ECH, P1), corrected TLS-015/MAC-011/BRW-002.
+    Proposed (owner decision): new capabilities, re-sequencing, merges and cuts.
+  - M3a progress: GulpTLS — CA (RSA/P-256), leaf minting with DNS/IP SANs and IDN A-labels,
+    de-duplicated LeafMinter with LRU leaf + (host, ALPN) context caches, File/Keychain CA stores,
+    ClientHello SNI/ALPN sniffer; tests do live NIOSSL handshakes against minted leaves.
 
 ## How to pick up work (reminder)
 

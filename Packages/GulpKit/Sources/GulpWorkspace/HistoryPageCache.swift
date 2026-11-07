@@ -47,6 +47,11 @@ public struct HistoryPageCache: Sendable {
         return true
     }
 
+    /// Forget that `page` is loading (the load failed or was superseded), so it can be asked again.
+    public mutating func cancelLoading(_ page: Int) {
+        requested.remove(page)
+    }
+
     /// Store a loaded page, evicting the least recently used pages over the limit.
     public mutating func store(_ rows: [ExchangeSummary], page: Int) {
         requested.remove(page)

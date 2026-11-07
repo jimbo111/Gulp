@@ -73,17 +73,36 @@ public enum SettingsSource: Sendable {
 /// switch files without rebuilding the engine.
 actor ProjectRecorder: ExchangeRecorder {
     private var writer: StoreWriter
+    private var paused = false
+    private var held: [(Exchange, CheckedContinuation<ExchangeID, Never>)] = []
 
     init(writer: StoreWriter) {
         self.writer = writer
     }
 
     func record(_ exchange: Exchange) async -> ExchangeID {
-        await writer.record(exchange)
+        if paused {
+            return await withCheckedContinuation { held.append((exchange, $0)) }
+        }
+        return await writer.record(exchange)
     }
 
-    func use(_ newWriter: StoreWriter) {
+    /// Hold new recordings (Save As copies the file meanwhile, PRJ-002).
+    func pause() {
+        paused = true
+    }
+
+    /// Continue recording into `newWriter`, first writing everything held during the pause, in order.
+    func resume(with newWriter: StoreWriter) async {
         writer = newWriter
+        while !held.isEmpty {
+            let batch = held
+            held = []
+            for (exchange, continuation) in batch {
+                continuation.resume(returning: await newWriter.record(exchange))
+            }
+        }
+        paused = false
     }
 }
 
@@ -169,15 +188,30 @@ public actor ProjectSession {
     /// Save the project to `url` and continue working there (PRJ-002). A saved temporary project
     /// becomes a normal one and its temporary file is removed.
     public func saveAs(_ destination: URL) async throws {
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
+        let current = store.url.standardizedFileURL.resolvingSymlinksInPath()
+        guard destination.standardizedFileURL.resolvingSymlinksInPath() != current else {
+            throw GulpError(
+                message: "The project is already saved at \(destination.lastPathComponent).",
+                recoverySuggestion: "Choose a different file name.")
         }
-        try await store.backup(to: destination)
-        let newStore = try ProjectStore.open(at: destination, eventBus: events)
+        // Recordings made while the file is copied are held, then written to the new file, so
+        // nothing lands in the old file after the copy (and no id is handed out twice).
+        // Overwriting a project that is open elsewhere would destroy it: its lock says so.
+        try ProjectStore.ensureNotOpen(destination)
+        await recorder.pause()
+        let newStore: ProjectStore
+        do {
+            Self.removeDatabaseFiles(destination)
+            try await store.backup(to: destination)
+            newStore = try ProjectStore.open(at: destination, eventBus: events)
+        } catch {
+            await recorder.resume(with: store.writer)
+            throw error
+        }
         let oldStore = store
-        await recorder.use(newStore.writer)
         settings.switchStore(newStore)
         store = newStore
+        await recorder.resume(with: newStore.writer)
         try await oldStore.close()
         if isTemporary { Self.removeDatabaseFiles(oldStore.url) }
         isTemporary = false
@@ -216,7 +250,7 @@ public actor ProjectSession {
     }
 
     static func removeDatabaseFiles(_ url: URL) {
-        for suffix in ["", "-wal", "-shm"] {
+        for suffix in ["", "-wal", "-shm", ".gulplock"] {
             try? FileManager.default.removeItem(atPath: url.path + suffix)
         }
     }

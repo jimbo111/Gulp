@@ -66,8 +66,8 @@ final class OriginHandler: ChannelInboundHandler {
         let index = self.index
         log.withLockedValue { $0[index] += bytes }
         pending += bytes
-        while let next = RequestFramer.next(pending) {
-            pending.removeFirst(next.length)
+        while case .request(_, let length) = RequestFramer.next(pending) {
+            pending.removeFirst(length)
             var out = context.channel.allocator.buffer(capacity: reply.count)
             out.writeBytes(reply)
             context.writeAndFlush(wrapOutboundOut(out), promise: nil)
@@ -171,6 +171,20 @@ struct ProxyTests {
         #expect(!running)
     }
 
+    @Test("PRX-001: stopping a listener also closes the client connections it accepted")
+    func test_PRX001_stopClosesClients() async throws {
+        let proxy = ProxyServer(engine: NIOHTTPEngine())
+        let config = ProxyListenerConfig(port: 0)
+        let port = try await proxy.start(config)
+        let client = try await ClientBootstrap(group: MultiThreadedEventLoopGroup.singleton)
+            .connect(host: "127.0.0.1", port: port).get()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(client.isActive)
+        await proxy.stop(config.id)
+        for _ in 0..<50 where client.isActive { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(!client.isActive)
+    }
+
     @Test("Unreachable upstream → 502; CONNECT → 501 until M3; origin-form → 400")
     func test_errors() async throws {
         let (proxy, proxyTarget) = try await startProxy(recorder: Recorded())
@@ -193,11 +207,76 @@ struct ProxyTests {
     func test_framing() {
         let chunkedText = "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\nGET"
         let chunked = Array(chunkedText.utf8)
-        let first = RequestFramer.next(chunked)
-        #expect(first?.length == chunked.count - 3)
+        guard case .request(let first, let length) = RequestFramer.next(chunked) else {
+            Issue.record("chunked request not framed")
+            return
+        }
+        #expect(length == chunked.count - 3)
+        #expect(first.bytes.count == length)
         let partial = Array("POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nab".utf8)
-        #expect(RequestFramer.next(partial) == nil)
+        #expect(RequestFramer.next(partial) == .incomplete)
+        let list = Array("POST / HTTP/1.1\r\nContent-Length: 2, 2\r\n\r\nab".utf8)
+        #expect(RequestFramer.next(list) == .request(RawRequest(Bytes(list)), length: list.count))
         let expect = Array("POST / HTTP/1.1\r\nExpect: 100-continue\r\nContent-Length: 5\r\n\r\n".utf8)
         #expect(RequestFramer.awaitsContinue(expect))
     }
+
+    @Test(
+        "F01 §4.1: hostile framing is refused instead of guessed (no overflow, no desync)",
+        arguments: [
+            ("POST / HTTP/1.1\r\nContent-Length: 9223372036854775807\r\n\r\n", 400),
+            ("POST / HTTP/1.1\r\nContent-Length: 99999999999999999\r\n\r\n", 413),
+            ("POST / HTTP/1.1\r\nContent-Length: 3\r\nContent-Length: 4\r\n\r\nabcd", 400),
+            ("POST / HTTP/1.1\r\nContent-Length: -1\r\n\r\n", 400),
+            ("POST / HTTP/1.1\r\nContent-Length: +3\r\n\r\nabc", 400),
+            ("POST / HTTP/1.1\r\nTransfer-Encoding: gzip\r\n\r\n", 400),
+            ("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\nabc\r\n0\r\n\r\n", 400),
+        ])
+    func test_framingRejects(request: String, status: Int) {
+        guard case .reject(let got, _) = RequestFramer.next(Array(request.utf8)) else {
+            Issue.record("not rejected: \(request)")
+            return
+        }
+        #expect(got == status)
+    }
+
+    @Test("F01 §4.1: chunked wins over Content-Length for delimiting, and the conflict is flagged")
+    func test_conflictingFramingFlagged() {
+        let text = "POST / HTTP/1.1\r\nContent-Length: 50\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n"
+        guard case .request(let request, let length) = RequestFramer.next(Array(text.utf8)) else {
+            Issue.record("not framed")
+            return
+        }
+        #expect(length == text.utf8.count)
+        #expect(request.parsed.warnings.contains(.conflictingFraming))
+    }
+
+    @Test("Request bodies over the limit get 413 before they are buffered")
+    func test_bodyLimit() {
+        let head = Array("POST / HTTP/1.1\r\nContent-Length: 11\r\n\r\n".utf8)
+        guard case .reject(let status, _) = RequestFramer.next(head, maxBody: 10) else {
+            Issue.record("not rejected")
+            return
+        }
+        #expect(status == 413)
+        let chunked = Array("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\nb\r\n0123456789A".utf8)
+        guard case .reject(let chunkedStatus, _) = RequestFramer.next(chunked, maxBody: 10) else {
+            Issue.record("chunked not rejected")
+            return
+        }
+        #expect(chunkedStatus == 413)
+    }
+
+    @Test("Hop-by-hop stripping never removes framing or routing headers named in Connection")
+    func test_hopByHopProtected() {
+        let text =
+            "GET / HTTP/1.1\r\nHost: h\r\nConnection: content-length, host, x-drop\r\n"
+            + "Content-Length: 0\r\nX-Drop: 1\r\n\r\n"
+        let stripped = ForwardRewrite.strippingHopByHop(RawRequest(Bytes(text)))
+        let out = stripped.bytes.string()
+        #expect(out.contains("Host: h\r\n"))
+        #expect(out.contains("Content-Length: 0\r\n"))
+        #expect(!out.contains("X-Drop"))
+    }
+
 }

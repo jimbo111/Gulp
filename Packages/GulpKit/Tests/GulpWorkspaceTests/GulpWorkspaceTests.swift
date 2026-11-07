@@ -75,6 +75,19 @@ struct ProjectTests {
         try await reopened.close()
     }
 
+    @Test("PRJ-002: Save As onto the project's own file is refused and loses nothing")
+    func test_PRJ002_saveAsSelf() async throws {
+        let environment = isolatedEnvironment()
+        let url = projectURL(environment, "self")
+        let session = try await ProjectSession.open(at: url, environment: environment)
+        await recordSample(session)
+        await #expect(throws: GulpError.self) { try await session.saveAs(url) }
+        await session.store.writer.flush()
+        let count = try await session.store.count()
+        #expect(count == 1)
+        try await session.close()
+    }
+
     @Test("PRJ-002: open creates a project; the recent list is most-recent-first")
     func test_PRJ002_recent() async throws {
         let environment = isolatedEnvironment()

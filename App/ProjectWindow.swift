@@ -13,6 +13,8 @@ struct ProjectWindow: View {
     @State private var failure: String?
     @State private var selection: Tool? = .proxy
     @State private var showListeners = false
+    /// Listener bind failures from opening the project (PRX-001), shown above the tools.
+    @State private var bindErrors: [String] = []
 
     var body: some View {
         Group {
@@ -31,6 +33,7 @@ struct ProjectWindow: View {
                     .listStyle(.sidebar)
                 } detail: {
                     detail(session: session)
+                        .safeAreaInset(edge: .top) { bindErrorBanner }
                 }
                 .sheet(isPresented: $showListeners) {
                     ProxyListenersView(session: session)
@@ -69,6 +72,20 @@ struct ProjectWindow: View {
         }
     }
 
+    @ViewBuilder private var bindErrorBanner: some View {
+        if !bindErrors.isEmpty {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+                Text(bindErrors.joined(separator: "\n"))
+                Spacer()
+                Button("Listeners…") { showListeners = true }
+                Button("Dismiss") { bindErrors = [] }
+            }
+            .padding(8)
+            .background(.bar)
+        }
+    }
+
     private var actions: ProjectActions? {
         guard let session else { return nil }
         return ProjectActions { url in
@@ -89,7 +106,11 @@ struct ProjectWindow: View {
             } else {
                 opened = try await ProjectSession.openTemporary()
             }
-            _ = await opened.startProxyListeners()
+            let results = await opened.startProxyListeners()
+            bindErrors = results.values.compactMap { result in
+                if case .failure(let error) = result { return error.message }
+                return nil
+            }
             projectName = await opened.url.lastPathComponent
             session = opened
         } catch {

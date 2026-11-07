@@ -75,12 +75,19 @@ that exercises a deferred part (e.g. F07 test 4's OAST column) runs only in the 
 - [x] UI: Proxy → HTTP History table (NSTableView, paged), the message viewer (read-only Raw/Hex), a basic filter bar (F05 HIS-001…HIS-006), Settings → Proxy listeners.
 - **DoD:** Browse `http://localhost:8088` through Gulp; 10k requests are recorded and scroll smoothly; quitting and reopening the project shows the same history.
 
-### M3 — TLS interception and the certificate authority
-- [ ] GulpTLS: CA generation and storage in the Keychain, leaf minting with SNI/SAN, an LRU cache, CA export in PEM/DER (F02 TLS-001…TLS-010).
-- [ ] GulpProxy: CONNECT handling, SNI sniffing, ALPN mirroring, TLS pass-through list, upstream TLS settings (F01 PRX-005…PRX-009).
-- [ ] macOS integration: "Install CA in login keychain" helper, CA export, simulator install (F24 MAC-001…MAC-004).
-- [ ] HTTP/2 on the client side of the proxy (browser ↔ Gulp) and upstream (F03 HTTP-020…HTTP-026).
-- **DoD:** Browse `https://example.com` and an HTTP/2 site through Gulp with the CA trusted; the history shows the decrypted traffic, with HTTP/2 flagged.
+### M3a — TLS interception and the certificate authority (HTTP/1.1)
+Split from the original M3 after the 2026-11-07 feature review (docs/FEATURE-REVIEW.md): CA + CONNECT
++ MITM is one milestone, HTTP/2 the next, so each lands with a working DoD.
+- [x] GulpTLS: CA generation and storage (Keychain on macOS, 0600 file elsewhere), leaf minting with SNI/SAN, an LRU cache, CA export in PEM/DER (F02 TLS-001…TLS-010, TLS-012).
+- [ ] GulpHTTP: upstream TLS (HTTPS targets) with chain capture and the would-be validation result (TLS-008), protocol settings (TLS-009).
+- [ ] GulpProxy: CONNECT handling, ClientHello sniff (SNI + ALPN), MITM with HTTP/1.1 offered to the client, TLS pass-through list, non-TLS tunnels as plain HTTP (F01 PRX-005…PRX-007; ECH per TLS-017).
+- [ ] macOS integration: "Install CA in login keychain" helper, uninstall, trust status, CA export (F24 MAC-001, MAC-002); Settings → TLS pane. (MAC-003/004 are P1.)
+- **DoD:** Browse `https://example.com` and VulnLab's `https://localhost:8443` through Gulp with the CA trusted; the history shows the decrypted traffic.
+
+### M3b — HTTP/2 (client side and upstream)
+- [ ] ALPN mirroring (PRX-008), HTTP/2 between client and proxy with one exchange per stream (PRX-009).
+- [ ] Upstream HTTP/2 in the engine: conversion, multiplexing, GOAWAY/RST/flow control, trailers (F03 HTTP-020…HTTP-024, HTTP-027).
+- **DoD:** `curl --http2` through Gulp to an h2 site and to VulnLab's h2 endpoint; the history shows the decrypted traffic with HTTP/2 flagged, and gRPC-style trailers are kept.
 
 ## Phase B — Manual testing core (M4–M9)
 
