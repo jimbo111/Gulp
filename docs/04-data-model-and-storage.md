@@ -41,7 +41,7 @@ public struct RawRequest: Sendable, Hashable {
 // invalidate" problem — these are value types and any edit (`replacing`) returns a NEW value whose
 // `parsed` is recomputed from the spliced bytes. `bytes` is get-only for the same reason.
 
-public struct ParsedRequest: Sendable {
+public struct ParsedRequest: Sendable, Hashable {  // Hashable so the enclosing RawRequest can be
     public var method: Range<Int>                 // byte ranges into RawRequest.bytes
     public var target: Range<Int>                 // request-target (origin/absolute/authority/asterisk form)
     public var version: Range<Int>
@@ -52,9 +52,9 @@ public struct ParsedRequest: Sendable {
     public var warnings: [ParseWarning]           // e.g. obsolete line folding, bare LF, invalid chars
 }
 
-public struct HeaderField: Sendable { public var name: Range<Int>; public var value: Range<Int>; public var line: Range<Int> }
+public struct HeaderField: Sendable, Hashable { public var name: Range<Int>; public var value: Range<Int>; public var line: Range<Int> }
 
-public struct ParsedResponse: Sendable {          // mirror of ParsedRequest for the status line
+public struct ParsedResponse: Sendable, Hashable {  // Hashable so RawResponse can be; mirror of ParsedRequest
     public var version: Range<Int>                // e.g. "HTTP/1.1"
     public var statusCode: Int                    // parsed integer, e.g. 200
     public var reasonPhrase: Range<Int>

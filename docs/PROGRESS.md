@@ -17,8 +17,10 @@ order; within a milestone, do P0 first.
   only once that workflow is green; fix anything it flags before starting M1. (The `macos` job runs
 `make bootstrap` then `make lint generate test-core build test`; the `core-linux` job runs
 `swift build`/`swift test` on the whole GulpKit graph.)
-- **Next action**: push, watch CI, fix any build fallout, then begin **M1** (GulpCore model + raw
-  HTTP/1 engine).
+- **Next action**: push, watch CI, fix any build fallout. **M1 has begun** — the GulpCore
+  byte-fidelity foundation (`Bytes`, raw HTTP/1 parser + framer, with tests) is written; it still
+  needs CI to compile/test it (no toolchain here) and then the remaining GulpCore model types
+  (`HTTPTarget`, `Exchange`, events, scope, errors) and the `GulpHTTP` engine.
 - **Product decisions**: resolved by the owner and recorded in `docs/07-decisions.md` §"Product
   decisions" (MIT license; macOS 14 min; Claude-only AI in v1; OAST off until configured;
   `com.gulp.app` placeholder bundle id; no team server). Build to those.
@@ -154,6 +156,18 @@ for behavior.
   - `Beacon/` package (separate, Linux/Docker) with placeholder `gulp-beacon` + `Dockerfile`.
   - Also corrected a spec error found while scaffolding: `SNIHandler` is in the `NIOTLS` module of
     swift-nio (a later review corrected an interim "NIOSSL" note; doc 01 §1 and F02 §4 are authoritative).
+- 2026-11-07 — **M1 started — GulpCore byte-fidelity foundation** (unverified locally; CI is the gate):
+  - `Bytes.swift` — the canonical value-semantic byte buffer (`RandomAccessCollection`, cheap slicing,
+    strict vs lossy UTF-8), Foundation-free per the GulpCore dependency rule.
+  - `HTTP1.swift` — the raw-preserving HTTP/1 parser + response framer: frames the start line and
+    headers as byte ranges (order and duplicates preserved), never normalizes, and emits warnings
+    (bare LF, obs-fold, duplicate/conflicting framing) instead of rejecting. `serialize()` is the
+    identity over the input bytes (HTTP-001). Framing detection + chunk decoding + incompleteness
+    (HTTP-002).
+  - `Tests/GulpCoreTests` — real round-trip, edit-splice, and framing tests, each named for its
+    requirement ID (replaces the scaffolding marker test).
+  - **Doc reconciled to code** (CLAUDE.md §4): doc 04 §2 `ParsedRequest`/`ParsedResponse`/`HeaderField`
+    marked `Hashable` (their `RawRequest`/`RawResponse` already were, which requires it).
 
 ## How to pick up work (reminder)
 
