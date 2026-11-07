@@ -43,7 +43,9 @@ Dashboard tasks.
     JSON fetch that silently won't send the JSON body. It emits a working `fetch` PoC only when the
     endpoint accepts a simple content type, or when observed CORS (`Access-Control-Allow-Origin` +
     credentials) actually permits the cross-site request.
-- Scheduler is a lightweight actor persisting scheduled jobs in the project; it drives existing task
+- Scheduler is a lightweight actor persisting scheduled jobs in the project as a `SchedulerSettings`
+  group in the `settings` table (doc 04 §6; same pattern as proxy/intercept rules — no dedicated
+  table needed); it drives existing task
   APIs. Don't over-engineer — time/interval triggers only.
 
 ## 5. Edge cases
