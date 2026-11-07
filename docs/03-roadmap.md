@@ -106,17 +106,18 @@ far (e.g. M11 validates an **unauthenticated** crawl+audit; M12 validates the au
 
 ### M10 — Passive scanner and the issue model
 - [ ] Issue model, issue UI (dashboard issue list, the issue detail with highlighted evidence), dedup (SCN-001…SCN-007).
-- [ ] Passive checks catalog (F08 §5.1).
+- [ ] Passive checks catalog (F08 §3.1).
 - [ ] Live passive scanning of proxy traffic as a background task.
 - **DoD:** Browsing VulnLab produces the expected passive issues (fixture list in doc 06 §3) and no duplicates.
 
 ### M11 — Crawler, active scanner, Beacon
-- [ ] Crawler, static mode (all P0 of F09); the browser-backed mode comes in M13. Build CRL-006's
+- [ ] Crawler, **static mode only**: the static-mode P0s CRL-001…CRL-010. The browser-backed P0s
+  (CRL-030/031, which need the Browser) are M13 — do **not** build them here. Build CRL-006's
   re-authentication **hook point** now, but its session-rule/macro wiring is completed in M12 when
   F15 (Sessions) exists — until then the crawler runs unauthenticated. Unauthenticated crawl+audit
   is what this milestone's DoD checks; authenticated crawling is validated in M12.
 - [ ] Insertion points, active check engine, scan configurations, the scan task UI (SCN-020…SCN-038).
-- [ ] Active checks catalog (F08 §5.2), at least every check marked P0.
+- [ ] Active checks catalog (F08 §3.2), at least every check marked P0.
 - [ ] Beacon client + interactsh client; Beacon server (Beacon package) (all P0 of F10).
 - [ ] Check Recipes (YAML custom checks) (SCN-060…SCN-066).
 - **DoD:** A "Crawl and audit" of VulnLab finds every P0 vulnerability planted there, with zero false positives on the "safe twin" endpoints (doc 06 §3).
