@@ -14,12 +14,13 @@ let nioCore: [Target.Dependency] = [
     .product(name: "NIOCore", package: "swift-nio"),
     .product(name: "NIOPosix", package: "swift-nio"),
 ]
-let nioHTTP: [Target.Dependency] = nioCore + [
-    .product(name: "NIOHTTP1", package: "swift-nio"),
-    .product(name: "NIOHTTP2", package: "swift-nio-http2"),
-    .product(name: "NIOSSL", package: "swift-nio-ssl"),
-    .product(name: "NIOExtras", package: "swift-nio-extras"),
-]
+let nioHTTP: [Target.Dependency] =
+    nioCore + [
+        .product(name: "NIOHTTP1", package: "swift-nio"),
+        .product(name: "NIOHTTP2", package: "swift-nio-http2"),
+        .product(name: "NIOSSL", package: "swift-nio-ssl"),
+        .product(name: "NIOExtras", package: "swift-nio-extras"),
+    ]
 
 let package = Package(
     name: "GulpKit",
@@ -27,7 +28,7 @@ let package = Package(
     products: [
         .library(name: "GulpWorkspace", targets: ["GulpWorkspace"]),
         .library(name: "GulpAutomation", targets: ["GulpAutomation"]),
-        .library(name: "GulpFeatures", targets: ["GulpFeatures"]),   // real content only on macOS
+        .library(name: "GulpFeatures", targets: ["GulpFeatures"]),  // real content only on macOS
         .executable(name: "gulp-cli", targets: ["gulp-cli"]),
         .executable(name: "gulp-vulnlab", targets: ["gulp-vulnlab"]),
     ],
@@ -47,31 +48,39 @@ let package = Package(
     ],
     targets: [
         // ---- Foundation layer ----
-        .target(name: "GulpCore", dependencies: [
-            .product(name: "Collections", package: "swift-collections"),
-            .product(name: "Logging", package: "swift-log"),
-        ]),
+        .target(
+            name: "GulpCore",
+            dependencies: [
+                .product(name: "Collections", package: "swift-collections"),
+                .product(name: "Logging", package: "swift-log"),
+            ]),
 
         // ---- Services layer ----
         .target(name: "GulpCodec", dependencies: ["GulpCore"]),
         .target(name: "GulpQuery", dependencies: ["GulpCore"]),
         .target(name: "GulpDiff", dependencies: ["GulpCore"]),
-        .target(name: "GulpStore", dependencies: [
-            "GulpCore", .product(name: "GRDB", package: "GRDB.swift"),
-        ]),
-        .target(name: "GulpTLS", dependencies: [
-            "GulpCore",
-            .product(name: "X509", package: "swift-certificates"),
-            .product(name: "Crypto", package: "swift-crypto"),
-            .product(name: "_CryptoExtras", package: "swift-crypto"),
-            .product(name: "NIOSSL", package: "swift-nio-ssl"),
-        ]),
+        .target(
+            name: "GulpStore",
+            dependencies: [
+                "GulpCore", .product(name: "GRDB", package: "GRDB.swift"),
+            ]),
+        .target(
+            name: "GulpTLS",
+            dependencies: [
+                "GulpCore",
+                .product(name: "X509", package: "swift-certificates"),
+                .product(name: "Crypto", package: "swift-crypto"),
+                .product(name: "_CryptoExtras", package: "swift-crypto"),
+                .product(name: "NIOSSL", package: "swift-nio-ssl"),
+            ]),
 
         // ---- Engine layer ----
-        .target(name: "GulpHTTP", dependencies: ["GulpCore", "GulpTLS"] + nioHTTP + [
-            .product(name: "NIOHTTPCompression", package: "swift-nio-extras"),
-            .product(name: "NIOSOCKS", package: "swift-nio-extras"),
-        ]),
+        .target(
+            name: "GulpHTTP",
+            dependencies: ["GulpCore", "GulpTLS"] + nioHTTP + [
+                .product(name: "NIOHTTPCompression", package: "swift-nio-extras"),
+                .product(name: "NIOSOCKS", package: "swift-nio-extras"),
+            ]),
         .target(name: "GulpProxy", dependencies: ["GulpCore", "GulpHTTP", "GulpTLS"] + nioHTTP),
         .target(name: "GulpSession", dependencies: ["GulpCore", "GulpHTTP"]),
         .target(name: "GulpRepeater", dependencies: ["GulpCore", "GulpHTTP"]),
@@ -79,9 +88,11 @@ let package = Package(
         .target(name: "GulpFuzzer", dependencies: ["GulpCore", "GulpHTTP", "GulpOAST", "GulpSession"]),
         // GulpCrawler defines the BrowserDriver protocol; it must NOT import GulpBrowser (ADR-010).
         .target(name: "GulpCrawler", dependencies: ["GulpCore", "GulpHTTP", "GulpSession"]),
-        .target(name: "GulpScanner", dependencies: [
-            "GulpCore", "GulpHTTP", "GulpOAST", "GulpCrawler", "GulpSession",
-        ]),
+        .target(
+            name: "GulpScanner",
+            dependencies: [
+                "GulpCore", "GulpHTTP", "GulpOAST", "GulpCrawler", "GulpSession",
+            ]),
         .target(name: "GulpSequencer", dependencies: ["GulpCore", "GulpHTTP"]),
         .target(name: "GulpReport", dependencies: ["GulpCore"]),
         .target(name: "GulpExtensions", dependencies: ["GulpCore", "GulpHTTP"]),
@@ -96,29 +107,37 @@ let package = Package(
         .target(name: "GulpUI", dependencies: ["GulpCore"]),
 
         // ---- Orchestration layer ----
-        .target(name: "GulpWorkspace", dependencies: [
-            "GulpCore", "GulpCodec", "GulpQuery", "GulpDiff", "GulpStore", "GulpTLS",
-            "GulpHTTP", "GulpProxy", "GulpSession", "GulpRepeater", "GulpFuzzer", "GulpOAST",
-            "GulpCrawler", "GulpScanner", "GulpSequencer", "GulpReport", "GulpExtensions",
-            "GulpBrowser", "GulpScript",
-        ]),
-        .target(name: "GulpAutomation", dependencies: [
-            "GulpCore", "GulpWorkspace", .product(name: "Hummingbird", package: "hummingbird"),
-        ]),
+        .target(
+            name: "GulpWorkspace",
+            dependencies: [
+                "GulpCore", "GulpCodec", "GulpQuery", "GulpDiff", "GulpStore", "GulpTLS",
+                "GulpHTTP", "GulpProxy", "GulpSession", "GulpRepeater", "GulpFuzzer", "GulpOAST",
+                "GulpCrawler", "GulpScanner", "GulpSequencer", "GulpReport", "GulpExtensions",
+                "GulpBrowser", "GulpScript",
+            ]),
+        .target(
+            name: "GulpAutomation",
+            dependencies: [
+                "GulpCore", "GulpWorkspace", .product(name: "Hummingbird", package: "hummingbird"),
+            ]),
 
         // ---- UI layer (macOS content; empty on Linux) ----
         .target(name: "GulpFeatures", dependencies: ["GulpCore", "GulpWorkspace", "GulpUI", "GulpAI"]),
 
         // ---- Executables ----
-        .executableTarget(name: "gulp-cli", dependencies: [
-            "GulpWorkspace", "GulpAutomation",
-            .product(name: "ArgumentParser", package: "swift-argument-parser"),
-        ]),
-        .executableTarget(name: "gulp-vulnlab", dependencies: [
-            "GulpCore",
-            .product(name: "Hummingbird", package: "hummingbird"),
-            .product(name: "ArgumentParser", package: "swift-argument-parser"),
-        ]),
+        .executableTarget(
+            name: "gulp-cli",
+            dependencies: [
+                "GulpWorkspace", "GulpAutomation",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ]),
+        .executableTarget(
+            name: "gulp-vulnlab",
+            dependencies: [
+                "GulpCore",
+                .product(name: "Hummingbird", package: "hummingbird"),
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ]),
 
         // ---- Tests (one per module + integration) ----
         .testTarget(name: "GulpCoreTests", dependencies: ["GulpCore"]),
