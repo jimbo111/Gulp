@@ -1,3 +1,4 @@
+import GulpFeatures
 import GulpWorkspace
 import SwiftUI
 
@@ -24,7 +25,13 @@ struct GulpApp: App {
         }
 
         Settings {
-            SettingsPlaceholderView()
+            TabView {
+                TLSSettingsView()
+                    .tabItem { Label("TLS", systemImage: "lock.shield") }
+                SettingsPlaceholderView()
+                    .tabItem { Label("Proxy", systemImage: "network") }
+            }
+            .frame(width: 620, height: 440)
         }
     }
 }
@@ -43,6 +50,6 @@ struct SettingsPlaceholderView: View {
     var body: some View {
         Text("Proxy listeners are project settings: use “Listeners…” in a project window's Proxy tool.")
             .padding()
-            .frame(width: 480, height: 200)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

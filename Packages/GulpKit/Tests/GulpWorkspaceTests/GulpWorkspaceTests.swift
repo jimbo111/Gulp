@@ -3,6 +3,7 @@ import GulpCore
 import GulpHTTP
 import GulpProxy
 import GulpStore
+import GulpTLS
 import Testing
 
 @testable import GulpWorkspace
@@ -11,9 +12,11 @@ import Testing
 
 func isolatedEnvironment() -> WorkspaceEnvironment {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("gulp-ws-\(UUID().uuidString)")
-    return WorkspaceEnvironment(
+    var environment = WorkspaceEnvironment(
         supportDirectory: root.appendingPathComponent("support"),
         cachesDirectory: root.appendingPathComponent("caches"))
+    environment.caKeyType = .p256  // fast key generation in tests
+    return environment
 }
 
 func projectURL(_ environment: WorkspaceEnvironment, _ name: String) -> URL {
@@ -86,6 +89,19 @@ struct ProjectTests {
         let count = try await session.store.count()
         #expect(count == 1)
         try await session.close()
+    }
+
+    @Test("TLS-001/002: sessions share the user's CA, created on first use and kept in the CA store")
+    func test_TLS002_sessionCA() async throws {
+        let environment = isolatedEnvironment()
+        let first = try await ProjectSession.openTemporary(environment: environment)
+        let second = try await ProjectSession.openTemporary(environment: environment)
+        let a = try #require(first.minter?.authority.certificate)
+        let b = try #require(second.minter?.authority.certificate)
+        #expect(a == b)
+        #expect(try environment.caStore.load()?.certificate == a)
+        try await first.close()
+        try await second.close()
     }
 
     @Test("PRJ-002: open creates a project; the recent list is most-recent-first")

@@ -366,15 +366,13 @@ struct EngineTests {
         await server.stop()
     }
 
-    @Test("HTTPS, HTTP/2 and WebSockets report their milestone instead of misbehaving")
+    @Test("HTTP/2 and WebSockets report their milestone instead of misbehaving")
     func test_notYetImplemented() async throws {
         let engine = NIOHTTPEngine()
         let tlsTarget = HTTPTarget(scheme: .https, host: "127.0.0.1")
-        let https = await engine.send(get(), to: tlsTarget, options: options())
-        #expect(https.error?.code == "tls_failure")
         let spec = H2RequestSpec(pseudoHeaders: [], headers: [])
         let h2 = await engine.send(spec, to: tlsTarget, options: options())
-        #expect(h2.error == .other("HTTP/2 is implemented in M3"))
+        #expect(h2.error == .other("HTTP/2 is implemented in M3b"))
         await #expect(throws: GulpError.self) {
             _ = try await engine.openWebSocket(get(), to: tlsTarget, options: options())
         }

@@ -84,7 +84,8 @@ let package = Package(
         // ---- Engine layer ----
         .target(
             name: "GulpHTTP",
-            dependencies: ["GulpCore", "GulpTLS", "CZlib"] + nioHTTP + [
+            dependencies: ["GulpCore", "GulpTLS", "CZlib"] + nioHTTP + nioConcurrency + [
+                .product(name: "NIOTLS", package: "swift-nio"),
                 .product(name: "NIOHTTPCompression", package: "swift-nio-extras"),
                 .product(name: "NIOSOCKS", package: "swift-nio-extras"),
             ]),
@@ -132,18 +133,22 @@ let package = Package(
         // ---- UI layer (macOS content; empty on Linux) ----
         .target(
             name: "GulpFeatures",
-            dependencies: ["GulpCore", "GulpStore", "GulpProxy", "GulpWorkspace", "GulpUI", "GulpAI"]),
+            dependencies: [
+                "GulpCore", "GulpStore", "GulpProxy", "GulpTLS", "GulpWorkspace", "GulpUI", "GulpAI",
+            ]),
 
         // ---- Executables ----
         .executableTarget(
             name: "gulp-cli",
             dependencies: [
-                "GulpWorkspace", "GulpAutomation", "GulpHTTP", "GulpProxy", "GulpStore", "GulpCore",
+                "GulpWorkspace", "GulpAutomation", "GulpHTTP", "GulpProxy", "GulpStore", "GulpTLS",
+                "GulpCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),
         .executableTarget(
             name: "gulp-vulnlab",
-            dependencies: ["GulpCore"] + nioCore + [
+            dependencies: ["GulpCore", "GulpTLS"] + nioCore + [
+                .product(name: "NIOSSL", package: "swift-nio-ssl"),
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),
@@ -162,8 +167,16 @@ let package = Package(
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
                 .product(name: "NIOTLS", package: "swift-nio"),
             ]),
-        .testTarget(name: "GulpHTTPTests", dependencies: ["GulpHTTP"] + nioCore + nioConcurrency),
-        .testTarget(name: "GulpProxyTests", dependencies: ["GulpProxy"] + nioCore + nioConcurrency),
+        .testTarget(
+            name: "GulpHTTPTests",
+            dependencies: ["GulpHTTP", "GulpTLS"] + nioCore + nioConcurrency + [
+                .product(name: "NIOSSL", package: "swift-nio-ssl")
+            ]),
+        .testTarget(
+            name: "GulpProxyTests",
+            dependencies: ["GulpProxy", "GulpTLS"] + nioCore + nioConcurrency + [
+                .product(name: "NIOSSL", package: "swift-nio-ssl")
+            ]),
         .testTarget(name: "GulpSessionTests", dependencies: ["GulpSession"]),
         .testTarget(name: "GulpRepeaterTests", dependencies: ["GulpRepeater"]),
         .testTarget(name: "GulpOASTTests", dependencies: ["GulpOAST"]),
@@ -178,7 +191,7 @@ let package = Package(
         .testTarget(name: "GulpScriptTests", dependencies: ["GulpScript"]),
         .testTarget(name: "GulpUITests", dependencies: ["GulpUI"]),
         .testTarget(name: "GulpFeaturesTests", dependencies: ["GulpFeatures"]),
-        .testTarget(name: "GulpWorkspaceTests", dependencies: ["GulpWorkspace"]),
+        .testTarget(name: "GulpWorkspaceTests", dependencies: ["GulpWorkspace", "GulpTLS"]),
         .testTarget(name: "GulpAutomationTests", dependencies: ["GulpAutomation"]),
         .testTarget(name: "IntegrationTests", dependencies: ["GulpWorkspace"]),
     ],

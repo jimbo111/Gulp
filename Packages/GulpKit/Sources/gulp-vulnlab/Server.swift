@@ -1,17 +1,22 @@
 // gulp-vulnlab — two raw SwiftNIO listeners on 127.0.0.1 only:
 //   :8088  the HTTP fixtures (keep-alive, routed by `VulnLab.respond`)
 //   :8089  `/echo-raw`: writes back exactly the bytes it received, then closes (close-delimited)
+//   :8443  the same fixtures over TLS, with a certificate from a throwaway CA (F02 acceptance #4:
+//          "upstream to VulnLab's self-signed :8443")
 
 import GulpCore
+import GulpTLS
 import NIOCore
 import NIOPosix
+import NIOSSL
 
 /// The running listeners.
 struct VulnLabServer: Sendable {
     let app: any Channel
     let raw: any Channel
+    let tls: any Channel
 
-    static func start(appPort: Int, rawPort: Int) async throws -> VulnLabServer {
+    static func start(appPort: Int, rawPort: Int, tlsPort: Int) async throws -> VulnLabServer {
         let app = try await ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
@@ -28,7 +33,19 @@ struct VulnLabServer: Sendable {
                 })
             }
             .bind(host: "127.0.0.1", port: rawPort).get()
-        return VulnLabServer(app: app, raw: raw)
+        // Not signed by anything a client trusts: a stand-in for a staging server's certificate.
+        let minter = try LeafMinter(authority: CertificateAuthority.generate(keyType: .p256))
+        let context = try await minter.serverContext(for: "localhost", alpn: ["http/1.1"])
+        let tls = try await ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton)
+            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .childChannelInitializer { channel in
+                channel.eventLoop.makeCompletedFuture(withResultOf: {
+                    try channel.pipeline.syncOperations.addHandler(NIOSSLServerHandler(context: context))
+                    try channel.pipeline.syncOperations.addHandler(AppHandler())
+                })
+            }
+            .bind(host: "127.0.0.1", port: tlsPort).get()
+        return VulnLabServer(app: app, raw: raw, tls: tls)
     }
 
     func waitUntilClosed() async throws {

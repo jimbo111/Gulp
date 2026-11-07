@@ -6,11 +6,12 @@ order; within a milestone, do P0 first.
 
 ## Current status
 
-- **Phase**: **M2 DONE** — CI green on both platforms (run 42416523505, commit `1acf39c`), and the M2 DoD
-  is an executable check (`Scripts/m2-dod.sh`, run by the Linux job): PASS. M0 and M1 done earlier.
-- **Active milestone**: **M3a — TLS interception + CA (HTTP/1.1)**, then M3b (HTTP/2). M3 was split
-  by the 2026-11-07 feature review (`docs/FEATURE-REVIEW.md`). GulpTLS (CA, minting, caches,
-  storage, ClientHello sniffer) has landed; upstream TLS, CONNECT/MITM and the CA install UI are next.
+- **Phase**: **M3a DONE** — CI green on both platforms (run 42424466338, commit `054b24a`); the M3a
+  DoD (`Scripts/m3a-dod.sh`, Linux CI) PASS: curl trusting only the exported Gulp CA fetched
+  `https://localhost:8443/echo` and `https://example.com` through `gulp-cli proxy`, and the reopened
+  project holds the decrypted exchanges. M0, M1, M2 done earlier (their DoD scripts still pass).
+- **Active milestone**: **M3b — HTTP/2** (ALPN mirroring PRX-008, client-side h2 PRX-009, upstream
+  h2 HTTP-020…024, trailers HTTP-027).
 - **Branching**: `main` holds merged milestones (PR jimbo111/Gulp#1 merged M0–M2). Work happens on
   the session branch and is merged by PR once CI is green.
 - **Build verification**: the authoring container has no Swift toolchain (`download.swift.org` is
@@ -36,9 +37,11 @@ order; within a milestone, do P0 first.
     - F20 §4: `settingsChanged` is declared but never published.
     - No app-terminate hook: on Cmd-Q the last ~50 ms of queued writes may be lost (window close is
       fine). Exchange ids can be reused after the newest rows are deleted and the project reopened.
-- **Next action**: M3a — upstream TLS in GulpHTTP (TLS-008/009), CONNECT + MITM + pass-through in
-  GulpProxy (PRX-005…007), Settings → TLS with Keychain install/trust status (MAC-001/002), VulnLab
-  `:8443`, and the executable DoD. Then M3b (HTTP/2, trailers).
+- **M3a carry-overs**: TLS-017 ECH handling (P1); MAC-003 simulator install (P1); TLS-007 PKCS#12
+  import (PEM import works); pass-through tunnels are not yet logged (PRX-007 "tunnel entry" needs
+  the Logger, M9); `TLSInfo.cipherSuite` is empty (NIOSSL doesn't expose the negotiated suite);
+  PRX-046 `http://gulp/cert.pem` landing page (P1) not yet served.
+- **Next action**: M3b — HTTP/2 on both sides with ALPN mirroring, then its executable DoD.
 - **Waiting on the owner**: the scope proposals in `docs/FEATURE-REVIEW.md` §3 (add, merge, defer,
   cut). Nothing has been removed from the specs until they are decided.
 - **Product decisions**: resolved by the owner and recorded in `docs/07-decisions.md` §"Product
@@ -128,7 +131,7 @@ for behavior.
 - [x] M0 — Scaffolding (repo layout, Package.swift, project.yml, Makefile, CI, empty app window) — **CI green both platforms (`6e17d38`)**
 - [x] M1 — Core model + raw HTTP/1 engine — **CI green both platforms + executable DoD PASS (`cd84c2a`)**
 - [x] M2 — Plain-HTTP proxy, storage, history UI — **CI green both platforms + executable DoD PASS (`1acf39c`)**
-- [ ] M3a — TLS interception + CA (HTTP/1.1) — GulpTLS landed (`996d99d`)
+- [x] M3a — TLS interception + CA (HTTP/1.1) — **CI green both platforms + executable DoD PASS (`054b24a`)**
 - [ ] M3b — HTTP/2 (client side + upstream, trailers)
 - [ ] M4 — Intercept, Match & Replace, message editor, WebSockets
 - [ ] M5 — Repeater + advanced HTTP engine (HTTP/2 raw, group/race sends)
@@ -253,6 +256,20 @@ for behavior.
   - M3a progress: GulpTLS — CA (RSA/P-256), leaf minting with DNS/IP SANs and IDN A-labels,
     de-duplicated LeafMinter with LRU leaf + (host, ALPN) context caches, File/Keychain CA stores,
     ClientHello SNI/ALPN sniffer; tests do live NIOSSL handshakes against minted leaves.
+
+- 2026-11-07 — **M3a DONE** (CI run 42424466338, `054b24a`; DoD `Scripts/m3a-dod.sh`: PASS, incl.
+  a real https://example.com through the proxy):
+  - GulpHTTP: upstream TLS inserted under the HTTP handler (direct, SOCKS, CONNECT tunnel); a
+    custom verification callback captures the chain and the would-be result (swift-certificates
+    Verifier vs the system PEM roots) — enforced only on request; TLSInfo on every exchange;
+    versions/ciphers/ALPN settings in the pool key; refused connects retry all addresses.
+  - GulpProxy: CONNECT → `200` → TunnelSniffer: MITM with a leaf for the SNI (replaying the
+    ClientHello into NIOSSL), glob pass-through splice, or plain HTTP in the tunnel.
+  - Sessions intercept with the user's CA (Keychain on macOS, 0600 file elsewhere); `gulp-cli ca
+    export|show`; VulnLab `:8443`; Settings → TLS (details, export, install/remove trust, badge).
+  - Caught by CI: `localhost` → `::1` first on macOS (single-address connect), BoringSSL refusing a
+    server certificate without `digitalSignature`, `TLSUserEvent` living in NIOTLS, internal
+    memberwise inits on public structs (twice), `catch where` spacing.
 
 ## How to pick up work (reminder)
 

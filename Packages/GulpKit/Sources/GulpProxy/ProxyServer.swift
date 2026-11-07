@@ -1,5 +1,6 @@
-// GulpProxy — the HTTP/1 forward proxy (F01 PRX-001…PRX-004). M2 scope: plain HTTP (absolute-form
-// requests). CONNECT/TLS interception arrives in M3, invisible mode and the landing page later.
+// GulpProxy — the HTTP/1 forward proxy (F01 PRX-001…PRX-007): absolute-form plain HTTP, and CONNECT
+// tunnels that are intercepted (TLS MITM), spliced (pass-through) or carry plain HTTP (Tunnel.swift).
+// HTTP/2 to the client arrives in M3b; invisible mode and the landing page later.
 
 import Foundation
 import GulpCore
@@ -33,11 +34,19 @@ public struct ProxyListenerConfig: Codable, Sendable, Hashable, Identifiable {
 /// Runs proxy listeners and forwards their traffic through the shared HTTP engine.
 public actor ProxyServer {
     private let engine: any HTTPEngine
+    private var tls: ProxyTLSOptions?
     private var listeners: [UUID: (server: any Channel, clients: ClientConnections)] = [:]
 
     /// Create a proxy that forwards (and, through the engine's recorder, records) via `engine`.
-    public init(engine: any HTTPEngine) {
+    /// Without `tls`, CONNECT is refused (no CA to intercept with).
+    public init(engine: any HTTPEngine, tls: ProxyTLSOptions? = nil) {
         self.engine = engine
+        self.tls = tls
+    }
+
+    /// Change TLS interception for connections accepted from now on.
+    public func setTLS(_ options: ProxyTLSOptions?) {
+        tls = options
     }
 
     /// Start a listener and return the port it is bound to. Bind failures (port in use, PRX-001)
@@ -46,6 +55,7 @@ public actor ProxyServer {
     public func start(_ config: ProxyListenerConfig) async throws -> Int {
         if listeners[config.id] != nil { await stop(config.id) }
         let engine = self.engine
+        let tls = self.tls
         let clients = ClientConnections()
         let channel: any Channel
         do {
@@ -58,10 +68,12 @@ public actor ProxyServer {
                     let pressure = Backpressure()
                     Task {
                         await ProxyConnection.serve(
-                            items, channel: channel, engine: engine, client: client, pressure: pressure)
+                            items, channel: channel, engine: engine, client: client, pressure: pressure,
+                            intercepts: tls != nil)
                     }
                     return channel.eventLoop.makeCompletedFuture(withResultOf: {
-                        let handler = ProxyConnectionHandler(items: continuation, pressure: pressure)
+                        let handler = ProxyConnectionHandler(
+                            items: continuation, pressure: pressure, tls: tls)
                         try channel.pipeline.syncOperations.addHandler(handler)
                     })
                 }
@@ -114,8 +126,10 @@ final class ClientConnections: Sendable {
 
 /// Work for a connection's serving task, in arrival order.
 enum ProxyItem: Sendable {
-    /// Forward this request.
-    case request(RawRequest)
+    /// Forward this request: absolute-form (`tunnel` nil) or inside a tunnel to `tunnel`.
+    case request(RawRequest, tunnel: HTTPTarget?)
+    /// Answer a CONNECT; the handler is already waiting for the tunnel to start.
+    case connect(RawRequest)
     /// Answer `100 Continue` (after any earlier responses).
     case sendContinue
     /// Answer an error and close (unframeable input).
@@ -149,26 +163,52 @@ final class Backpressure: Sendable {
 final class ProxyConnectionHandler: ChannelInboundHandler {
     typealias InboundIn = ByteBuffer
 
+    private enum Mode {
+        /// A forward proxy: absolute-form requests and CONNECT.
+        case forward
+        /// A CONNECT was framed; bytes wait until the tunnel starts.
+        case tunnelPending
+        /// Inside a tunnel: origin-form requests go to this target.
+        case tunnel(HTTPTarget)
+    }
+
     private let items: AsyncStream<ProxyItem>.Continuation
     private let pressure: Backpressure
+    private let tls: ProxyTLSOptions?
     private var buffer: [UInt8] = []
     private var sentContinue = false
     private var rejected = false
+    private var mode = Mode.forward
 
-    init(items: AsyncStream<ProxyItem>.Continuation, pressure: Backpressure) {
+    init(items: AsyncStream<ProxyItem>.Continuation, pressure: Backpressure, tls: ProxyTLSOptions?) {
         self.items = items
         self.pressure = pressure
+        self.tls = tls
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         guard !rejected else { return }
         buffer.append(contentsOf: unwrapInboundIn(data).readableBytesView)
+        frame(context: context)
+    }
+
+    private func frame(context: ChannelHandlerContext) {
         loop: while true {
+            if case .tunnelPending = mode { return }
             switch RequestFramer.next(buffer) {
             case .request(let request, let length):
                 buffer.removeFirst(length)
                 sentContinue = false
-                enqueue(.request(request), context: context)
+                switch mode {
+                case .tunnel(let target):
+                    enqueue(.request(request, tunnel: target), context: context)
+                case .forward where request.bytes[request.parsed.method].string() == "CONNECT":
+                    mode = .tunnelPending  // the bytes after CONNECT belong to the tunnel
+                    enqueue(.connect(request), context: context)
+                    return
+                case .forward, .tunnelPending:
+                    enqueue(.request(request, tunnel: nil), context: context)
+                }
             case .reject(let status, let message):
                 rejected = true
                 buffer = []
@@ -183,6 +223,24 @@ final class ProxyConnectionHandler: ChannelInboundHandler {
             // The client waits for this before sending its body (F01 §5 Expect: 100-continue).
             sentContinue = true
             enqueue(.sendContinue, context: context)
+        }
+    }
+
+    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        if let ready = event as? TunnelReady, let tls {
+            // `200 Connection established` is out: let the sniffer decide what the tunnel carries.
+            let sniffer = TunnelSniffer(host: ready.host, port: ready.port, tls: tls, initial: buffer)
+            buffer = []
+            do {
+                try context.pipeline.syncOperations.addHandler(sniffer, position: .before(self))
+            } catch {
+                context.close(promise: nil)
+            }
+        } else if let tunnel = event as? TunnelTarget {
+            mode = .tunnel(tunnel.target)
+            frame(context: context)
+        } else {
+            context.fireUserInboundEventTriggered(event)
         }
     }
 
@@ -203,12 +261,24 @@ final class ProxyConnectionHandler: ChannelInboundHandler {
 enum ProxyConnection {
     static func serve(
         _ items: AsyncStream<ProxyItem>, channel: any Channel, engine: any HTTPEngine, client: String?,
-        pressure: Backpressure
+        pressure: Backpressure, intercepts: Bool
     ) async {
         for await item in items {
             let reply: (bytes: [UInt8], close: Bool)
+            var tunnel: TunnelReady?
             switch item {
-            case .request(let request): reply = await forward(request, engine: engine, client: client)
+            case .request(let request, let target):
+                reply = await forward(request, tunnel: target, engine: engine, client: client)
+            case .connect(let request):
+                if intercepts, let authority = connectAuthority(request) {
+                    reply = (Array("HTTP/1.1 200 Connection established\r\n\r\n".utf8), false)
+                    tunnel = TunnelReady(host: authority.host, port: authority.port)
+                } else {
+                    let message =
+                        intercepts
+                        ? "CONNECT needs a host:port target." : "HTTPS interception is off (no Gulp CA)."
+                    reply = (errorPage(intercepts ? 400 : 502, message, close: true), true)
+                }
             case .sendContinue: reply = (Array("HTTP/1.1 100 Continue\r\n\r\n".utf8), false)
             case .reject(let status, let message): reply = (errorPage(status, message, close: true), true)
             }
@@ -222,6 +292,7 @@ enum ProxyConnection {
             } catch {
                 break
             }
+            if let tunnel { channel.pipeline.fireUserInboundEventTriggered(tunnel) }
             if reply.close {
                 channel.close(promise: nil)
                 break
@@ -231,7 +302,7 @@ enum ProxyConnection {
 
     /// Forward one request (PRX-002) and decide whether the client connection stays open (PRX-003).
     static func forward(
-        _ request: RawRequest, engine: any HTTPEngine, client: String?
+        _ request: RawRequest, tunnel: HTTPTarget?, engine: any HTTPEngine, client: String?
     ) async -> (bytes: [UInt8], close: Bool) {
         let method = request.bytes[request.parsed.method].string()
         let version = request.bytes[request.parsed.version].string()
@@ -240,14 +311,19 @@ enum ProxyConnection {
             || request.hasHeaderToken("proxy-connection", "close")
             || (version == "HTTP/1.0" && !request.hasHeaderToken("connection", "keep-alive"))
         if method == "CONNECT" {
-            let message = "HTTPS interception (CONNECT) arrives in milestone M3."
-            return (errorPage(501, message, close: true), true)
+            return (errorPage(400, "CONNECT inside a tunnel is not supported.", close: true), true)
         }
-        guard let rewritten = ForwardRewrite.originForm(request) else {
+        let originForm: RawRequest
+        let target: HTTPTarget
+        if let tunnel {
+            // Inside a tunnel the target is the CONNECT authority; the request goes as sent.
+            (originForm, target) = (request, tunnel)
+        } else if let rewritten = ForwardRewrite.originForm(request) {
+            (originForm, target) = rewritten
+        } else {
             let message = "Gulp is a forward proxy: configure it as your HTTP proxy (absolute-form requests)."
             return (errorPage(400, message, close: clientWantsClose), clientWantsClose)
         }
-        let (originForm, target) = rewritten
         var options = SendOptions(recordAs: .proxy)
         options.clientAddress = client
         let forwarded = ForwardRewrite.strippingHopByHop(originForm)
@@ -278,5 +354,18 @@ enum ProxyConnection {
             "HTTP/1.1 \(status) \(reason)\r\nContent-Type: text/html; charset=utf-8\r\n"
             + "Content-Length: \(body.utf8.count)\r\n" + (close ? "Connection: close\r\n" : "") + "\r\n"
         return Array((head + body).utf8)
+    }
+}
+
+extension ProxyConnection {
+    /// `host:port` from a CONNECT request-target (`[v6]:port` accepted; the port is required).
+    static func connectAuthority(_ request: RawRequest) -> (host: String, port: Int)? {
+        let text = request.bytes[request.parsed.target].string()
+        guard let colon = text.lastIndex(of: ":"), let port = Int(text[text.index(after: colon)...]),
+            (1...65_535).contains(port)
+        else { return nil }
+        var host = String(text[..<colon])
+        if host.hasPrefix("["), host.hasSuffix("]") { host = String(host.dropFirst().dropLast()) }
+        return host.isEmpty ? nil : (host, port)
     }
 }

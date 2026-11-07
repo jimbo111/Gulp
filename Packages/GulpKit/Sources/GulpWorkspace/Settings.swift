@@ -117,9 +117,24 @@ public struct ProxySettings: SettingsGroup, Hashable {
     public var version = 1
     /// Listeners, in display order.
     public var listeners: [ProxyListenerConfig]
+    /// Host globs whose TLS is not intercepted (PRX-007), e.g. `*.apple.com`.
+    public var passThroughHosts: [String] = []
 
     /// Create proxy settings.
-    public init(listeners: [ProxyListenerConfig]) {
+    public init(listeners: [ProxyListenerConfig], passThroughHosts: [String] = []) {
         self.listeners = listeners
+        self.passThroughHosts = passThroughHosts
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case version, listeners, passThroughHosts
+    }
+
+    /// Decode, accepting settings saved before a field existed.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        listeners = try container.decode([ProxyListenerConfig].self, forKey: .listeners)
+        passThroughHosts = try container.decodeIfPresent([String].self, forKey: .passThroughHosts) ?? []
     }
 }
