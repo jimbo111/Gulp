@@ -29,6 +29,27 @@ public enum GulpNetworkError: Error, Sendable, Codable, Equatable, Hashable {
         }
     }
 
+    /// Decode a stored `exchanges.error` token. The token carries no detail, so string/limit payloads
+    /// come back empty (`""` / `0`); unknown tokens become `.other(token)`.
+    public init(code: String) {
+        switch code {
+        case "cancelled": self = .cancelled
+        case "connect_timeout": self = .connectTimeout
+        case "tls_handshake_timeout": self = .tlsHandshakeTimeout
+        case "first_byte_timeout": self = .firstByteTimeout
+        case "idle_timeout": self = .idleTimeout
+        case "total_timeout": self = .totalTimeout
+        case "connection_refused": self = .connectionRefused
+        case "connection_reset": self = .connectionReset
+        case "dns_failure": self = .dnsFailure("")
+        case "tls_failure": self = .tlsFailure("")
+        case "too_large": self = .tooLarge(limit: 0)
+        case "incomplete_response": self = .incompleteResponse
+        case "upstream_proxy_error": self = .upstreamProxyError("")
+        default: self = .other(code)
+        }
+    }
+
     /// A short human-readable description for tables and the event log.
     public var userDescription: String {
         switch self {

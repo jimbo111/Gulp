@@ -60,10 +60,14 @@ let package = Package(
         .target(name: "GulpCodec", dependencies: ["GulpCore"]),
         .target(name: "GulpQuery", dependencies: ["GulpCore"]),
         .target(name: "GulpDiff", dependencies: ["GulpCore"]),
+        // System zlib: blob compression (GulpStore) and decompression helpers (GulpHTTP, HTTP-007).
+        // Headers ship with the macOS SDK and with zlib1g-dev on Linux.
+        .systemLibrary(name: "CZlib", path: "Sources/CZlib"),
         .target(
             name: "GulpStore",
             dependencies: [
-                "GulpCore", .product(name: "GRDB", package: "GRDB.swift"),
+                "GulpCore", "CZlib", .product(name: "GRDB", package: "GRDB.swift"),
+                .product(name: "Crypto", package: "swift-crypto"),
             ]),
         .target(
             name: "GulpTLS",
@@ -76,9 +80,6 @@ let package = Package(
             ]),
 
         // ---- Engine layer ----
-        // System zlib for the decompression helpers (HTTP-007); headers ship with the macOS SDK and
-        // with zlib1g-dev on Linux.
-        .systemLibrary(name: "CZlib", path: "Sources/CZlib"),
         .target(
             name: "GulpHTTP",
             dependencies: ["GulpCore", "GulpTLS", "CZlib"] + nioHTTP + [

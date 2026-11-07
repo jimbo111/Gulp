@@ -165,6 +165,30 @@ public struct RawResponse: Sendable, Hashable {
         self.interim = interim
         self.isHeadResponse = headRequest
     }
+    /// Rebuild a response from every byte received on the wire, splitting off the interim (1xx,
+    /// except 101) responses that precede the final one. Inverse of `wireBytes`.
+    public init(wire: Bytes, headRequest: Bool = false) {
+        var interim: [RawResponse] = []
+        var rest = wire.rawBytes
+        while true {
+            let (end, terminator) = HTTP1.headerBlockEnd(rest)
+            guard terminator != 0, end < rest.count else { break }
+            let status = HTTP1.parseResponse(Bytes(Array(rest[..<end]))).statusCode
+            guard status >= 100, status < 200, status != 101 else { break }
+            interim.append(RawResponse(Bytes(Array(rest[..<end]))))
+            rest = Array(rest[end...])
+        }
+        self.init(Bytes(rest), interim: interim, headRequest: headRequest)
+    }
+
+    /// Every byte received for this response, in wire order: interim responses, then the final one.
+    public var wireBytes: Bytes {
+        var all = Bytes()
+        for response in interim { all.append(response.bytes) }
+        all.append(bytes)
+        return all
+    }
+
     /// Return the exact input bytes unchanged (HTTP-001 identity).
     public func serialize() -> Bytes { bytes }
     /// Splice `new` over `range` and re-parse; only those bytes change.
