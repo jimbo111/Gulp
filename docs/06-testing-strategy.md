@@ -20,8 +20,11 @@ Rules:
 
 ## 2. Property and round-trip tests (must exist from M1)
 
-- `parse(bytes).serialize() == bytes` for every fixture in `Tests/Fixtures/http/` (including
-  malformed ones: bare LF, duplicate headers, obs-fold, missing final CRLF, NUL bytes, 1 MB headers).
+- `parse(bytes).serialize() == bytes` for every fixture in
+  `Packages/GulpKit/Tests/GulpCoreTests/Fixtures/http/` (`request-*.http` / `response-*.http`, exact
+  wire bytes protected by `.gitattributes`), including malformed ones: bare LF, duplicate headers,
+  obs-fold, missing final CRLF, NUL bytes; the 1 MB-header and 10k-header cases and a seeded fuzz
+  corpus are generated in `ParserPropertyTests`.
 - Editing a header via `ParsedRequest` changes only that header's bytes.
 - Codecs: `decode(encode(x)) == x` over random bytes, for every reversible codec.
 - GulpQL: `parse(print(ast)) == ast`.

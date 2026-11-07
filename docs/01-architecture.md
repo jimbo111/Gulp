@@ -230,9 +230,16 @@ public struct Delivery: Sendable {                 // what a subscriber's stream
 public actor EventBus {
     public func publish(_ event: GulpEvent)         // never blocks; fans out to each subscriber's bounded buffer
     public func subscribe(bufferSize: Int = 256) -> AsyncStream<Delivery>   // on overflow, yields Delivery(event: nil, lagged: n)
+    public func subscribeWithID(bufferSize: Int = 256) -> Subscription      // (id, stream), for an explicit unsubscribe
     public func unsubscribe(_ id: SubscriptionID)   // also happens automatically when the stream is dropped
 }
+public typealias Subscription = (id: SubscriptionID, stream: AsyncStream<Delivery>)
 ```
+
+Overflow semantics (as implemented): each buffer uses `.bufferingOldest(bufferSize)`, so when it is
+full the *new* event is rejected and counted, buffered events keep their order, and the
+`Delivery(event: nil, lagged: n)` marker is enqueued on the next `publish` that finds room — right
+after the events the subscriber did receive and before the next one it will receive.
 
 A subscriber that sees `lagged > 0` should re-query the store for the window it missed (§5.3). This
 is why `.lagged` is **not** a `GulpEvent` case: the event enum stays a pure description of what

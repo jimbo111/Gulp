@@ -172,20 +172,32 @@ public enum HTTP1 {
     typealias LineScan = (ranges: [Range<Int>], ending: LineEnding, warnings: [ParseWarning])
     typealias HeaderScan = (fields: [HeaderField], warnings: [ParseWarning])
 
-    /// Returns (index just past the end of the header block, sawCRLFCRLF). If no blank line is found,
-    /// returns (count, false) — the whole input is headers, body empty (missingFinalCRLF warning).
-    static func headerBlockEnd(_ a: [UInt8]) -> (end: Int, crlf: Bool) {
+    /// Locate the blank line that ends the header block. Returns the index just past it and the
+    /// terminator length: 4 for CRLFCRLF, 2 for a tolerated LFLF (including CRLF+LF), or 0 when no
+    /// blank line exists (then `end == a.count`: the whole input is headers, body empty).
+    static func headerBlockEnd(_ a: [UInt8]) -> (end: Int, terminator: Int) {
         var i = 0
         while i < a.count {
             if i + 3 < a.count, a[i] == CR, a[i + 1] == LF, a[i + 2] == CR, a[i + 3] == LF {
-                return (i + 4, true)
+                return (i + 4, 4)
             }
             if i + 1 < a.count, a[i] == LF, a[i + 1] == LF {
-                return (i + 2, false)
+                return (i + 2, 2)
             }
             i += 1
         }
-        return (a.count, false)
+        return (a.count, 0)
+    }
+
+    /// The header region `[0, regionEnd)` (start line + field lines, excluding the blank line) and
+    /// the warning for a missing blank line.
+    static func headerRegion(_ a: [UInt8]) -> (blockEnd: Int, regionEnd: Int, warnings: [ParseWarning]) {
+        let (end, terminator) = headerBlockEnd(a)
+        switch terminator {
+        case 4: return (end, end - 2, [])
+        case 2: return (end, end - 1, [])
+        default: return (end, a.count, a.isEmpty ? [] : [.missingFinalCRLF])
+        }
     }
 
     /// Split a header region `[0, end)` into content line ranges (terminator excluded) plus the
@@ -272,9 +284,8 @@ public enum HTTP1 {
     /// Frame a request's start line, headers, and body as byte ranges, never normalizing.
     public static func parseRequest(_ bytes: Bytes) -> ParsedRequest {
         let a = bytes.rawBytes
-        let (end, crlf) = headerBlockEnd(a)
-        var warnings: [ParseWarning] = crlf ? [] : (a.isEmpty ? [] : [.missingFinalCRLF])
-        let headerRegionEnd = end == a.count ? a.count : end - (crlf ? 2 : 1)
+        let (end, headerRegionEnd, regionWarn) = headerRegion(a)
+        var warnings = regionWarn
         let (lineRanges, ending, lineWarn) = lines(a, upTo: headerRegionEnd)
         warnings.append(contentsOf: lineWarn)
         let startLine = lineRanges.first ?? 0..<0
@@ -301,9 +312,8 @@ public enum HTTP1 {
     /// Frame a response's status line, headers, and body, and resolve body framing (HTTP-002).
     public static func parseResponse(_ bytes: Bytes) -> ParsedResponse {
         let a = bytes.rawBytes
-        let (end, crlf) = headerBlockEnd(a)
-        var warnings: [ParseWarning] = crlf ? [] : (a.isEmpty ? [] : [.missingFinalCRLF])
-        let headerRegionEnd = end == a.count ? a.count : end - (crlf ? 2 : 1)
+        let (end, headerRegionEnd, regionWarn) = headerRegion(a)
+        var warnings = regionWarn
         let (lineRanges, ending, lineWarn) = lines(a, upTo: headerRegionEnd)
         warnings.append(contentsOf: lineWarn)
         let startLine = lineRanges.first ?? 0..<0
@@ -475,7 +485,9 @@ public enum HTTP1 {
 
     /// Parse an ASCII hex integer over `a[range]` (no "0x"); nil if empty or a non-hex byte appears.
     static func hexValue(_ a: [UInt8], _ range: Range<Int>) -> Int? {
-        if range.isEmpty { return nil }
+        // At most 15 hex digits (< 2^60), so the value can neither overflow nor wrap negative —
+        // a negative size would otherwise make `dechunk` slice backwards and trap.
+        if range.isEmpty || range.count > 15 { return nil }
         var v = 0
         for idx in range {
             let b = a[idx]

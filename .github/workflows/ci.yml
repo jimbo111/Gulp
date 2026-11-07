@@ -1,8 +1,8 @@
 name: CI
 
 on:
+  # Every branch push runs CI (the repo currently has no `main`; work happens on feature branches).
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
