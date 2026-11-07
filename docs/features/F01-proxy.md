@@ -41,7 +41,7 @@ editing (intercept), rewrite them automatically (match & replace), and feeds the
 | PRX-010 | P0 | Global intercept toggle (toolbar + ⌘⇧I). When on, matching requests are held in an **intercept queue**. |
 | PRX-011 | P0 | Intercept UI: queue list (method, URL, time waiting) and the selected message in an editable MessageEditor with Inspector. Actions: Forward (⌥⌘F), Drop (⌥⌘X), Forward all, Drop all, Send to…, "Intercept response to this request". |
 | PRX-012 | P0 | Edited messages are forwarded with the edited bytes; the original is kept (`original_request_blob`) and the row shows an "edited" marker. |
-| PRX-013 | P0 | Intercept rules (request): ordered conditions joined by AND/OR. Fields: domain, IP, protocol, method, URL, file extension, request contains params, header, body, in scope. Matching: matches/doesn't match regex. Default rules: skip images/CSS/fonts/JS (`^(gif|jpg|png|css|js|ico|svg|woff2?)$`), only in-scope. |
+| PRX-013 | P0 | Intercept rules (request): ordered conditions joined by AND/OR. Fields: domain, IP, protocol, method, URL, file extension, request contains params, header, body, in scope. Matching: matches/doesn't match regex. Default rules: skip images/CSS/fonts/JS (`^(gif\|jpg\|png\|css\|js\|ico\|svg\|woff2?)$`), only in-scope. |
 | PRX-014 | P0 | Intercept responses (separate toggle and rule set: status, MIME, header, body, "request was intercepted"). |
 | PRX-015 | P1 | Rules can also be written as a GulpQL expression (F05) instead of the rule builder. |
 | PRX-016 | P1 | Timeout policy: optionally auto-forward intercepted items after N seconds. The queue shows countdowns. |

@@ -14,12 +14,12 @@ All three use the same `ProjectSession` as the app, so behavior matches.
 
 | ID | Pri | Requirement |
 |---|---|---|
-| AUT-001 | P0 | `gulp send` — send a raw request (`--raw file|-`, `--target`, version/connection/redirect options) and print the response (raw or `--json`), with exit codes for transport errors. |
-| AUT-002 | P0 | `gulp scan --url <seed> [--config fast|balanced|thorough|<file>] [--scope <file>] [--report out.html|.json|.sarif] [--fail-on high|medium|...]` — headless crawl-and-audit; progress to stderr; exits non-zero when issues at/above the threshold are found (for CI gating). |
+| AUT-001 | P0 | `gulp send` — send a raw request (`--raw file\|-`, `--target`, version/connection/redirect options) and print the response (raw or `--json`), with exit codes for transport errors. |
+| AUT-002 | P0 | `gulp scan --url <seed> [--config fast\|balanced\|thorough\|<file>] [--scope <file>] [--report out.html\|.json\|.sarif] [--fail-on high\|medium\|...]` — headless crawl-and-audit; progress to stderr; exits non-zero when issues at/above the threshold are found (for CI gating). |
 | AUT-003 | P0 | `gulp proxy --port 8080 [--project f.gulp]` — run a headless proxy that records to a project (useful for capturing traffic in CI/e2e runs). |
-| AUT-004 | P0 | `gulp project` subcommands: `new`, `info`, `compact`, `export (har|json|sarif)`, `import`. |
+| AUT-004 | P0 | `gulp project` subcommands: `new`, `info`, `compact`, `export (har\|json\|sarif)`, `import`. |
 | AUT-005 | P1 | `gulp fuzz` — run a saved/declared Fuzzer attack headlessly and emit results (CSV/JSON). |
-| AUT-006 | P1 | `gulp replay <har|.gulp>` — replay requests through the engine/proxy (test fixtures; VulnLab-driven tests). |
+| AUT-006 | P1 | `gulp replay <har\|.gulp>` — replay requests through the engine/proxy (test fixtures; VulnLab-driven tests). |
 | AUT-007 | P1 | `gulp api --port 9000 --token <t>` — start the REST+MCP server (AUT-010/AUT-020) headlessly against a project. |
 | AUT-008 | P1 | `gulp dev generate-project --exchanges N` and other dev helpers (doc 06 §5). |
 | AUT-009 | P1 | Global flags: `--project`, `--config-dir`, `--log-level`, `--quiet`, `--json`; sensible exit codes; man-page/`--help` for every command (swift-argument-parser). |
