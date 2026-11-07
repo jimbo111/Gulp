@@ -45,6 +45,10 @@ jobs:
         run: swift build --package-path Packages/GulpKit -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
       - name: Test GulpKit
         run: swift test --package-path Packages/GulpKit --parallel -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+      - name: M1 Definition of Done (gulp-cli + VulnLab byte fidelity)
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/m1-dod.sh
       - name: Build Beacon
         run: swift build --package-path Beacon -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
       - name: Test Beacon

@@ -334,11 +334,14 @@ public final class NIOHTTPEngine: HTTPEngine {
             idleTimeout: timeAmount(options.timeouts.idleBetweenBytes), totalDeadline: totalDeadline,
             promise: promise)
         let writeStart = NIODeadline.now()
-        let write = channel.writeAndFlush(command)
+        // The explicit-promise form: in an async context the plain `writeAndFlush(_:)` resolves to
+        // NIO's `async throws` overload, but we need the future to chain a failure handler onto.
+        let written = channel.eventLoop.makePromise(of: Void.self)
         // If the write never reaches the handler (channel already closed), fail the response here;
         // a second completion of the promise is ignored.
-        write.whenFailure { promise.fail($0) }
-        _ = try? await write.get()
+        written.futureResult.whenFailure { promise.fail($0) }
+        channel.writeAndFlush(command, promise: written)
+        _ = try? await written.futureResult.get()
         let writeEnd = NIODeadline.now()
         let wire: WireResponse
         do {

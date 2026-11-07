@@ -129,13 +129,12 @@ let package = Package(
         .executableTarget(
             name: "gulp-cli",
             dependencies: [
-                "GulpWorkspace", "GulpAutomation",
+                "GulpWorkspace", "GulpAutomation", "GulpHTTP", "GulpCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),
         .executableTarget(
             name: "gulp-vulnlab",
-            dependencies: [
-                "GulpCore",
+            dependencies: ["GulpCore"] + nioCore + [
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),

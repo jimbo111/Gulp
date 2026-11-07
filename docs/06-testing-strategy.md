@@ -31,7 +31,12 @@ Rules:
 
 ## 3. VulnLab — the reference vulnerable target (`gulp-vulnlab`)
 
-VulnLab is a deliberately vulnerable web app that ships in the repo (Hummingbird executable target).
+VulnLab is a deliberately vulnerable web app that ships in the repo (`gulp-vulnlab` executable
+target). Its protocol-level **Basics** fixtures (`/echo`, `/echo-raw`, `/chunked`, `/continue`, …) run
+on a small raw SwiftNIO server so every byte on the wire is exact — a framework would normalize the
+very things they exist to exercise (1xx responses, chunk bytes, verbatim echo). The app-level
+endpoints below (auth, XSS, SQLi, …) may use Hummingbird. The M1 DoD is executable:
+`Scripts/m1-dod.sh` (run by the Linux CI job).
 It's the fixture for manual checks, integration tests and scanner accuracy tests. **It must bind
 only to 127.0.0.1** and prints a warning banner at startup.
 

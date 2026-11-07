@@ -202,10 +202,9 @@ public enum GroupSendMode: Sendable {
     case sequentialSingleConnection, sequentialSeparateConnections, parallel, singlePacket
 }
 
-/// A live WebSocket (F01 §2.4 / F26). Declared in M1; implemented in M4.
-public struct WebSocketSession: Sendable {
-    init() {}
-}
+/// A live WebSocket (F01 §2.4 / F26). Declared in M1; implemented in M4. (Its synthesized
+/// initializer is internal, so only the engine can create one.)
+public struct WebSocketSession: Sendable {}
 
 // MARK: - Hooks and recording
 
