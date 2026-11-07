@@ -133,7 +133,9 @@ let package = Package(
         // ---- UI layer (macOS content; empty on Linux) ----
         .target(
             name: "GulpFeatures",
-            dependencies: ["GulpCore", "GulpStore", "GulpProxy", "GulpWorkspace", "GulpUI", "GulpAI"]),
+            dependencies: [
+                "GulpCore", "GulpStore", "GulpProxy", "GulpTLS", "GulpWorkspace", "GulpUI", "GulpAI",
+            ]),
 
         // ---- Executables ----
         .executableTarget(
