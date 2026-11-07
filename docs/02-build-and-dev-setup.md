@@ -39,6 +39,7 @@ The Makefile is the single entry point. Every target must work from a clean chec
 | `run` | `build`, then `open` the built `.app` from DerivedData (use `-derivedDataPath .build/xcode` so the path is predictable) |
 | `test-core` | `swift test --package-path Packages/GulpKit --parallel` |
 | `test` | `test-core`, then `xcodebuild test -scheme Gulp` (app and UI tests) |
+| `perf` | `swift test --package-path Packages/GulpKit --filter PerformanceTests` (the performance budgets in doc 06 §5; kept out of `test` because it is slow) |
 | `lint` | `swift format lint --strict --recursive App Packages Beacon` |
 | `format` | `swift format --in-place --recursive App Packages Beacon` |
 | `vulnlab` | `swift run --package-path Packages/GulpKit gulp-vulnlab --port 8088` |

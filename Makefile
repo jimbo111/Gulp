@@ -10,7 +10,7 @@ DEST      := platform=macOS
 
 .DEFAULT_GOAL := help
 
-.PHONY: help bootstrap generate build run test test-core lint format vulnlab beacon release clean
+.PHONY: help bootstrap generate build run test test-core perf lint format vulnlab beacon release clean
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n",$$1,$$2}'
@@ -34,6 +34,9 @@ test-core: ## swift test for GulpKit (works on Linux)
 
 test: test-core ## Core tests + app/UI tests (macOS)
 	xcodebuild -project Gulp.xcodeproj -scheme $(SCHEME) -configuration $(CONFIG) -destination '$(DEST)' -derivedDataPath $(DD) test
+
+perf: ## Performance budget tests (doc 06 §5; slow, excluded from `test`)
+	swift test --package-path $(KIT) --filter PerformanceTests
 
 lint: ## Check formatting (strict)
 	swift format lint --strict --recursive App Packages Beacon UITests
