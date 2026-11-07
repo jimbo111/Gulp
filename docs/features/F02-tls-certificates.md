@@ -33,7 +33,8 @@ CA's lifecycle, leaf-certificate minting, and upstream TLS behavior.
 | TLS-012 | P1 | IP-address targets: mint a certificate with an IP SAN. |
 | TLS-013 | P1 | Certificate details viewer: from any HTTPS history item, show the upstream server's chain (subject, issuer, SANs, validity, key, fingerprints) and the leaf Gulp presented. |
 | TLS-014 | P1 | Per-host "TLS profile" overrides: force TLS 1.2, disable SNI, a specific cipher. |
-| TLS-015 | P2 | "Mimic browser TLS fingerprint" mode for upstream connections (a JA3/JA4-like ClientHello shape via BoringSSL cipher/extension/curve ordering) to avoid bot-detection blocks. Best effort; document the limits. |
+| TLS-015 | P2 | "Mimic browser TLS fingerprint" mode for upstream connections to avoid bot-detection blocks: a browser-like ClientHello judged by **JA4** (JA3 is obsolete since Chrome randomises extension order) plus a browser-like HTTP/2 SETTINGS/priority fingerprint. Best effort; document the limits. |
+| TLS-017 | P1 | Encrypted ClientHello (ECH): when the client's ClientHello carries the `encrypted_client_hello` extension (0xfe0d), mint for the **outer** SNI (the only name visible) and complete the handshake; a browser then retries without ECH per its fallback rules. Record "ECH offered" on the connection. The Gulp Browser (F16) launches with ECH disabled. |
 | TLS-016 | P2 | Optional on-disk leaf cache that survives restarts (faster first load). |
 
 ## 3. UI
