@@ -75,8 +75,14 @@ final class AppHandler: ChannelInboundHandler {
     typealias OutboundOut = ByteBuffer
 
     private var buffer: [UInt8] = []
+    /// Set once `/ws` switched the connection to WebSocket.
+    private var webSocket: WSFrameParser?
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        if webSocket != nil {
+            echoFrames(Array(unwrapInboundIn(data).readableBytesView), context: context)
+            return
+        }
         buffer.append(contentsOf: unwrapInboundIn(data).readableBytesView)
         while let next = Self.nextRequest(buffer) {
             let (request, used) = next
@@ -84,6 +90,16 @@ final class AppHandler: ChannelInboundHandler {
             let target = request.bytes[request.parsed.target].string()
             if target == "/sse" || target.hasPrefix("/sse?") {
                 Self.streamEvents(request, context: context)  // the connection is the stream from now on
+                return
+            }
+            if target == "/ws" || target.hasPrefix("/ws?"),
+                let key = request.headerValue("sec-websocket-key")?.string(),
+                request.hasHeaderToken("upgrade", "websocket")
+            {
+                acceptWebSocket(key: key, context: context)
+                let rest = buffer
+                buffer = []
+                if !rest.isEmpty { echoFrames(rest, context: context) }
                 return
             }
             let reply = VulnLab.respond(to: request)
@@ -125,6 +141,43 @@ final class AppHandler: ChannelInboundHandler {
                 task.cancel()
                 channel.writeAndFlush(channel.allocator.buffer(string: "0\r\n\r\n"), promise: nil)
             }
+        }
+    }
+
+    /// `/ws` (doc 06 §3, M4b): a WebSocket echo. The 101 and a greeting go out in one write (so a
+    /// proxy sees frames arrive together with the handshake); then text and binary messages come
+    /// back as `echo: …`, pings get pongs, and a close is answered with the same close.
+    private func acceptWebSocket(key: String, context: ChannelHandlerContext) {
+        webSocket = WSFrameParser()
+        let head =
+            "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+            + "Sec-WebSocket-Accept: \(WebSocketWire.accept(forKey: key))\r\n\r\n"
+        let greeting = WebSocketWire.frame(opcode: .text, payload: Array("hello from VulnLab".utf8))
+        let out = context.channel.allocator.buffer(bytes: Array(head.utf8) + greeting)
+        context.writeAndFlush(NIOAny(out), promise: nil)
+    }
+
+    private func echoFrames(_ bytes: [UInt8], context: ChannelHandlerContext) {
+        guard let frames = webSocket?.feed(bytes) else { return }
+        for frame in frames {
+            let reply: [UInt8]
+            switch WSOpcode(rawValue: frame.opcode) {
+            case .text, .binary, .continuation:
+                let prefix = frame.opcode == WSOpcode.continuation.rawValue ? [] : Array("echo: ".utf8)
+                let opcode = WSOpcode(rawValue: frame.opcode) ?? .binary
+                reply = WebSocketWire.frame(opcode: opcode, payload: prefix + frame.payload, fin: frame.fin)
+            case .ping:
+                reply = WebSocketWire.frame(opcode: .pong, payload: frame.payload)
+            case .close:
+                let closing = WebSocketWire.frame(opcode: .close, payload: frame.payload)
+                let bound = NIOLoopBound(context, eventLoop: context.eventLoop)
+                context.writeAndFlush(NIOAny(context.channel.allocator.buffer(bytes: closing)))
+                    .whenComplete { _ in bound.value.close(promise: nil) }
+                return
+            case .pong, nil:
+                continue
+            }
+            context.writeAndFlush(NIOAny(context.channel.allocator.buffer(bytes: reply)), promise: nil)
         }
     }
 

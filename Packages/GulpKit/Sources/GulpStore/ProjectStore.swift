@@ -13,13 +13,16 @@ public final class ProjectStore: Sendable {
     /// Batched exchange writes; also the engine's recorder (via GulpWorkspace).
     public let writer: StoreWriter
     let pool: DatabasePool
+    /// Where changes outside the writer (WebSocket rows) are announced.
+    let eventBus: EventBus?
     private let lock: ProjectLock
 
-    private init(url: URL, pool: DatabasePool, writer: StoreWriter, lock: ProjectLock) {
+    private init(url: URL, pool: DatabasePool, writer: StoreWriter, lock: ProjectLock, eventBus: EventBus?) {
         self.url = url
         self.pool = pool
         self.writer = writer
         self.lock = lock
+        self.eventBus = eventBus
     }
 
     /// Open (creating if needed) the project at `url`, migrating it to the current schema.
@@ -70,7 +73,7 @@ public final class ProjectStore: Sendable {
             return try ExchangeID.fetchOne(db, sql: next) ?? 1
         }
         let writer = StoreWriter(pool: pool, nextID: nextID, eventBus: eventBus, durable: durable)
-        return ProjectStore(url: url, pool: pool, writer: writer, lock: lock)
+        return ProjectStore(url: url, pool: pool, writer: writer, lock: lock, eventBus: eventBus)
     }
 
     /// Flush pending writes, checkpoint the WAL into the main file, and release the file. The store

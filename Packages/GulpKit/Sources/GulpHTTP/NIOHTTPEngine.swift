@@ -147,11 +147,12 @@ public final class NIOHTTPEngine: HTTPEngine {
         }
     }
 
-    /// WebSockets arrive in M4 (F03 §2).
+    /// Message-level WebSocket sessions arrive with the Repeater (M5, REP-012); `upgrade(…)` gives
+    /// a raw upgraded connection today.
     public func openWebSocket(
         _ upgrade: RawRequest, to target: HTTPTarget, options: SendOptions
     ) async throws -> WebSocketSession {
-        throw GulpError(message: "WebSockets are implemented in M4", underlying: nil)
+        throw GulpError(message: "WebSocket sessions arrive with the Repeater (M5)", underlying: nil)
     }
 
     /// Pre-connect for ALPN mirroring (PRX-008): an existing HTTP/2 or pooled HTTP/1 connection
@@ -190,6 +191,49 @@ public final class NIOHTTPEngine: HTTPEngine {
             channel.close(promise: nil)
             return nil
         }
+    }
+
+    /// The upgrade send (see `upgrade(_:to:options:onRead:onClose:)`): a raw-stream handler waits at
+    /// the end of the pipeline; on `101` the HTTP/1 handler starts passing bytes through to it.
+    func upgradeSend(
+        _ request: RawRequest, to target: HTTPTarget, options: SendOptions,
+        onRead: @escaping @Sendable ([UInt8]) -> Void, onClose: @escaping @Sendable () -> Void
+    ) async -> (result: ExchangeResult, connection: UpgradedConnection?) {
+        let start = NIODeadline.now()
+        var timing = Timing(start: Date())
+        var outgoing = OutgoingRequest(request: request, target: target)
+        let route = upstreamRoute(for: target, options: options)
+        if let route, route.kind == .http, !route.tunnelPlainHTTP, target.scheme == .http {
+            outgoing.request = request.forPlainHTTPProxy(
+                target: target, proxyAuthorization: route.basicAuthorization)
+        }
+        let deadline = start + timeAmount(options.timeouts.total)
+        let channel: any Channel
+        let tls: TLSInfo?
+        do {
+            (channel, tls) = try await connect(
+                target, route: route, options: options, deadline: deadline, timing: &timing)
+            try await channel.eventLoop.submit {
+                let raw = RawStreamHandler(onRead: onRead, onClose: onClose)
+                try channel.pipeline.syncOperations.addHandler(raw)
+            }.get()
+        } catch {
+            let mapped = (error as? GulpNetworkError) ?? HTTP1ClientHandler.networkError(error)
+            let failed = await finish(
+                outgoing, options: options, wire: nil, error: mapped, connectionID: 0, timing: timing)
+            return (failed, nil)
+        }
+        let result = await exchange(
+            on: channel, request: outgoing.request, options: options, totalDeadline: deadline)
+        timing.totalMs = milliseconds(from: start, to: .now())
+        let finished = await finish(
+            outgoing, options: options, wire: result.wire, error: result.wire.error, connectionID: 0,
+            timing: timing, tls: tls)
+        guard result.wire.error == nil, finished.exchange.response?.parsed.statusCode == 101 else {
+            channel.close(promise: nil)
+            return (finished, nil)
+        }
+        return (finished, UpgradedConnection(channel: channel))
     }
 
     // MARK: send pipeline

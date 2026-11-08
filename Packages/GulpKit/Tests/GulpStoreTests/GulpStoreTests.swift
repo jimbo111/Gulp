@@ -91,6 +91,43 @@ struct StoreTests {
         try await store.close()
     }
 
+    @Test("PRX-031/032: WebSocket connections and messages are stored with frames and announced")
+    func test_PRX031_webSocketRows() async throws {
+        let bus = EventBus()
+        let events = await bus.subscribe()
+        let store = try ProjectStore.open(at: temporaryProject(), eventBus: bus)
+        let id = try await store.openWebSocket(upgradeExchangeID: 7, url: "ws://h/chat")
+        let frames = [
+            WSFrameInfo(fin: false, opcode: 1, rsv: 0, length: 3, masked: true),
+            WSFrameInfo(fin: true, opcode: 0, rsv: 0, length: 2, masked: true),
+        ]
+        let message = try await store.recordWebSocketMessage(
+            connection: id, direction: 0, opcode: 1, payload: Array("Hello".utf8), frames: frames)
+        try await store.recordWebSocketMessage(
+            connection: id, direction: 1, opcode: 2, payload: [0, 1, 2], frames: [])
+        var connections = try await store.webSocketConnections()
+        #expect(connections.count == 1)
+        #expect(connections.first?.url == "ws://h/chat" && connections.first?.upgradeExchangeID == 7)
+        #expect(connections.first?.messageCount == 2 && connections.first?.closedAt == nil)
+        try await store.closeWebSocket(id, code: 1000)
+        connections = try await store.webSocketConnections()
+        #expect(connections.first?.closeCode == 1000 && connections.first?.closedAt != nil)
+        let messages = try await store.webSocketMessages(connection: id)
+        #expect(messages.map(\.direction) == [0, 1])
+        #expect(messages.first?.payload == Array("Hello".utf8))
+        #expect(messages.first?.frames == frames)
+        #expect(messages.last?.payload == [0, 1, 2] && messages.last?.opcode == 2)
+        var seen: [GulpEvent] = []
+        for await delivery in events {
+            if let event = delivery.event { seen.append(event) }
+            if seen.count == 4 { break }
+        }
+        #expect(seen.first == .wsConnectionChanged(id))
+        #expect(seen.contains(.wsMessage(message)))
+        #expect(seen.last == .wsConnectionChanged(id))
+        try await store.close()
+    }
+
     @Test("Interim 1xx responses are stored as received and split again on load")
     func test_interimRoundTrip() async throws {
         let store = try ProjectStore.open(at: temporaryProject())

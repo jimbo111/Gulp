@@ -96,6 +96,9 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
 
     private var pending: Pending?
     private var context: ChannelHandlerContext?
+    /// After `101 Switching Protocols` the connection carries another protocol (WebSocket): bytes
+    /// pass down the pipeline untouched instead of being parsed as HTTP (PRX-030).
+    private var passThrough = false
 
     func handlerAdded(context: ChannelHandlerContext) {
         self.context = context
@@ -125,6 +128,10 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        if passThrough {
+            context.fireChannelRead(data)
+            return
+        }
         let incoming = unwrapInboundIn(data)
         guard pending != nil else {
             // Bytes nobody asked for: the connection can no longer be trusted for reuse.
@@ -207,11 +214,19 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
     private func complete(end: Int, reusable: Bool) {
         guard let p = pending else { return }
         let surplus = p.buffer.count > end
+        let switching = p.head?.status == 101
         finish(
             WireResponse(
                 bytes: Array(p.buffer[p.start..<end]), interim: p.interim, error: nil,
-                firstByteAt: p.firstByteAt, lastByteAt: .now(), reusable: reusable && !surplus,
+                firstByteAt: p.firstByteAt, lastByteAt: .now(), reusable: reusable && !surplus && !switching,
                 receivedAny: true))
+        guard switching, let context else { return }
+        // The first frames may have arrived with the 101: hand them on, then pass everything through.
+        passThrough = true
+        if surplus {
+            let rest = context.channel.allocator.buffer(bytes: p.buffer[end...])
+            context.fireChannelRead(NIOAny(rest))
+        }
     }
 
     private func fail(_ error: GulpNetworkError) {

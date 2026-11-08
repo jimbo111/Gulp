@@ -32,7 +32,7 @@ public struct WSFrame: Sendable, Equatable {
 }
 
 /// Frame boundaries kept with a recorded message (PRX-031 `frames_json`).
-public struct WSFrameInfo: Sendable, Codable, Equatable {
+public struct WSFrameInfo: Sendable, Codable, Hashable {
     /// Final fragment.
     public var fin: Bool
     /// Raw opcode.
@@ -43,6 +43,15 @@ public struct WSFrameInfo: Sendable, Codable, Equatable {
     public var length: Int
     /// Whether the frame was masked.
     public var masked: Bool
+
+    /// Create frame metadata.
+    public init(fin: Bool, opcode: UInt8, rsv: UInt8, length: Int, masked: Bool) {
+        self.fin = fin
+        self.opcode = opcode
+        self.rsv = rsv
+        self.length = length
+        self.masked = masked
+    }
 }
 
 /// A whole message: a control frame, or a data message reassembled from its fragments.
@@ -53,6 +62,13 @@ public struct WSMessage: Sendable, Equatable {
     public var payload: [UInt8]
     /// The frames it came in.
     public var frames: [WSFrameInfo]
+
+    /// Create a message.
+    public init(opcode: UInt8, payload: [UInt8], frames: [WSFrameInfo]) {
+        self.opcode = opcode
+        self.payload = payload
+        self.frames = frames
+    }
 }
 
 /// Incremental frame parser for one direction.

@@ -52,6 +52,8 @@ struct ProxyUpstream: Sendable {
     let forceHTTP1: Bool
     var intercept: InterceptQueue?
     var matchReplace: MatchReplaceHook?
+    /// Where WebSocket connections and messages are recorded (PRX-031).
+    var webSockets: (any WebSocketRecorder)?
 
     var options: SendOptions {
         var options = SendOptions(recordAs: .proxy)

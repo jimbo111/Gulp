@@ -92,6 +92,8 @@ public enum GulpEvent: Sendable, Hashable {
     case exchangeUpdated(ExchangeID)
     case interceptQueued(InterceptItemID)
     case wsMessage(WSMessageID)
+    /// A WebSocket connection opened or closed (its row id).
+    case wsConnectionChanged(Int64)
     case issueFound(IssueID)
     case taskProgress(TaskID, TaskProgress)
     case oastInteraction(OASTInteractionID)

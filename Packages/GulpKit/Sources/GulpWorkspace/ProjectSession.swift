@@ -90,15 +90,18 @@ public enum SettingsSource: Sendable {
     case project(URL)
 }
 
-/// Records the engine's exchanges into whichever store the session currently uses, so Save As can
-/// switch files without rebuilding the engine.
-actor ProjectRecorder: ExchangeRecorder {
+/// Records the engine's exchanges (and the proxy's WebSocket traffic) into whichever store the
+/// session currently uses, so Save As can switch files without rebuilding the engine.
+actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
+    private var store: ProjectStore
     private var writer: StoreWriter
     private var paused = false
     private var held: [(Exchange, CheckedContinuation<ExchangeID, Never>)] = []
+    private var waiting: [CheckedContinuation<Void, Never>] = []
 
-    init(writer: StoreWriter) {
-        self.writer = writer
+    init(store: ProjectStore) {
+        self.store = store
+        self.writer = store.writer
     }
 
     func record(_ exchange: Exchange) async -> ExchangeID {
@@ -117,8 +120,10 @@ actor ProjectRecorder: ExchangeRecorder {
         paused = true
     }
 
-    /// Continue recording into `newWriter`, first writing everything held during the pause, in order.
-    func resume(with newWriter: StoreWriter) async {
+    /// Continue recording into `newStore`, first writing everything held during the pause, in order.
+    func resume(with newStore: ProjectStore) async {
+        store = newStore
+        let newWriter = newStore.writer
         writer = newWriter
         while !held.isEmpty {
             let batch = held
@@ -128,6 +133,29 @@ actor ProjectRecorder: ExchangeRecorder {
             }
         }
         paused = false
+        let woken = waiting
+        waiting = []
+        for continuation in woken { continuation.resume() }
+    }
+
+    /// The store to write WebSocket rows to, once any Save As copy has finished.
+    private func currentStore() async -> ProjectStore {
+        while paused { await withCheckedContinuation { waiting.append($0) } }
+        return store
+    }
+
+    func webSocketOpened(upgradeExchangeID: ExchangeID?, url: String) async -> Int64? {
+        try? await currentStore().openWebSocket(upgradeExchangeID: upgradeExchangeID, url: url)
+    }
+
+    func webSocketMessage(_ connection: Int64, direction: WSDirection, message: WSMessage) async {
+        _ = try? await currentStore().recordWebSocketMessage(
+            connection: connection, direction: direction.rawValue, opcode: Int(message.opcode),
+            payload: message.payload, frames: message.frames)
+    }
+
+    func webSocketClosed(_ connection: Int64, code: Int?) async {
+        try? await currentStore().closeWebSocket(connection, code: code)
     }
 }
 
@@ -168,7 +196,7 @@ public actor ProjectSession {
         self.settings = settings
         self.isTemporary = isTemporary
         self.environment = environment
-        let recorder = ProjectRecorder(writer: store.writer)
+        let recorder = ProjectRecorder(store: store)
         self.recorder = recorder
         let matchReplace = MatchReplaceHook(rules: settings.get(MatchReplaceSettings.self).rules)
         self.matchReplace = matchReplace
@@ -181,7 +209,7 @@ public actor ProjectSession {
         let proxySettings = settings.get(ProxySettings.self)
         self.proxy = ProxyServer(
             engine: engine, tls: minter.map { proxySettings.tlsOptions(minter: $0) }, intercept: intercept,
-            matchReplace: matchReplace)
+            matchReplace: matchReplace, webSockets: recorder)
     }
 
     /// Apply the stored intercept settings to the queue (call after opening or changing them).
@@ -269,13 +297,13 @@ public actor ProjectSession {
             try await store.backup(to: destination)
             newStore = try ProjectStore.open(at: destination, eventBus: events)
         } catch {
-            await recorder.resume(with: store.writer)
+            await recorder.resume(with: store)
             throw error
         }
         let oldStore = store
         settings.switchStore(newStore)
         store = newStore
-        await recorder.resume(with: newStore.writer)
+        await recorder.resume(with: newStore)
         try await oldStore.close()
         if isTemporary { Self.removeDatabaseFiles(oldStore.url) }
         isTemporary = false

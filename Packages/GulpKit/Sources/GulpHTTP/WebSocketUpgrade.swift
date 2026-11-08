@@ -1,0 +1,82 @@
+// GulpHTTP — connection upgrades (F01 PRX-030, F03): send an `Upgrade: websocket` request on a
+// fresh HTTP/1.1 connection and, on `101 Switching Protocols`, keep the connection as a raw byte
+// stream. The proxy splices it to its client; tools (and `gulp-cli ws`) speak WebSocket over it.
+
+import GulpCore
+import NIOConcurrencyHelpers
+import NIOCore
+
+/// Direction of a WebSocket message (`ws_messages.direction`).
+public enum WSDirection: Int, Sendable, Codable {
+    /// Client → server.
+    case toServer = 0
+    /// Server → client.
+    case toClient = 1
+}
+
+/// Records WebSocket connections and messages (PRX-031); implemented by the project (GulpStore).
+public protocol WebSocketRecorder: Sendable {
+    /// A connection opened by the upgrade recorded as `upgradeExchangeID`; returns its id.
+    func webSocketOpened(upgradeExchangeID: ExchangeID?, url: String) async -> Int64?
+    /// One message (control frames included).
+    func webSocketMessage(_ connection: Int64, direction: WSDirection, message: WSMessage) async
+    /// The connection closed (with the close code if a close frame was seen).
+    func webSocketClosed(_ connection: Int64, code: Int?) async
+}
+
+/// A connection switched to another protocol.
+public struct UpgradedConnection: Sendable {
+    /// The channel, carrying raw bytes in both directions (write `ByteBuffer`s to it).
+    public let channel: any Channel
+
+    /// Write raw bytes (already-framed WebSocket frames, for instance).
+    public func write(_ bytes: [UInt8]) async throws {
+        try await channel.writeAndFlush(channel.allocator.buffer(bytes: bytes))
+    }
+
+    /// Close the connection.
+    public func close() async {
+        try? await channel.close()
+    }
+}
+
+/// Delivers every byte of an upgraded connection to `onRead`, and its end to `onClose`.
+final class RawStreamHandler: ChannelInboundHandler, Sendable {
+    typealias InboundIn = ByteBuffer
+    private let onRead: @Sendable ([UInt8]) -> Void
+    private let onClose: @Sendable () -> Void
+
+    init(onRead: @escaping @Sendable ([UInt8]) -> Void, onClose: @escaping @Sendable () -> Void) {
+        self.onRead = onRead
+        self.onClose = onClose
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        onRead(Array(unwrapInboundIn(data).readableBytesView))
+    }
+
+    func channelInactive(context: ChannelHandlerContext) {
+        onClose()
+        context.fireChannelInactive()
+    }
+
+    func errorCaught(context: ChannelHandlerContext, error: any Error) {
+        context.close(promise: nil)
+    }
+}
+
+extension NIOHTTPEngine {
+    /// Send an upgrade request (e.g. `Upgrade: websocket`) on a new HTTP/1.1 connection. The exchange
+    /// is recorded like any other; on `101` the connection stays open and every later byte goes to
+    /// `onRead` (the first frames may already be among them). Any other status closes it.
+    public func upgrade(
+        _ request: RawRequest, to target: HTTPTarget, options: SendOptions,
+        onRead: @escaping @Sendable ([UInt8]) -> Void, onClose: @escaping @Sendable () -> Void
+    ) async -> (result: ExchangeResult, connection: UpgradedConnection?) {
+        var options = options
+        options.httpVersion = .http1_1  // WebSocket over HTTP/2 (RFC 8441) is not offered
+        options.connection = .newAndClose
+        options.onResponseBytes = nil
+        return await upgradeSend(request, to: target, options: options, onRead: onRead, onClose: onClose)
+    }
+}
