@@ -1,6 +1,8 @@
 # F15 — Sessions, authentication and macros
 
-> Milestone: M12 · Modules: `GulpSession`, `GulpFeatures/Sessions` · Depends on: F03, F04, F16
+> Milestones: M12a (sessions, macros, request signing), M13a (recorded and passkey logins), M22
+> (scripted WS sequences WSX-008, post-1.0) · Modules: `GulpSession`, `GulpFeatures/Sessions` ·
+> Depends on: F03, F04, F16
 
 ## 1. Purpose
 
@@ -32,7 +34,7 @@ testing).
 | SES-015 | P1 | Per-rule logging to the Logger so it's clear what the session layer did to each request (and why a retry happened). |
 | SES-016 | P1 | **Request signing — DPoP** (RFC 9449) as a session action: for each request, mint a fresh DPoP proof JWT (`htm`, `htu`, `iat`, `jti`, `ath` for the access token, the server `nonce` when one is demanded via `DPoP-Nonce`) signed with the identity's key, and set the `DPoP` header; retry once on a `use_dpop_nonce` error. *(Added by the 2026-11-08 feature review, A3; M12a.)* |
 | SES-017 | P1 | **Request signing — HTTP Message Signatures** (RFC 9421) as a session action: sign the configured covered components (`@method`, `@target-uri`, `@authority`, `content-digest`, chosen headers) with the identity's key/algorithm, adding `Signature-Input`/`Signature` (and `Content-Digest` when covered). *(Added by the 2026-11-08 feature review, A3; M12a.)* |
-| SES-018 | P1 | **Request signing — AWS SigV4** as a session action: sign with access key/secret (+ session token), region and service, for API Gateway and other AWS-fronted APIs (`Authorization`, `X-Amz-Date`, `X-Amz-Content-Sha256`). Signing actions run **last** among the session actions, after Transform Tags and every edit (doc 01 §6 hook order), so the signature covers the bytes actually sent; keys live in the Keychain. *(Added by the 2026-11-08 feature review, A3; M12a.)* |
+| SES-018 | P1 | **Request signing — AWS SigV4** as a session action: sign with access key/secret (+ session token), region and service, for API Gateway and other AWS-fronted APIs (`Authorization`, `X-Amz-Date`, `X-Amz-Content-Sha256`). Signing actions (SES-016…018) are configured as session actions but run as the engine's **last** request hook — after Transform Tags, match & replace, extensions and the Content-Length fixer (doc 01 §5.6, F03 §4) — so the signature covers the bytes actually sent; keys live in the Keychain. *(Added by the 2026-11-08 feature review, A3; M12a.)* |
 
 ### 2.3 Macros
 
@@ -48,7 +50,7 @@ testing).
 
 | ID | Pri | Requirement |
 |---|---|---|
-| SES-030 | P1 | **Recorded login** via the Gulp Browser (F16): the user logs in once in the managed browser; Gulp records the navigations/requests and builds a replayable login (a macro or a browser-replay) usable by automated tools. Credentials stored in the Keychain. *(later: M13 — needs F16, which lands in M13; the rest of Sessions is M12.)* |
+| SES-030 | P1 | **Recorded login** via the Gulp Browser (F16): the user logs in once in the managed browser; Gulp records the navigations/requests and builds a replayable login (a macro or a browser-replay) usable by automated tools. Credentials stored in the Keychain. *(later: M13a — needs F16's CDP automation, which lands in M13a; the rest of Sessions is M12a.)* |
 | SES-031 | P2 | Browser-based re-auth: when a macro replay can't reproduce a JS-heavy login, re-run the recorded browser login headlessly to refresh cookies. |
 | SES-032 | P1 | **Passkey logins**: recorded logins (SES-030) and browser re-auth work for WebAuthn/passkey sign-in by using the Gulp Browser's virtual authenticator (F16 BRW-016) — the identity stores the virtual credential, so the recorded login replays without a hardware key. *(Added by the 2026-11-08 feature review, A4; M13a.)* |
 | SES-040 | P1 | Upstream **client certificates** (mTLS) per host (F02 TLS-011), selectable per identity. |
@@ -73,6 +75,17 @@ touched by session rules.
   by identity where relevant.
 - Recorded login: capture the browser's requests through the proxy during a marked recording window;
   offer to turn them into a macro (strip static assets, keep the auth-relevant posts/redirects).
+- Request signing (SES-016…018): one `RequestSigner` hook, registered last in the engine pipeline,
+  dispatching to the configured scheme. Signing reads the final bytes, so it must re-sign on every
+  send and retry (never cache a signature). DPoP: per-identity key pair (ES256 by default), a fresh
+  `jti` per proof, `ath` = base64url(SHA-256(access token)), and the latest `DPoP-Nonce` remembered
+  per origin. RFC 9421: build the signature base from the covered components exactly as the RFC
+  orders them. SigV4: canonical request → string to sign → derived signing key; when the body is
+  streamed or unknown, use `UNSIGNED-PAYLOAD` only if the user allows it. The JOSE/crypto primitives
+  are the F12 `GulpCodec` ones (shared with the JWT Workbench).
+- Passkeys (SES-032): the recorded login stores the identity's virtual-authenticator credential
+  (F16 BRW-016) in the Keychain alongside other credentials and re-adds it to the authenticator
+  before replaying.
 
 ## 5. Edge cases
 
@@ -96,6 +109,6 @@ touched by session rules.
 4. A browser-recorded login replays to obtain a valid session cookie.
 5. Request signing (SES-016…018): Repeater sends to VulnLab's `/signed/dpop`, `/signed/http-sig` and
    `/signed/sigv4` succeed with the matching session action enabled and fail (401) without it; editing
-   the body after signing is still accepted because signing runs last.
+   the body in Repeater is still accepted, because signing runs after every other hook.
 6. Passkeys (SES-032): a login to VulnLab `/webauthn/login` is recorded with the virtual authenticator
    and replayed to obtain a valid session.

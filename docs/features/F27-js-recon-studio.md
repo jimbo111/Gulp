@@ -1,6 +1,6 @@
 # F27 — JS Recon Studio (source-map recovery & API inventory)
 
-> Milestone: M23 (the recon core only needs F04/F05, so it can be built earlier if desired) · Modules: `GulpFeatures/JSRecon`
+> Milestones: M19a (core: JSR-001…005 and ETL-004), M23 (JSR-006…009, post-1.0) · Modules: `GulpFeatures/JSRecon`
 > (asset storage in `GulpStore`; source-map/endpoint parsing is pure Swift and may live in `GulpCodec`/`GulpCore`; the JS
 > beautifier is either a pure-Swift formatter or, if it uses JavaScriptCore, `GulpScript` — **not** `GulpCore`, which is
 > pure-Swift and Linux-building, doc 01 §3 rule 3) · Depends on: F04, F05, F08, F09, F23
@@ -15,6 +15,12 @@ GraphQL operations), parameter names, feature flags, cloud/storage URLs, and lib
 feeds those endpoints into the site map, Crawler, Scanner and Param Discovery. It turns "dead" client
 code into live attack surface.
 
+**Scheduling (2026-11-08 feature review: "trimmed, earlier").** The recon core — asset inventory with
+the scripts/comments view, beautify, source-map recovery, endpoint extraction and hand-off
+(JSR-001…JSR-005, ETL-004) — is v1 and ships in **M19a** next to the secret scanner. The rest
+(JSR-006…JSR-009: parameter mining, library fingerprinting, literal flagging, asset diff) stays
+post-1.0 in **M23**.
+
 ## 2. Requirements
 
 | ID | Pri | Requirement |
@@ -24,10 +30,10 @@ code into live attack surface.
 | JSR-003 | P0 | Recover original sources from source maps: detect `//# sourceMappingURL` and inline/base64 maps, fetch referenced `.map` files, and reconstruct the original file tree from `sourcesContent` as a browsable virtual folder. |
 | JSR-004 | P0 | Extract an endpoint/API inventory from JS/maps — URL string literals, `fetch`/XHR/axios/`$.ajax` targets, route-table paths, GraphQL operation strings — normalized against the target origin, deduped. |
 | JSR-005 | P0 | Send discovered endpoints into the site map (F04) and offer "crawl/scan/Param-Discover these" (F08/F09/F23), honoring scope. |
-| JSR-006 | P1 | Mine candidate parameter names, feature flags and config keys from JS and hand them to Param Discovery (F23 ADV-021). |
-| JSR-007 | P1 | Fingerprint JS libraries/framework versions and cross-link to the Scanner's vulnerable-JS dataset (F08). |
-| JSR-008 | P1 | Flag interesting literals (cloud storage URLs, internal hostnames, API bases, source-map exposure itself) as info observations; link secrets to the F23 secret scanner rather than re-implementing it. |
-| JSR-009 | P2 | Diff an asset across captures to surface newly-added endpoints/routes between app versions (retest/engagement value; pairs with the issue retest in F08 §2.4). |
+| JSR-006 | P1 | Mine candidate parameter names, feature flags and config keys from JS and hand them to Param Discovery (F23 ADV-021). *(later: M23 — post-1.0.)* |
+| JSR-007 | P1 | Fingerprint JS libraries/framework versions and cross-link to the Scanner's vulnerable-JS dataset (F08). *(later: M23 — post-1.0.)* |
+| JSR-008 | P1 | Flag interesting literals (cloud storage URLs, internal hostnames, API bases, source-map exposure itself) as info observations; link secrets to the F23 secret scanner rather than re-implementing it. *(later: M23 — post-1.0.)* |
+| JSR-009 | P2 | Diff an asset across captures to surface newly-added endpoints/routes between app versions (retest/engagement value; pairs with the issue retest in F08 §2.4). *(later: M23 — post-1.0.)* |
 | ETL-004 | P1 | **Find scripts/comments**: list all JavaScript files and HTML comments seen for a host (useful for secrets/endpoints); link secrets to the secret scanner (F23 ADV-060). Folded into the JSR-001 asset inventory as its "comments" view. *(Moved from F17, 2026-11-08.)* |
 
 ## 3. UI
@@ -62,5 +68,7 @@ view across captures.
    tree and lists files.
 2. The endpoint miner extracts planted `/api/internal/*` routes not reachable by crawling and adds
    them to the site map; "scan these" finds the planted bug on one.
-3. Library fingerprinting flags a bundled known-vulnerable library version.
-4. The asset diff surfaces a new endpoint added between two VulnLab captures.
+3. *(M23)* Library fingerprinting flags a bundled known-vulnerable library version.
+4. *(M23)* The asset diff surfaces a new endpoint added between two VulnLab captures.
+5. *(M19a)* The scripts/comments view (ETL-004) lists every JS file and HTML comment seen for the
+   VulnLab host, and a planted secret in a comment links to the secret scanner's finding.

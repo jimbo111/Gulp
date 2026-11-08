@@ -1,6 +1,7 @@
 # F05 — History, Logger, GulpQL filters and search
 
-> Milestones: M2 (history), M9 (GulpQL, Logger, search) · Modules: `GulpQuery`, `GulpStore`,
+> Milestones: M2 (history), M4b (in-progress rows HIS-007), M6b (import/export HIS-044), M9 (GulpQL,
+> Logger, search) · Modules: `GulpQuery`, `GulpStore`,
 > `GulpFeatures/{Proxy,Logger}` · Depends on: F01, F04
 
 ## 1. Purpose

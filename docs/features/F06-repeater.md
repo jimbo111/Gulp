@@ -16,7 +16,7 @@ A tester lives here, iterating on a single request to understand and exploit beh
 | REP-003 | P0 | Per-tab target editor (scheme/host/port/SNI/IP override) and HTTP version preference; "Update Content-Length" toggle (default on). |
 | REP-004 | P0 | Per-tab request **history** (every send), navigable with ◀ ▶ (and ⌘[ / ⌘]); each entry keeps the exact request and response. Shows a diff against the previous response (UI-030) on demand. |
 | REP-005 | P0 | Tab management: rename (double-click), reorder (drag), close (⌘W), reopen-closed (⌘⇧T), colored labels, and **groups** (REP-010). Tabs persist in the project. |
-| REP-006 | P0 | Follow redirects option (never/on-site/in-scope/always, max hops); when on, show the redirect chain and let the user step through it. *(The `in-scope` value and ScopeGuard gating of sends need F04/scope, which lands in M6; Repeater itself is M5, so until M6 `in-scope` behaves as `on-site` and out-of-scope sends aren't gated — see the roadmap cross-milestone note.)* |
+| REP-006 | P0 | Follow redirects option (never/on-site/in-scope/always, max hops); when on, show the redirect chain and let the user step through it. *(The `in-scope` value and ScopeGuard gating of sends need F04/scope, which lands in M6a; Repeater itself is M5, so until M6a `in-scope` behaves as `on-site` and out-of-scope sends aren't gated — see the roadmap cross-milestone note.)* |
 | REP-007 | P0 | Connection option: reuse vs. new connection; automatically reconnect on failure. Show connection info (reused, ALPN, TLS) for each send. |
 | REP-008 | P1 | Inline **Transform Tags** (F12) in the request are evaluated on send (e.g. `«base64(...)»`, `«now()»`, `«var(csrf)»`); a toggle enables/disables evaluation, and a preview shows the rendered bytes. *(later: M7 — needs F12, which lands in M7; the rest of Repeater is M5.)* |
 | REP-009 | P1 | Inspector editing (UI-020): change a param/header/cookie/pseudo-header via the structured panel and the raw updates. |
@@ -51,6 +51,13 @@ A tester lives here, iterating on a single request to understand and exploit beh
   that the tag evaluator reads; capture rules run on each response.
 - Group single-packet send delegates entirely to `HTTPEngine.sendGroup` (F03 HTTP-033/034).
 - WS Repeater uses `HTTPEngine.openWebSocket`; frames are shown with the same WS viewer as F01.
+- Streaming (REP-016) reuses the engine's streamed-response path (F01 §4.3): the response pane
+  renders chunks as they arrive and the tab history stores what was received when the user stops.
+- Paste to request (REP-017): parse a cURL command line with POSIX shell quoting and map the common
+  flags (`-X`, `-H`, `-d`/`--data-raw`/`--data-binary`, `-b`, `-u`, `-A`, `-e`, `--http2`,
+  `--compressed`, `-k`); parse the two common `fetch(url, {method, headers, body})` shapes (a
+  browser's "Copy as fetch" and Node). Build raw bytes in the order given and show any flag that was
+  ignored; a raw HTTP request is taken as is (the target from `Host` unless the user sets one).
 
 ## 5. Edge cases
 

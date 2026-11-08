@@ -1,6 +1,6 @@
 # F01 — Proxy
 
-> Milestones: M2 (plain HTTP), M3 (TLS), M4 (intercept, match & replace, WebSockets) ·
+> Milestones: M2 (plain HTTP), M3 (TLS), M4a (intercept, M&R), M4b (streaming, WebSockets), M22 (WSX-006) ·
 > Modules: `GulpProxy`, `GulpFeatures/Proxy` · Depends on: F02, F03, F05, F20
 
 ## 1. Purpose

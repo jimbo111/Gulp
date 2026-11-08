@@ -1,12 +1,18 @@
 # F23 — Advanced testing tools
 
-> Milestone: M19 · Modules: `GulpFeatures/Advanced` + helpers in engines (`GulpScanner`,
-> `GulpHTTP`, `GulpSession`) · Depends on: F03, F06, F07, F08, F10, F12 (codec/JWT ops), F13 (diff/similarity for Authz verdicts), F15
+> Milestones: M6b (API import), M12b (Authz Matrix), M13b (GraphQL), M19a (params, secrets), M19b, M22 ·
+> Per tool: §1 M12b, §3 M19a, §4 M19b (Smuggling Probe), §5 M13b, §6 M6b, §7 M19a, WSX-004 M22 (post-1.0) · Modules:
+> `GulpFeatures/Advanced` + helpers in engines (`GulpScanner`, `GulpHTTP`, `GulpSession`) · Depends
+> on: F03, F06, F07, F08, F10, F12 (codec/JWT ops), F13 (diff/similarity for Authz verdicts), F15,
+> F20 (import/export service)
 
 These are focused power-tools, each equivalent to a popular extension of the reference ecosystem.
-Build them as first-class tools sharing the common engines/components.
+Build them as first-class tools sharing the common engines/components. Since the 2026-11-08 feature
+review they ship **tool by tool**, each in the milestone where its prerequisites exist (API import in
+M6b, Authz Matrix in M12b right after identities, GraphQL in M13b with the browser, Param Discovery
+and the secret scanner in M19a, the Smuggling Probe in M19b); the JWT Workbench moved to F12 (M7).
 
-## 1. Authz Matrix (access-control testing)
+## 1. Authz Matrix (access-control testing) — M12b
 
 > **Concept.** Many apps enforce authorization inconsistently. The matrix replays the same requests
 > as different **identities** (F15) — e.g. admin, low-priv user, unauthenticated — and compares
@@ -28,7 +34,7 @@ Build them as first-class tools sharing the common engines/components.
 The JWT Workbench (ADV-010…ADV-013) moved to **F12 §2.3** so it ships with the Decoder in **M7**,
 where it sits on the same `GulpCodec` operations. The requirement IDs are unchanged.
 
-## 3. Param Discovery (hidden parameters)
+## 3. Param Discovery (hidden parameters) — M19a
 
 | ID | Pri | Requirement |
 |---|---|---|
@@ -36,7 +42,7 @@ where it sits on the same `GulpCodec` operations. The requirement IDs are unchan
 | ADV-021 | P1 | Mine candidate param names from the app itself (seen params, words in JS/HTML) to augment wordlists; dedup. |
 | ADV-022 | P1 | Detect server-side parameter pollution / array/dup handling quirks; report processed params as findings/observations and offer "send to Fuzzer/Scanner". |
 
-## 4. Smuggling Probe (HTTP request smuggling / desync)
+## 4. Smuggling Probe (HTTP request smuggling / desync) — M19b
 
 | ID | Pri | Requirement |
 |---|---|---|
@@ -45,25 +51,25 @@ where it sits on the same `GulpCodec` operations. The requirement IDs are unchan
 | ADV-032 | P1 | Guided confirmation/exploitation workbench (construct a follow-up that proves desync) with strong warnings and scope gating; never run destructive confirmations automatically. |
 | ADV-033 | P1 | Report findings with the exact probes and reasoning; integrate with the Scanner as an opt-in active check family. |
 
-## 5. GraphQL Workbench
+## 5. GraphQL Workbench — M13b
 
 | ID | Pri | Requirement |
 |---|---|---|
 | ADV-040 | P0 | Detect GraphQL endpoints; run **introspection** (and detect when it's disabled); render the schema (types/queries/mutations) in a browser. |
 | ADV-041 | P0 | Build/send queries with a schema-aware editor; import operations from traffic; pretty-print and variables support. |
 | ADV-042 | P1 | Security checks: introspection exposed, field/suggestion leakage, batching/alias-based abuse (DoS/brute force), missing depth/complexity limits, and authz testing per field (pairs with Authz Matrix). Raise issues (F08). |
-| ADV-043 | P1 | Generate insertion points from GraphQL variables/args for the Scanner; a GraphQL-aware matcher helper for Check Recipes. |
+| ADV-043 | P1 | Generate insertion points from GraphQL variables/args for the Scanner; a GraphQL-aware matcher helper for Check Recipes. *(The Check Recipe helper lands with recipes — later: M15.)* |
 
-## 6. API import & schema-driven testing
+## 6. API import & schema-driven testing — M6b
 
 | ID | Pri | Requirement |
 |---|---|---|
-| ADV-050 | P0 | Import **OpenAPI/Swagger** (2.0/3.x) and build requests for every operation (paths, methods, params, example/required bodies, auth), adding them to the site map and offering a scan of the whole API. |
+| ADV-050 | P0 | Import **OpenAPI/Swagger** (2.0/3.x) and build requests for every operation (paths, methods, params, example/required bodies, auth), adding them to the site map and offering a scan of the whole API. *(Pulled forward to M6b by the 2026-11-08 feature review; "scan the whole API" activates with the active scanner — later: M11c.)* |
 | ADV-051 | P1 | Import **Postman** collections and **HAR**; map to requests/site map. *(The API-import entry point of the shared import/export service, F20 PRJ-012.)* |
-| ADV-052 | P1 | Schema-aware insertion points and value generation (types/enums/formats) so scans send plausible, well-typed inputs. |
+| ADV-052 | P1 | Schema-aware insertion points and value generation (types/enums/formats) so scans send plausible, well-typed inputs. *(Value generation for the imported requests is M6b; the Scanner insertion points — later: M11c.)* |
 | ADV-053 | P2 | gRPC-Web / protobuf decode helpers (best-effort) for API traffic. **Superseded (2026-11-08 feature review, A2)** — promoted to the full F33 gRPC & protobuf spec (GRP-001…GRP-007, P1, M10b); not built separately. |
 
-## 7. Secret scanner
+## 7. Secret scanner — M19a
 
 | ID | Pri | Requirement |
 |---|---|---|
@@ -72,8 +78,8 @@ where it sits on the same `GulpCodec` operations. The requirement IDs are unchan
 
 ## 8. Implementation notes
 
-- Each tool is a feature module reusing: identities/sessions (F15) for Authz Matrix; the codec/JWT
-  ops (F12) for JWT; the Fuzzer engine (F07) for Param Discovery; the raw engine (F03) for Smuggling;
+- Each tool is a feature module reusing: identities/sessions (F15) for Authz Matrix; the Fuzzer
+  engine (F07) for Param Discovery; the raw engine (F03) for Smuggling;
   the scanner model (F08) for all issues; the diff/similarity (F13) for Authz verdicts.
 - Smuggling and other potentially disruptive probes are **safe-by-default**, scope-gated, and never
   auto-run destructive confirmations; they carry prominent warnings and require explicit action.

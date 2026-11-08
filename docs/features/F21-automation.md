@@ -1,6 +1,8 @@
 # F21 — Automation: CLI, REST API, MCP server
 
-> Milestone: M17 · Modules: `gulp-cli`, `GulpAutomation`, `GulpWorkspace` · Depends on: all engines
+> Milestones: M6b (MCP read surface + `send_request`), M17 (CLI, REST API, full MCP, scheduler), M25
+> (`gulp retest`, post-1.0) · Modules: `gulp-cli`, `GulpAutomation`, `GulpWorkspace` · Depends on:
+> all engines
 
 ## 1. Purpose
 
@@ -39,10 +41,10 @@ All three use the same `ProjectSession` as the app, so behavior matches.
 
 | ID | Pri | Requirement |
 |---|---|---|
-| AUT-020 | P0 | An **MCP server** (Model Context Protocol) exposing Gulp capabilities as tools/resources to AI clients. Transport: stdio (for local clients like Claude Code) and/or the local HTTP transport; token-gated for the HTTP transport. |
-| AUT-021 | P0 | Tools: `list_exchanges(filter)`, `get_exchange(id)`, `send_request(raw/target/options)`, `repeater_send`, `start_scan(seed,config)`, `scan_status`, `list_issues(filter)`, `get_issue(id)`, `search(query)`, `get_scope`/`set_scope`, `beacon_interactions`, `add_note`. Each tool has a strict JSON schema and returns structured results sized for a model (truncate large bodies with a fetch-more affordance). |
-| AUT-022 | P0 | Resources: expose issues, the site map, and selected exchanges as MCP resources an agent can read. |
-| AUT-023 | P0 | **Safety for agent control**: every active action (scan, send to a target, scope changes) is ScopeGuard-checked; a configurable **approval mode** can require human confirmation in the app before active tools run on an agent's behalf; all agent actions are logged and attributed (`source = .automation`/`.ai`). Off-by-default network egress; no project data leaves the machine via MCP unless the client reads it. |
+| AUT-020 | P0 | An **MCP server** (Model Context Protocol) exposing Gulp capabilities as tools/resources to AI clients. Transport: stdio (for local clients like Claude Code) and/or the local HTTP transport; token-gated for the HTTP transport. *(Pulled forward by the 2026-11-08 feature review: the stdio transport ships in M6b; the HTTP transport comes with the REST API in M17.)* |
+| AUT-021 | P0 | Tools: `list_exchanges(filter)`, `get_exchange(id)`, `send_request(raw/target/options)`, `repeater_send`, `start_scan(seed,config)`, `scan_status`, `list_issues(filter)`, `get_issue(id)`, `search(query)`, `get_scope`/`set_scope`, `beacon_interactions`, `add_note`. Each tool has a strict JSON schema and returns structured results sized for a model (truncate large bodies with a fetch-more affordance). *(M6b ships the read tools + `send_request`: `list_exchanges`, `get_exchange`, `send_request`, `get_scope`. The others are added as their features land — `search` and `add_note` in M9, the issue tools in M10a, `start_scan`/`scan_status`/`beacon_interactions` in M11a/M11b — and the set is complete in M17.)* |
+| AUT-022 | P0 | Resources: expose issues, the site map, and selected exchanges as MCP resources an agent can read. *(Site map and exchanges in M6b; issues once F08 lands.)* |
+| AUT-023 | P0 | **Safety for agent control** (M6b, with the first MCP tools): every active action (scan, send to a target, scope changes) is ScopeGuard-checked; a configurable **approval mode** can require human confirmation in the app before active tools run on an agent's behalf; all agent actions are logged and attributed (`source = .automation`/`.ai`). Off-by-default network egress; no project data leaves the machine via MCP unless the client reads it. |
 | AUT-024 | P1 | Reuses the same auth/token and OpenAPI-derived schemas as the REST API where possible; a quickstart for connecting Claude Code. |
 | AUT-025 | P2 | Prompts/recipes: packaged MCP "prompts" for common workflows (triage issues, explain an exchange, draft a report section) that call the tools. |
 

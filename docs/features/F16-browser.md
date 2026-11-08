@@ -1,6 +1,7 @@
 # F16 — Gulp Browser and DOM Probe
 
-> Milestone: M13 · Modules: `GulpBrowser` (macOS only), `GulpFeatures/Browser` · Depends on: F01, F02
+> Milestones: M4b (launch, BRW-001…004), M13a (CDP automation, passkeys), M13b (DOM Probe) · Modules:
+> `GulpBrowser` (macOS only), `GulpFeatures/Browser` · Depends on: F01, F02
 
 ## 1. Purpose
 
@@ -66,6 +67,13 @@ the Scanner's passive checks (F08 §3.1).
 - DOM Probe script is a self-contained JS bundle shipped in resources; it posts findings to a
   CDP binding (`Runtime.addBinding`) that `GulpBrowser` receives.
 - This module is macOS-only (`#if os(macOS)`), but the issue it raises uses the shared F08 model.
+- Virtual authenticator (BRW-016): enable the CDP `WebAuthn` domain per target, add a virtual
+  authenticator (CTAP2, internal transport, resident keys and user verification on), and read/add
+  credentials with `WebAuthn.getCredentials`/`addCredential` so a recorded passkey can be exported
+  to an identity and re-added before a replay or a crawl.
+- The one-click launch (BRW-001…004) ships in M4b, before the CDP client exists: launching needs only
+  process management and the SPKI pin. Keep the launcher and the CDP client separate so M13a adds
+  automation without touching the launch path.
 
 ## 5. Edge cases
 

@@ -52,6 +52,9 @@ support keyboard navigation everywhere.
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+- Since the 2026-11-08 feature review the **Sequencer** entry is hidden in v1 builds (F11 is
+  post-1.0); the other tools appear as their milestones land. GraphQL ships in M13b, Authz Matrix in
+  M12b, and the JWT Workbench with the Decoder in M7.
 - Sidebar: `NavigationSplitView` with sections. Badges show counts: Repeater tabs, new issues,
   intercepted items waiting, new Beacon interactions. The user can hide or reorder tools
   (Settings → Appearance).
@@ -71,9 +74,9 @@ support keyboard navigation everywhere.
 
 ## 4. Shared components (GulpUI)
 
-These are used everywhere. Build them once, in M2/M4, and reuse them. **Priority:** every `UI-xxx`
+These are used everywhere. Build them once, in M2/M4a, and reuse them. **Priority:** every `UI-xxx`
 component is **P0 for the milestone that first needs it** (the roadmap lists which — e.g. the
-`MessageEditor` in M4); they have no `Pri` column because they are shared infrastructure, not
+`MessageEditor` in M4a); they have no `Pri` column because they are shared infrastructure, not
 optional features. The same holds for the §5 shortcuts (they ship with the actions they trigger).
 
 | ID | Component | Description |

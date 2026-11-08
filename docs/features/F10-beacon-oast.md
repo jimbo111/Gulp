@@ -1,7 +1,7 @@
 # F10 — Beacon (OAST / out-of-band application security testing)
 
-> Milestone: M11 · Modules: `GulpOAST`, `Beacon/` (separate package), `GulpFeatures/Beacon` ·
-> Depends on: F02, F03
+> Milestone: M11a (client, interactsh, dev Beacon; the deployable server is post-1.0) · Modules:
+> `GulpOAST`, `Beacon/` (separate package), `GulpFeatures/Beacon` · Depends on: F02, F03
 
 ## 1. Purpose
 

@@ -76,6 +76,7 @@ tests can measure false positives.
 | Mass assignment (M11c) | `/api/users/me` (`PATCH` JSON; accepts and persists an unexpected `role` property) | `/safe/api/users/me` (allowlists fields) | SCN-072 |
 | File upload (M11c) | `/upload` (checks only the `Content-Type` header; serves stored files from `/uploads/` with an extension-derived type, so `x.svg`/`x.html` render same-origin) | `/safe/upload` (content sniffing + `Content-Disposition: attachment` + sandbox CSP) | SCN-073 |
 | SPA | `/app/` (client-side routing, links rendered by JS) | — | CRL |
+| Discovery & recon (M8, M19a) | Unlinked content for content discovery (`/admin` is not linked from any page; backup files `/index.html.bak`, `/backup.zip`, `/.old/config.php~`); a hidden parameter (`/api/report` changes its output when an undocumented `debug=1` is sent); `/static/app.min.js`, a minified bundle with `//# sourceMappingURL` pointing to an exposed `app.min.js.map` (with `sourcesContent`), whose code references `/api/internal/*` routes that no page links to; a planted fake API key in that bundle and another in an HTML comment | — (the secret scanner's precision is checked on `/safe/*` pages, which carry none) | F07 ETL-003, F23 (Param Discovery, secret scanner), F27 (JS Recon core) |
 
 **Import fixtures (M6b).** `Tests/Fixtures/import/` holds files captured against VulnLab for the
 import/export service (F20 PRJ-012/013, F23 ADV-050/051): a HAR, a Postman v2.1 collection, an XML
@@ -90,7 +91,7 @@ oracle for HTTP-001 and the M1 DoD. `/redirect?to=` returns `302` with a `Locati
 value. `/chunked` responds `Transfer-Encoding: chunked` in several small chunks (e.g. 3 chunks) plus
 a terminating zero-chunk (optionally a trailer, to exercise trailer parsing). `/gzip` sets
 `Content-Encoding: gzip`; `/slow?ms=` delays before the body; `/large?mb=` streams N MB;
-`/status/{code}` returns that status (used for the Governor-backoff test). A `/continue` endpoint
+`/status/{code}` returns that status (used for the shared-limiter backoff test, F03 GOV-007). A `/continue` endpoint
 emits a `100 Continue` interim response before the final one, to exercise 1xx handling (recorded in
 `ParsedResponse.interimResponses`, doc 04 §2). Fixture files for the parser round-trip/edit tests
 live in `Tests/Fixtures/http/` and are authored as part of M1 (doc §2 lists the malformed cases).
@@ -134,7 +135,7 @@ post-1.0 feature adds (every vulnerable route gets a `/safe/*` twin unless noted
 |---|---|
 | F25 SSO (M21) | An **OIDC** authorization server: `/oidc/authorize`, `/oidc/token`, `/oidc/userinfo`, `/.well-known/openid-configuration`, JWKS — a vulnerable instance (over-accepts `redirect_uri`, missing/static `state`, PKCE downgradable to `plain`, implicit-flow token leak via `Referer`) and a hardened twin. A **SAML** SP `/saml/acs` that accepts a signature-stripped/XSW assertion, with a signature-validating twin. |
 | WebSocket checks, ex-F26 (M22: F07 §2.6, F08 §3.6, F23 WSX-004) | Reuses `/ws/chat`; adds a socket that authorizes **only at handshake** (+ per-message-authz twin), a socket that **upgrades on a cross-origin `Origin`** returning authenticated data (+ Origin-checking twin, for CSWSH), and a socket whose messages reach a **blind sink** (command/SSRF) that calls the dev Beacon, for OAST-correlated WS injection. |
-| F27 JS Recon (M23) | A **minified JS bundle with an exposed `.map`**, `/api/internal/*` routes referenced only from JS (not linked), a bundled **known-vulnerable JS library** version, and a second **versioned capture** of the bundle (adds an endpoint) for the asset-diff test. |
+| F27 JS Recon, rest (M23) | Reuses the v1 "Discovery & recon" bundle and its `.map` (the core, JSR-001…005, is v1 in M19a); adds a bundled **known-vulnerable JS library** version and a second **versioned capture** of the bundle (adds an endpoint) for the asset-diff test. |
 | Cache family, ex-F28 (M24: F08 §3.5) | `/cache/reflect` that reflects **`X-Forwarded-Host`** into a cacheable response (+ non-caching twin) — and when that reflected header value is fetched server-side it reaches the dev Beacon, giving the cache-amplified **SSRF-into-cache** path (OAST-correlated); and an `/account` endpoint cacheable as **`/account.css`** (cache deception) with a `Cache-Control: private` twin. |
 | Retest, ex-F30 (M25: F08 §2.4, F21 DRF-009) | No new routes required — reuses existing endpoints, plus a **config toggle** on one planted vuln so a fixture can flip vulnerable→patched between runs (for the Fixed/Still-Vulnerable verdict test). |
 | F32 LLM (M26) | `/ai/chat` (SSE) vulnerable to **direct prompt injection** (+ guarded twin); a stored-note path the assistant later ingests for **indirect injection + OAST exfil**; an endpoint that renders model **Markdown into HTML** (XSS sink) with a sanitizing twin; and a remote **MCP server** at `/mcp` (HTTP transport) with an unauthenticated privileged tool and a **poisoned tool description** (+ an authenticated, clean twin) for LLM-009. |

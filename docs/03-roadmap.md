@@ -6,7 +6,7 @@ Build the milestones **in order**. Each one ends with a usable, tested app. Requ
 |---|---|---|---|
 | PRX | F01 Proxy | SES | F15 Sessions |
 | TLS | F02 TLS & CA | BRW | F16 Browser |
-| HTTP | F03 HTTP engine | ETL | F17 Engagement tools |
+| HTTP | F03 HTTP engine | ETL | F17 (merged — its IDs now live in F06, F07, F19, F21, F27 and doc 05) |
 | TGT | F04 Target & scope | EXT | F18 Extensions |
 | HIS | F05 History/Logger/GulpQL | RPT | F19 Reporting |
 | REP | F06 Repeater | PRJ | F20 Projects & settings |
@@ -14,33 +14,46 @@ Build the milestones **in order**. Each one ends with a usable, tested app. Requ
 | SCN | F08 Scanner | AI | F22 AI assistant |
 | CRL | F09 Crawler | ADV | F23 Advanced tools |
 | BCN | F10 Beacon | MAC | F24 macOS integration |
-| SEQ | F11 Sequencer | UI | doc 05 |
-| DEC | F12 Decoder | CMP | F13 Comparer |
+| SEQ | F11 Sequencer (post-1.0) | UI | doc 05 |
+| DEC | F12 Decoder (incl. JWT Workbench) | CMP | F13 Comparer |
 | NB | F14 Notebook | GRP | F33 gRPC & protobuf |
 
-Post-1.0 expansion prefixes (M21+, see Phase F): `SSO` (F25), `WSX` (F26), `JSR` (F27), `WCP` (F28),
-`GOV` (F29), `DRF` (F30), `JRN` (F31), `LLM` (F32).
+Post-1.0 expansion prefixes (Phase F): `SSO` (F25), `JSR` (F27 — its core is v1, M19a), `LLM`
+(F32). The prefixes of the specs merged on 2026-11-08 keep working where the requirements now live:
+`GOV` (F03 §3.4, F20 §2.4) and `JRN` (F04 §2.3, F14) are v1; `WSX` (F01, F07, F08, F15, F23), `WCP`
+(F08 §3.5) and `DRF` (F08 §2.4, F21) are post-1.0. See `docs/07-decisions.md` product decision #7.
 
 "All P0 of Fxx" means every requirement in that spec marked P0. P1 items are part of the milestone
-unless the spec marks them "(later: Mxx)".
+unless the spec marks them "(later: Mxx)", "post-1.0" or "Cut". **Post-1.0** items are scheduled in
+Phase F or listed in the Post-1.0 backlog at the end of this file; **cut** items are not built.
+
+**Re-sequenced on 2026-11-08** (the feature review, `docs/FEATURE-REVIEW.md` §3, adopted by the owner):
+milestone numbers were **not** renumbered, because hundreds of cross-references use them. Oversized
+milestones were split with letter suffixes (as M3 was split into M3a/M3b): M4 → M4a/M4b, M6 →
+M6a/M6b, M10 → M10a/M10b, M11 → M11a/M11b/M11c, M12 → M12a/M12b, M13 → M13a/M13b, M16 → M16a/M16b,
+M19 → M19a/M19b. A bare "Mxx" in older text means the whole group (e.g. "M11" = M11a–M11c). M14
+(Sequencer) is retired — F11 moved to the Post-1.0 backlog — and its number is not reused. A
+**Daily-driver beta** release gate sits between M9 and M10a.
 
 ### Cross-milestone dependencies (why some requirements are deferred, not reordered)
 
-A few requirements need a cross-cutting capability — **OAST/Beacon** (F10, M11) or **Sessions**
-(F15, M12) — that a tool is built before. The build strategy is **layer the capability in when it
+A few requirements need a cross-cutting capability — **OAST/Beacon** (F10, M11a) or **Sessions**
+(F15, M12a) — that a tool is built before. The build strategy is **layer the capability in when it
 lands**, not reorder the milestones, because reordering only moves the conflict: Sessions (F15)
-itself forward-depends on the Browser (F16, M13) for login recording, so pulling Sessions earlier
-would create a new forward dependency. So the tool is built first with a clean **hook point**, and
-the dependent requirement is finished in the later milestone and marked "(later: Mxx)" in its spec.
-The known cases are: FUZ-025 (M8 tool → OAST column in M11), CRL-006 (M11 crawler → session re-auth
-in M12), REP-006 (M5 Repeater's "in-scope" redirect option + ScopeGuard gating → M6 when F04/scope
-lands; until then Repeater sends unconditionally), REP-008 (M5 Repeater → Transform Tags in M7),
-DEC-021 `beacon()` tag (M7 Decoder → wired in M11 when F10/Beacon lands), NB-005 (M9 Notebook↔issue
-link → M10 when F08 lands), NB-007 (M9 Notebook→report → M16 when F19 lands), ETL-004 (M16 →
-secret-scanner link in M19), SES-030 (M12 Sessions → recorded login in M13). Each milestone's
-Definition of Done only checks what can work with the capabilities built so far (e.g. M11 validates
-an **unauthenticated** crawl+audit; M12 validates the authenticated one), and any acceptance test
-that exercises a deferred part (e.g. F07 test 4's OAST column) runs only in the later milestone.
+itself forward-depends on the Browser's CDP automation (F16, M13a) for login recording, so pulling
+Sessions earlier would create a new forward dependency. So the tool is built first with a clean
+**hook point**, and the dependent requirement is finished in the later milestone and marked
+"(later: Mxx)" in its spec. The known cases are: FUZ-025 (M8 tool → OAST column in M11a), CRL-006
+(M11a crawler → session re-auth in M12a), REP-006 (M5 Repeater's "in-scope" redirect option +
+ScopeGuard gating → M6a when F04/scope lands; until then Repeater sends unconditionally), REP-008
+(M5 Repeater → Transform Tags in M7), ADV-013 (M7 JWT Transform Tag → the Fuzzer payload processor
+in M8), DEC-021 `beacon()` tag (M7 Decoder → wired in M11a when F10/Beacon lands), NB-005 (M9
+Notebook↔issue link → M10a when F08 lands), NB-007 (M9 Notebook→report → M16a when F19 lands),
+GRP-005 (M10b protobuf insertion points → Scanner in M11c), SES-030 (M12a Sessions → recorded login
+in M13a). Each milestone's Definition of Done only checks what can work with the capabilities built
+so far (e.g. M11b/M11c validate an **unauthenticated** audit; M12a validates the authenticated one),
+and any acceptance test that exercises a deferred part (e.g. F07 test 4's OAST column) runs only in
+the later milestone.
 
 > **On spec "Depends on" headers.** Those headers list the features a spec is *conceptually* related
 > to, not a strict acyclic module graph, so they can appear mutually (e.g. F01↔F05, F04↔F05). The
@@ -89,147 +102,208 @@ Split from the original M3 after the 2026-11-07 feature review (docs/FEATURE-REV
 - [ ] Upstream HTTP/2 in the engine: conversion, multiplexing, GOAWAY/RST/flow control, trailers (F03 HTTP-020…HTTP-024, HTTP-027).
 - **DoD:** `curl --http2` through Gulp to an h2 site and to VulnLab's h2 endpoint; the history shows the decrypted traffic with HTTP/2 flagged, and gRPC-style trailers are kept.
 
-## Phase B — Manual testing core (M4–M9)
+## Phase B — Manual testing core (M4a–M9) → Daily-driver beta
 
-### M4 — Intercept, Match & Replace, message editor, WebSockets
+### M4a — Message editor, Intercept, Match & Replace, Send to / Copy as
 - [ ] Shared `MessageEditor` component: Pretty/Raw/Hex/Render tabs, syntax highlighting, search, Inspector sidebar (doc 05 §4, UI-010…UI-030).
-- [ ] Intercept: queue, forward/drop, edit, intercept rules, intercept responses (PRX-010…PRX-018).
+- [ ] Intercept: queue, forward/drop, edit, intercept rules, intercept responses (PRX-010…PRX-019).
 - [ ] Match & Replace rules (PRX-020…PRX-025).
+- [ ] The global "Send to…" context menu infrastructure (UI-040) with **Copy as** cURL/PowerShell/fetch/Python/Go (ETL-008, moved from F17).
+- **DoD:** Intercept a login POST, change a parameter, and forward it; a match-replace rule adds a header to every request; "Copy as cURL" on a history row reproduces the request against `/echo` (F01 test 7).
+
+### M4b — Streaming responses, WebSockets, Gulp Browser launch
+- [ ] **Streaming responses** through the proxy with in-progress recording (PRX-050, F01 §4.3) and in-progress history rows with an SSE event view (HIS-007). (FEATURE-REVIEW A1; fixes the M2 "responses are buffered whole" carry-over.)
 - [ ] WebSockets: proxying, history, intercept and edit (PRX-030…PRX-036).
-- [ ] The global "Send to…" context menu infrastructure (UI-040).
-- **DoD:** Intercept a login POST, change a parameter, and forward it; a match-replace rule adds a header to every request; WebSocket messages show up in WS history.
+- [ ] **Gulp Browser launch** — the zero-setup capture path: discover/download Chromium, launch with the CA SPKI pin and proxy flags, one-click ⌘⇧O, cleanup on quit (BRW-001…BRW-004). CDP automation is M13a.
+- **DoD:** `curl -N` through Gulp to VulnLab `/sse` receives every event as it is sent and the history row goes from "streaming" to complete (F01 test 8); WebSocket messages show up in WS history; one click launches Chromium proxied through Gulp with no certificate warning on `https://localhost:8443`, its traffic is recorded, and quitting Gulp closes it (F16 test 1).
 
 ### M5 — Repeater (and the advanced HTTP engine)
-- [ ] All P0/P1 of F06 (tabs, groups, history, follow redirects, connection options).
+- [ ] All P0/P1 of F06 (tabs, groups, history, follow redirects, connection options), including streamed responses in Repeater (REP-016) and **paste to request** from cURL/fetch/raw (REP-017).
 - [ ] F03 HTTP/2 raw mode, the "update Content-Length" option, group send modes including single-packet attack (HTTP-030…HTTP-036).
-- [ ] F03 remaining P1 engine features: HTTP/1 pipelining for Turbo mode, platform auth, and the shared global/per-host throttle (HTTP-011, HTTP-012, HTTP-013). The HTTP-013 limiter is the one the Governor later consolidates (F29, M11).
-- **DoD:** The VulnLab race-condition endpoint (doc 06 §3) can be exploited with a group send in single-packet mode.
+- [ ] F03 remaining P1 engine features: HTTP/1 pipelining for Turbo mode, platform auth, and the shared global/per-host throttle (HTTP-011, HTTP-012, HTTP-013). The HTTP-013 limiter is extended with concurrency budgets and backoff in M11a (F03 §3.4, GOV-002/003/007).
+- **DoD:** The VulnLab race-condition endpoint (doc 06 §3) can be exploited with a group send in single-packet mode; a pasted cURL command reproduces its request (F06 test 8); `/sse` streams in a Repeater tab (F06 test 7).
 
-### M6 — Target: site map and scope
-- [ ] All P0/P1 of F04.
+### M6a — Target: site map and scope
+- [ ] All P0/P1 of F04 §2.1–§2.2 (site map, scope, ScopeGuard).
 - **DoD:** The site map tree fills from proxy traffic; scope rules hide out-of-scope items; ScopeGuard blocks out-of-scope Repeater sends (with a confirmation dialog).
 
-### M7 — Decoder and Comparer
-- [ ] All P0/P1 of F12 (including Transform Tags in Repeater) and F13.
-- **DoD:** A Base64 → URL → Gzip chain decodes correctly; Smart Decode solves the fixture set; Comparer word-diffs two 1 MB responses in < 1 s.
+### M6b — Import/export and the MCP read surface
+Pulled forward from M16/M17/M19 by the 2026-11-08 feature review: importing existing traffic and API
+definitions, and letting an AI agent read the project and send a request, are daily-driver needs.
+- [ ] The **import/export service** (PRJ-012) and its entry points: History export/import (HIS-044), Project → Import/merge (PRJ-008), site-map import (TGT-009), Postman/HAR import (ADV-051); **other-proxy history import** (PRJ-013).
+- [ ] **API import**: OpenAPI/Swagger request building into the site map and schema-aware values (ADV-050, ADV-052). ("Scan the whole API" activates with the active scanner in M11c.)
+- [ ] **MCP server, read surface + `send_request`**: the stdio transport (AUT-020), the tools `list_exchanges`, `get_exchange`, `send_request` and `get_scope` (AUT-021, first part), the site map and exchanges as resources (AUT-022, first part), and agent safety — ScopeGuard, approval mode, audit log (AUT-023). The remaining MCP tools arrive with their features and are completed in M17.
+- **DoD:** Importing VulnLab's `/openapi.json` creates requests for every `/api/*` operation in the site map; a HAR export → import round-trips byte-for-byte (F20 test 6) and the other-proxy fixtures import (F20 test 7); Claude Code connected over MCP (stdio) lists history and sends a request, and an out-of-scope `send_request` is refused with a structured error and audit-logged.
 
-### M8 — Fuzzer
-- [ ] All P0/P1 of F07 except Turbo mode (optional, finish it last within this milestone) and
-  except FUZ-025 (the OAST result column), which needs Beacon and is finished in M11.
-- **DoD:** A Cartesian attack with 2 positions × 100 payloads runs at ≥ 1,000 req/s against VulnLab; grep-extract pulls the CSRF token from every response.
+### M7 — Decoder, Comparer and JWT Workbench
+- [ ] All P0/P1 of F12 (including Transform Tags in Repeater and the **JWT Workbench**, ADV-010…ADV-013, moved from F23) and F13.
+- **DoD:** A Base64 → URL → Gzip chain decodes correctly; Smart Decode solves the fixture set; Comparer word-diffs two 1 MB responses in < 1 s; forged `alg:none` and RS→HS tokens are accepted by VulnLab `/api/me` and rejected by `/safe/api/me`, and a weak HMAC secret is brute-forced (F12 test 5).
 
-### M9 — Logger, GulpQL, search, Notebook
+### M8 — Fuzzer (with content discovery)
+- [ ] All P0/P1 of F07 §2.1–§2.5, including **content discovery** (ETL-003, moved from F17), except Turbo mode (optional, finish it last within this milestone) and except FUZ-025 (the OAST result column), which needs Beacon and is finished in M11a. (§2.6 WebSocket fuzzing is post-1.0, M22.)
+- **DoD:** A Cartesian attack with 2 positions × 100 payloads runs at ≥ 1,000 req/s against VulnLab; grep-extract pulls the CSRF token from every response; "Discover content" finds VulnLab's hidden `/admin` and backup files (F07 test 6).
+
+### M9 — Logger, GulpQL, search, Notebook, coverage index
 - [ ] GulpQL parser and evaluator, applied to History, Logger, site map and Fuzzer results (HIS-020…HIS-028).
 - [ ] Logger tool showing every tool's traffic (HIS-040…HIS-045).
 - [ ] Global search with FTS5 (HIS-050…HIS-054).
-- [ ] Notebook (all P0/P1 of F14).
-- [ ] **F31 Journal — coverage index (JRN-001)**: record per-endpoint tool coverage from `ToolSource`
-  (Repeater/Fuzzer/Notebook sources exist now; Scanner columns populate at M10/M11). The full
-  coverage/timeline/map tool is M16. (Phase F fold-in.)
+- [ ] Notebook (all P0/P1 of F14 except the timeline group JRN-003/005/008/009, which is M16b).
+- [ ] **Coverage index (JRN-001, F04 §2.3, moved from F31)**: record per-endpoint tool coverage from `ToolSource` (Repeater/Fuzzer/Notebook sources exist now; Scanner columns populate at M10a/M11b). The coverage view (JRN-002) is M16b.
 - **DoD:** `resp.status >= 500 and req.host ~ "api"` filters 1M rows in < 2 s (index-assisted where possible); the coverage index reflects which tools touched each endpoint.
 
-## Phase C — Automation (M10–M14)
+### Release gate — Daily-driver beta (after M9)
 
-### M10 — Passive scanner and the issue model
+Not a milestone with new features: a gate that M3b–M9 must pass before Phase C starts, so real users
+get the manual-testing core months before the scanner. Scope of the beta: proxy (HTTP/1.1, HTTP/2,
+TLS interception, streaming, WebSockets), Gulp Browser launch, intercept and Match & Replace,
+Repeater (incl. race sends and paste-to-request), site map and scope, import (HAR/OpenAPI/Postman/
+other proxies) and the MCP read surface, Decoder + JWT Workbench, Comparer, Fuzzer with content
+discovery, Logger, GulpQL, search and Notebook.
+- [ ] Every P0 of M3b–M9 is implemented and tested; `make test` and `make lint` pass; the core builds on Linux.
+- [ ] A scripted end-to-end beta check (`Scripts/beta-dod.sh`, run in CI on macOS) against VulnLab passes: browse via the Gulp Browser, intercept and edit, Repeater single-packet race, Fuzzer content discovery, JWT forgery, import of `/openapi.json`, global search, and a Notebook entry — then quit and reopen the project with everything intact.
+- [ ] The performance budgets of doc 01 §9 that apply to the shipped tools hold (history scrolling at 1M rows, proxy overhead, GulpQL, Comparer).
+- [ ] No known data-loss bug: the PROGRESS carry-overs that can lose data (the app-terminate flush hook, exchange-id reuse after delete) are fixed; every other open carry-over is listed in the beta release notes.
+- [ ] A Developer-ID-signed, notarized build (doc 02 §8 signing and notarization; Sparkle auto-update stays M20) installs on a clean macOS 14 machine. This needs the final bundle id and team (doc 07 product decision #1).
+- **DoD:** The beta build is in the hands of a small group of real testers with a feedback channel, and the release notes list what is not there yet (scanner, crawler, sessions, extensions, reports, AI).
+
+## Phase C — Automation (M10a–M13b)
+
+### M10a — Passive scanner and the issue model
 - [ ] Issue model, issue UI (dashboard issue list, the issue detail with highlighted evidence), dedup (SCN-001…SCN-007).
 - [ ] Passive checks catalog (F08 §3.1).
 - [ ] Live passive scanning of proxy traffic as a background task.
 - **DoD:** Browsing VulnLab produces the expected passive issues (fixture list in doc 06 §3) and no duplicates.
 
-### M11 — Crawler, active scanner, Beacon
-- [ ] Crawler, **static mode only**: the static-mode P0s CRL-001…CRL-010. The browser-backed P0s
-  (CRL-030/031, which need the Browser) are M13 — do **not** build them here. Build CRL-006's
-  re-authentication **hook point** now, but its session-rule/macro wiring is completed in M12 when
-  F15 (Sessions) exists — until then the crawler runs unauthenticated. Unauthenticated crawl+audit
-  is what this milestone's DoD checks; authenticated crawling is validated in M12.
+### M10b — gRPC and protobuf
+- [ ] All P0/P1 of F33 except the Scanner half of GRP-005 (later: M11c): RPC recognition and framing with trailers (GRP-001), schema-less decode (GRP-002), `.proto`/descriptor/reflection schemas (GRP-003), edit and re-send in Repeater (GRP-004), Fuzzer positions inside protobuf fields (GRP-005). (FEATURE-REVIEW A2; supersedes ADV-053.)
+- **DoD:** A gRPC unary call to VulnLab's `vulnlab.Echo/Say` through the proxy decodes without a schema and shows `grpc-status` from the HTTP/2 trailers; reflection names the fields; an edited message re-sent from Repeater returns the edited echo; gRPC-Web text and Connect calls decode (F33 tests 1–3).
+
+### M11a — Crawler (static), Beacon client, shared limiter and panic stop
+- [ ] Crawler, **static mode only**: the static-mode P0s CRL-001…CRL-010. The browser-backed P0s (CRL-030/031) are M13a. Build CRL-006's re-authentication **hook point** now; its session-rule/macro wiring is completed in M12a — until then the crawler runs unauthenticated.
+- [ ] Beacon **client** + interactsh client (all P0/P1 of F10 §2.1) and the local **dev Beacon** (BCN-024) for tests; wire the Fuzzer's OAST column (FUZ-025) and the `beacon()` Transform Tag (DEC-021). The deployable Beacon server (BCN-020…023, 025) is post-1.0.
+- [ ] **Shared limiter** (F03 §3.4: GOV-002, GOV-003, GOV-007 — HTTP-013 extended with concurrency budgets and adaptive backoff) and the **panic stop** (F20 GOV-001), built now because M11 ships the first active tools.
+- **DoD:** A static crawl of VulnLab discovers every linked route within scope and none outside it; the dev-Beacon and interactsh loops correlate an interaction to its request (F10 tests 1, 3, 4); global/per-host caps bound aggregate throughput (F03 test 6) and backoff reacts to 503 bursts (F03 test 7); the panic stop halts a running crawl + fuzz with zero in-flight requests (F20 test 5).
+
+### M11b — Active scan engine and the P0 checks
 - [ ] Insertion points, active check engine, scan configurations, the scan task UI (SCN-020…SCN-038).
-- [ ] Active checks catalog (F08 §3.2), at least every check marked P0.
-- [ ] Beacon client + interactsh client; Beacon server (Beacon package) (all P0 of F10).
-- [ ] Check Recipes (YAML custom checks) (SCN-060…SCN-066).
-- [ ] **F29 Governor — shared limiter + panic stop (GOV-001/002/003/007)**: the global + per-host
-  rate/concurrency limiter (consolidating F03 HTTP-013) and the one-key panic stop that halts all
-  active tools, built now because M11 ships the first active tools (Scanner/Crawler/Beacon). The full
-  Governor panel/quiet-hours/watchpoints are M16. (Phase F fold-in.)
-- **DoD:** A "Crawl and audit" of VulnLab finds every P0 vulnerability planted there, with zero false positives on the "safe twin" endpoints (doc 06 §3); the panic stop halts a running crawl+audit with zero in-flight requests, and global/per-host caps bound aggregate throughput.
+- [ ] Every active check marked **[P0]** in F08 §3.2, with the §3.4 detection methodology.
+- **DoD:** An active audit of VulnLab's vulnerable endpoints finds every P0 vulnerability planted there (including the three OAST checks via the dev Beacon), with zero false positives on the "safe twin" endpoints (doc 06 §3).
 
-### M12 — Sessions, authentication, macros
-- [ ] All P0/P1 of F15.
-- **DoD:** A scan of VulnLab's authenticated area stays logged in by re-running the login macro when the session expires.
+### M11c — Full check catalog and crawl-and-audit
+- [ ] The remaining (P1) active checks of F08 §3.2 and the checks added by the 2026-11-08 review: server-side prototype pollution, client-side path traversal, mass assignment, upload bypasses and JWT checks (SCN-070…SCN-074).
+- [ ] "Crawl and audit" end-to-end (F09 + F08), "scan the whole API" for imported OpenAPI operations (ADV-050), and protobuf-field insertion points in the Scanner (GRP-005).
+- **DoD:** A "Crawl and audit" of VulnLab finds every planted vulnerability (the doc 06 §3 fixture manifest, including the M11c fixtures and the gRPC SQLi) with zero false positives on the safe twins — the scanner-accuracy test (doc 06 §3); a scan of the imported `/openapi.json` covers every operation.
 
-### M13 — Gulp Browser, DOM Probe, Frame Kit
-- [ ] All P0/P1 of F16, plus the CDP-backed crawl mode of F09 (CRL-030…CRL-036).
-- **DoD:** One click launches a proxied Chromium with no certificate warnings; the SPA in VulnLab is crawled; DOM Probe finds the planted DOM XSS.
+### M12a — Sessions, authentication, macros, request signing
+- [ ] All P0/P1 of F15 except SES-030/032 (recorded and passkey logins need the browser automation of M13a), including the **request-signing** session actions DPoP, HTTP Message Signatures and AWS SigV4 (SES-016…SES-018).
+- [ ] Wire the crawler's re-authentication (CRL-006) and authenticated scanning (SCN-035).
+- **DoD:** A scan of VulnLab's authenticated area stays logged in by re-running the login macro when the session expires; Repeater sends to the `/signed/*` fixtures succeed with the matching signing action and fail without it (F15 test 5).
 
-### M14 — Sequencer
-- [ ] All P0/P1 of F11.
-- **DoD:** The VulnLab weak-token endpoint is rated "poor" and the strong-token endpoint "excellent".
+### M12b — Authz Matrix
+Moved up from M19 by the 2026-11-08 feature review: access-control testing is the most-used
+bug-bounty tool and only needs identities (M12a).
+- [ ] All P0/P1 of F23 §1 (ADV-001…ADV-006). (WSX-004, per-message WebSocket authorization, is post-1.0 — M22.)
+- **DoD:** Authz Matrix flags the VulnLab IDOR (`/api/orders/{id}`) and the `/admin` bypass, with the `/safe/*` twins "Enforced" (F23 test 1); live mode flags the IDOR while browsing as user-A.
+
+### M13a — Browser automation: CDP crawl, recorded logins, passkeys
+- [ ] CDP connection and profile management (BRW-005…BRW-007) and the browser-backed crawl mode of F09 (CRL-030…CRL-036).
+- [ ] Recorded login (SES-030) and **passkeys**: the CDP virtual authenticator (BRW-016) and passkey recorded logins (SES-032).
+- **DoD:** The SPA in VulnLab is crawled through the browser and its client-side routes appear in the site map; a browser-recorded login replays to a valid session (F15 test 4); a passkey login to `/webauthn/login` is recorded and replayed with the virtual authenticator (F15 test 6, F16 test 5).
+
+### M13b — DOM Probe and GraphQL Workbench
+- [ ] DOM Probe (BRW-010…BRW-015; now P1). Frame Kit (BRW-020…022) is cut.
+- [ ] **GraphQL Workbench** (all P0/P1 of F23 §5, ADV-040…ADV-043), moved up from M19 to ship with the browser.
+- **DoD:** DOM Probe finds the planted DOM XSS on `/spa` and nothing on `/safe/spa` (F16 test 2); the GraphQL Workbench introspects `/graphql`, renders the schema and flags the field-level authz bug (F23 test 5).
+
+### M14 — (retired)
+Was the Sequencer (F11). The 2026-11-08 feature review moved F11 out of v1 (it rarely finds bugs
+against modern frameworks and JWT-based sessions) — see the Post-1.0 backlog below. The number is not
+reused, so older references stay unambiguous.
 
 ## Phase D — Platform (M15–M17)
 
-### M15 — Extensions and scripting
-- [ ] All P0/P1 of F18 (JS host, JSON-RPC host, Python SDK, Snippets, Extension Gallery stub).
-- **DoD:** The sample extensions in `SDK/examples` (header injector, custom passive check, custom tab) work in both runtimes.
+### M15 — Extensions, scripting, Check Recipes
+- [ ] All P0/P1 of F18 (JS host, JSON-RPC host, Snippets, the Python SDK — now P1). The Extension Gallery (EXT-020/021) is post-1.0; v1 installs from a file or folder.
+- [ ] **Check Recipes** (YAML custom checks, SCN-060…SCN-064; moved out of M11 and to P1 by the 2026-11-08 review).
+- **DoD:** The sample extensions in `SDK/examples` (header injector, custom passive check, custom tab) work in both runtimes; a YAML Check Recipe for a custom header leak detects it on VulnLab and renders the templated issue (F08 §7).
 
-### M16 — Reporting, engagement tools, project polish
-- [ ] All P0/P1 of F17, F19, and the remaining items of F20.
-- [ ] **F29 Governor — full control surface**: the live throughput panel (GOV-006), resource
-  watchpoints (GOV-004), quiet hours (GOV-005), dry-run preview (GOV-008) and layered-settings caps
-  (GOV-009), on top of the M11 limiter/panic-stop. (Phase F fold-in.)
-- [ ] **F31 Journal — full tool**: the coverage view, activity timeline, attack-surface map and
-  "resume where I left off" (JRN-002…JRN-009), on top of the M9 coverage index. (Phase F fold-in.)
-- **DoD:** A self-contained HTML report of the VulnLab scan opens offline; a CSRF PoC is generated for a VulnLab form; the Governor panel shows live throughput and the Journal shows per-endpoint coverage.
+### M16a — Reporting
+- [ ] All P0/P1 of F19, including the **bug-bounty Markdown** export (RPT-012, promoted to P1) and the **CSRF PoC generator** (ETL-007, moved from F17). PDF and branding (RPT-009, RPT-005) are P2.
+- [ ] Notebook items in reports (NB-007).
+- **DoD:** A self-contained HTML report of the VulnLab scan opens offline; a bug-bounty Markdown export reproduces a finding with its cURL line (F19 test 6); a CSRF PoC is generated for a VulnLab form (F19 test 5).
 
-### M17 — Automation: CLI, REST API, MCP server
-- [ ] All P0/P1 of F21.
-- **DoD:** `gulp scan --url http://localhost:8088 --config fast --report out.html` exits non-zero when it finds high-severity issues; Claude Code connected over MCP can list history and send a Repeater request.
+### M16b — Project polish, throughput panel, coverage view and timeline
+- [ ] The remaining items of F20 (Project Info, Compact/Rebuild, auto-save reminder, settings reset/search, first run, diagnostics) and the open M2 carry-overs.
+- [ ] Live **throughput panel** (GOV-006, F20 §2.4).
+- [ ] **Coverage view** (JRN-002, F04 §2.3) and the **engagement timeline**, resume card, markers and report appendix (JRN-003, JRN-005, JRN-008, JRN-009, F14); the `v2_journal` migration (doc 04 §4).
+- **DoD:** Compact reduces project size and Rebuild reconstructs the site map and FTS (F20 test 4); the throughput panel shows live req/s and the binding cap during a fuzz; the coverage view lists the untested in-scope endpoints (F04 test 5); the timeline and resume card reflect the last session (F14 test 4).
+
+### M17 — Automation: CLI, REST API, full MCP server
+- [ ] All P0/P1 of F21 — the CLI, the REST API, and the rest of the MCP tools and resources (on top of the M6b read surface) — plus the **task scheduler** (ETL-006, moved from F17). `gulp retest` (DRF-009) is post-1.0 (M25).
+- **DoD:** `gulp scan --url http://localhost:8088 --config fast --report out.html` exits non-zero when it finds high-severity issues; Claude Code connected over MCP can start a scan, poll it and list its issues; a scheduled scan starts at its set time and notifies on completion (F21 test 5).
 
 ## Phase E — Differentiators and release (M18–M20)
 
 ### M18 — Gulp Assistant (AI)
-- [ ] All P0/P1 of F22.
-- **DoD:** With AI disabled no provider call is possible; enabled (with consent), "Explain this issue" on a VulnLab finding returns a grounded answer citing the real exchange with the auth cookie masked in the redaction preview; an AI-initiated out-of-scope active action is blocked and audit-logged as `.ai`.
+- [ ] All P0/P1 of F22, including the **bounded agentic follow-up** "Investigate this endpoint" (AI-013). Payload crafting and report drafting (AI-007, AI-009) are P2.
+- **DoD:** With AI disabled no provider call is possible; enabled (with consent), "Explain this issue" on a VulnLab finding returns a grounded answer citing the real exchange with the auth cookie masked in the redaction preview; an AI-initiated out-of-scope active action is blocked and audit-logged as `.ai`; "Investigate this endpoint" stops at its request budget and every active step waits for approval.
 
-### M19 — Advanced testing tools
-- [ ] All P0/P1 of F23 (Authz Matrix, JWT Workbench, Param Discovery, Smuggling Probe, GraphQL Workbench, API import, secret scanner).
-- **DoD:** Authz Matrix flags the VulnLab IDOR (`/api/orders/{id}`) and `/admin` bypass with `/safe/*` twins "Enforced"; JWT `alg:none` and RS→HS confusion are accepted/rejected correctly; the GraphQL introspection + field-authz bug is found; importing `/openapi.json` creates requests for every `/api/*` operation; the secret scanner finds the planted key.
+### M19a — Param Discovery, secret scanner, JS Recon core
+- [ ] **Param Discovery** (F23 §3, ADV-020…ADV-022) and the **secret scanner** (F23 §7, ADV-060/061).
+- [ ] **JS Recon Studio core** — the review's "trimmed, earlier" F27: asset inventory with the scripts/comments view, beautify, source-map recovery, endpoint extraction and hand-off to the site map/scanner (JSR-001…JSR-005, ETL-004). JSR-006…JSR-009 stay post-1.0 (M23).
+- **DoD:** Param Discovery finds the hidden parameter planted in a VulnLab endpoint (F23 test 3); the secret scanner finds the planted key in a VulnLab JS file and reports it redacted (F23 test 7); JS Recon reconstructs the `src/` tree from the exposed `.map` and adds the JS-only `/api/internal/*` routes to the site map (F27 tests 1–2).
+
+### M19b — Smuggling Probe
+- [ ] All P0/P1 of F23 §4 (ADV-030…ADV-033).
+- **DoD:** The Smuggling Probe classifies VulnLab's CL.TE emulation listener (:8090) as vulnerable via timing differentials and a correctly-behaving endpoint as safe (F23 test 4).
 
 ### M20 — macOS polish, packaging, release
-- [ ] Remaining items of F24 (system proxy toggle, menu bar extra, Shortcuts/App Intents, Quick Look).
-- [ ] Sparkle, signing, notarization, DMG, release workflow (doc 02 §8).
+- [ ] Remaining items of F24 (system proxy toggle, dock and notifications, Sparkle UI, iOS Simulator CA install; the menu bar extra, Services and App Intents are P2 since 2026-11-08).
+- [ ] Sparkle, signing, notarization, DMG, release workflow (doc 02 §8) — signing and notarization already work since the beta gate.
 - [ ] Accessibility audit (VoiceOver labels, keyboard navigation), localization-ready strings.
 - [ ] Performance budget verification (doc 01 §9).
 - **DoD:** A notarized DMG installs and auto-updates from a test appcast.
 
 ## Phase F — Post-1.0 expansion (M21+)
 
-Added after the v1 spec review (ADR-013). These build on the v1 engines; each spec notes where parts
-could be pulled earlier. Schedule/prioritize with the owner — the order below is the suggested value
-ranking, not a hard sequence. **Two have P0 parts that belong earlier and should be built then:**
-F29 Governor's shared limiter + panic stop in **M11** (when the first active tools ship) with the
-full panel in M16, and F31 Journal's coverage index in **M9** with the full tool in M16.
+Added after the v1 spec review (ADR-013) and reshaped by the 2026-11-08 feature review (product
+decision #7): F26, F28 and F30 were merged into the v1 specs they extend, but their requirements stay
+post-1.0 and are scheduled here in their new homes. These build on the v1 engines. Schedule and
+prioritize with the owner; the suggested order after 1.0 is **M21 (SSO) and M26 (LLM) first**, then
+M22–M25.
 
 ### M21 — SSO Workbench
 - [ ] All P0/P1 of F25. **DoD:** reconstructs a VulnLab OIDC auth-code flow and flags an over-accepted `redirect_uri`; a signature-stripped/XSW SAML assertion is accepted by the vulnerable SP and rejected by the safe twin.
 
-### M22 — WebSocket Security Workbench
-- [ ] All P0/P1 of F26. **DoD:** WS Repeater + Fuzzer work against VulnLab `/ws/chat`; a cross-origin handshake is flagged CSWSH; a replayed privileged message under a stripped session is caught.
+### M22 — WebSocket fuzzing and checks (merged from F26)
+- [ ] WS Fuzzer and OAST over WS (F07 §2.6: WSX-002, WSX-005, WSX-007), CSWSH (F08 §3.6: WSX-003), per-message authorization in the Authz Matrix (F23 §1: WSX-004), sub-protocol decoding (F01 §2.4: WSX-006) and scripted WS sequences (F15: WSX-008). **DoD:** a 2-position WS fuzz with an extract rule works against VulnLab `/ws/chat`; a cross-origin handshake is flagged CSWSH; a replayed privileged message under a stripped session is caught.
 
-### M23 — JS Recon Studio
-- [ ] All P0/P1 of F27. **DoD:** reconstructs a source tree from an exposed `.map`, mines `/api/internal/*` endpoints not found by crawling, and feeds them to a scan.
+### M23 — JS Recon Studio (rest)
+- [ ] The F27 requirements not built in M19a (JSR-006…JSR-009). **DoD:** library fingerprinting flags the bundled known-vulnerable library version and the asset diff surfaces a new endpoint between two VulnLab captures (F27 tests 3–4).
 
-### M24 — Web Cache Poisoning & Deception
-- [ ] All P0/P1 of F28. **DoD:** confirms an `X-Forwarded-Host` poisoning vector victim-safely and a `/account.css` deception; safe twins clean.
+### M24 — Web cache poisoning & deception check family (merged from F28)
+- [ ] All P0/P1 of F08 §3.5 (WCP-001…WCP-008). **DoD:** confirms an `X-Forwarded-Host` poisoning vector victim-safely and a `/account.css` deception; safe twins clean.
 
-### M25 — Drift & Retest
-- [ ] All P0/P1 of F30. **DoD:** an issue proof re-run flips Still-Vulnerable→Fixed after a patch; `gulp retest --fail-on regression` exits non-zero on a regression.
+### M25 — Issue retest (merged from F30)
+- [ ] F08 §2.4 (DRF-003…DRF-005) and `gulp retest` (F21 DRF-009); the `v3_drift` migration with `issue_proofs`/`retest_runs` only. **DoD:** an issue proof re-run flips Still-Vulnerable→Fixed after a patch; `gulp retest --fail-on regression` exits non-zero on a regression.
 
 ### M26 — LLM/AI-feature security testing
-- [ ] All P0/P1 of F32. **DoD:** a VulnLab chat endpoint is flagged for direct prompt injection and for indirect injection with an OAST-correlated exfil; the guarded twins are clean.
+- [ ] All P0/P1 of F32, including AI-agent/MCP endpoint testing (LLM-009). **DoD:** a VulnLab chat endpoint is flagged for direct prompt injection and for indirect injection with an OAST-correlated exfil; the guarded twins are clean; the poisoned tool description on VulnLab's `/mcp` server is reported.
 
-### (Folded into earlier milestones)
-- **F29 Governor** — shared limiter + panic stop in **M11**, live panel/quiet-hours in **M16**.
-- **F31 Journal** — coverage index in **M9**, full coverage/timeline/map tool in **M16**.
+### Post-1.0 backlog (specified, not scheduled)
 
-Backlog features (CSP Auditor, Deserialization, gRPC, Arsenal, Share Packs, Privacy Guard, Interop
-Hub, Perspectives, Dojo, Access Pack, target TLS scanner) are listed in `docs/README.md`; promote
-each to a full `Fxx` spec and a milestone here when scheduled.
+Specified requirements that the 2026-11-08 feature review moved out of v1 without a milestone yet.
+Schedule them here (as a new Phase F milestone) when the owner decides; nothing below is built
+before 1.0.
+
+| Item | Requirements | Why it waits | DoD when scheduled |
+|---|---|---|---|
+| Sequencer (F11) | SEQ-001…SEQ-010 | Rarely finds bugs against modern frameworks and JWT sessions; a whole milestone | The VulnLab weak-token endpoint is rated "poor" and the strong-token endpoint "excellent" |
+| Deployable Beacon server (F10 §2.2) | BCN-020…BCN-023, BCN-025 | interactsh support (BCN-005) covers v1 users | A Gulp client correlates DNS + HTTPS interactions through a self-hosted `gulp-beacon` on a real domain |
+| Extension Gallery (F18 §3.3) | EXT-020, EXT-021 | No extension community yet | An extension installs from the signed catalog after its permissions are shown |
+| Per-app transparent proxy (F24) | MAC-011 (the post-1.0 P1 part) | Needs a Network Extension and its entitlement | An app that ignores the system proxy is captured |
+| HTTP/3 client (F03 §3.5) | HTTP-037 | Interception stays a non-goal; this is a Repeater-only extra | A Repeater send over `h3` to an HTTP/3 server succeeds and `Alt-Svc: h3` is flagged in history |
+
+Further, not-yet-specified candidates (CSP Auditor, Deserialization, Arsenal, Share Packs, Privacy
+Guard, Interop Hub, Perspectives, Dojo, Access Pack, target TLS scanner) are listed in
+`docs/README.md`; promote each to a full `Fxx` spec and a milestone here when scheduled.

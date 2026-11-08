@@ -1,7 +1,8 @@
 # F08 — Scanner (passive, active, check recipes)
 
-> Milestones: M10 (passive + issue model), M11 (active) · Modules: `GulpScanner`,
-> `GulpFeatures/{Scanner,Issues}` · Depends on: F03, F04, F09, F10, F15
+> Milestones: M10a (passive, issues), M11b (active, P0 checks), M11c (catalog), M15 (recipes), M22, M24, M25 ·
+> Modules: `GulpScanner`, `GulpFeatures/{Scanner,Issues}` · Depends on: F03, F04, F09, F10, F12 (JWT
+> checks), F15, F16 (CSPT confirmation)
 
 ## 1. Purpose
 
@@ -13,6 +14,11 @@ The Scanner finds vulnerabilities automatically. **Passive** checks analyze traf
 > responses the tester already caused (e.g. "this cookie lacks HttpOnly", "the response reflects
 > input"). Active scanning sends attack payloads (e.g. a quote to test SQLi) and can change state, so
 > it's scope-gated and configurable.
+
+Milestones: the issue model and passive checks are M10a; the active engine and the [P0] checks
+M11b; the rest of the catalog M11c; Check Recipes M15. M22, M24 and M25 in the header are the
+**post-1.0** parts — WebSocket checks (§3.6), the cache poisoning family (§3.5) and issue retest
+(§2.4), merged here from F26, F28 and F30 on 2026-11-08.
 
 ## 2. Issue model and requirements
 
@@ -45,7 +51,7 @@ The Scanner finds vulnerabilities automatically. **Passive** checks analyze traf
 | SCN-032 | P0 | Time-based detection with statistical rigor: multiple samples, compare against baseline latency distribution, require a consistent delay to reduce false positives. |
 | SCN-033 | P0 | OAST integration (F10): checks can request a correlation token, inject it, and later ask whether an interaction arrived (supports asynchronous/blind detection; a scan isn't "done" until a grace period for OAST has elapsed). |
 | SCN-034 | P0 | Scan configurations: **Passive only**, **Light active**, **Balanced**, **Thorough**, and **Custom** (choose check families, intensity, insertion-point policy, concurrency, throttle). Configs are savable/shareable. |
-| SCN-035 | P0 | Scan tasks: created from "Actively scan" on a request/branch, or from a Crawl-and-audit (F09). Progress, pause/resume/cancel, per-check counts, and a log. Respect ScopeGuard and the shared resource pool. *(The F15 dependency in the header is for **authenticated** scanning, which lands in M12; the M11 scanner runs unauthenticated, matching the M11 DoD — same deferral as CRL-006.)* |
+| SCN-035 | P0 | Scan tasks: created from "Actively scan" on a request/branch, or from a Crawl-and-audit (F09). Progress, pause/resume/cancel, per-check counts, and a log. Respect ScopeGuard and the shared resource pool. *(The F15 dependency in the header is for **authenticated** scanning, which lands in M12a; the M11b/M11c scanner runs unauthenticated, matching their DoDs — same deferral as CRL-006.)* |
 | SCN-036 | P1 | Consolidation across insertion points (don't report the same reflected-XSS once per param if it's clearly the same sink); configurable. |
 | SCN-037 | P1 | Re-scan an issue to verify (re-run just that check) and mark fixed/still-present. |
 | SCN-038 | P1 | Scan speed/safety guards: max requests per insertion point, global budget, and "safe checks only" (no payloads that could modify data). |
@@ -71,9 +77,9 @@ Needs-Review with the reason.
 ## 3. Built-in checks catalog
 
 Each entry = one or more issue definitions. Mark the P0 set that the VulnLab accuracy test (doc 06
-§3) depends on; implement the rest as P1 within M10/M11.
+§3) depends on; implement the rest as P1 within M10a/M11c.
 
-### 3.1 Passive checks (M10)
+### 3.1 Passive checks (M10a)
 
 - Security headers missing/weak: CSP (absent/weak), HSTS, X-Content-Type-Options,
   X-Frame-Options/frame-ancestors, Referrer-Policy, Permissions-Policy. **[P0 for the ones VulnLab
@@ -91,7 +97,7 @@ Each entry = one or more issue definitions. Mark the P0 set that the VulnLab acc
 - Unencrypted / cleartext submission; open redirect parameters observed.
 - Content-type sniffing risks; charset issues.
 
-### 3.2 Active checks (M11)
+### 3.2 Active checks (M11b for the [P0] set, M11c for the rest)
 
 - **Reflected XSS** (context-aware: HTML body, attribute, JS string, URL, CSS) with a benign
   marker-probe methodology and a proof payload per context. **[P0]**
@@ -205,7 +211,7 @@ proves it.
 |---|---|---|
 | WSX-003 | P0 | **CSWSH** (cross-site WebSocket hijacking): replay the upgrade handshake with a forged/absent/cross-origin `Origin` header (cookies kept) and report whether the server still upgrades and returns authenticated data in the first frames; raise a CSWSH issue. *(Moved from F26; later: M22.)* |
 
-## 4. Live passive scanning (M10)
+## 4. Live passive scanning (M10a)
 
 - A background consumer of `exchangeRecorded` runs passive checks on in-scope traffic (configurable
   to all), emitting issues. It must keep up with proxy throughput (batch, run off-main, drop to a

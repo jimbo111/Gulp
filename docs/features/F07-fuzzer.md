@@ -40,7 +40,7 @@ content). It is used for brute force, parameter testing, enumeration, and inject
 | FUZ-022 | P0 | **Grep-extract**: capture text between delimiters or by regex group into a column (e.g. extract a token, a row count, a reflected value). |
 | FUZ-023 | P0 | **Baseline & anomalies**: mark a baseline response; highlight rows whose length/status/time deviate; a quick "length histogram" to spot outliers. |
 | FUZ-024 | P1 | Reflection column: whether the payload is reflected in the response (and encoded/raw), useful for XSS triage. |
-| FUZ-025 | P1 | OAST column: when a payload includes a Beacon token (F10), flag rows that caused an out-of-band interaction (blind injection detection). *(later: M11 — needs Beacon, which lands in M11; the rest of the Fuzzer is M8.)* |
+| FUZ-025 | P1 | OAST column: when a payload includes a Beacon token (F10), flag rows that caused an out-of-band interaction (blind injection detection). *(later: M11a — needs Beacon, which lands in M11a; the rest of the Fuzzer is M8.)* |
 | FUZ-026 | P1 | Save an attack and its results in the project; reopen later; export results (CSV/HTML). |
 | FUZ-027 | P2 | Charts: length and time scatter plots (Swift Charts) to eyeball clusters. |
 
@@ -122,9 +122,9 @@ Multiple attacks run as separate tabs; the Dashboard lists them as tasks.
    (measured), and finds the valid pair.
 3. Grep-extract pulls the CSRF token from each `/login` GET; recursive-grep uses it in the paired
    POST.
-4. *(M11, not M8)* A blind-injection payload set carrying Beacon tokens flags the row that triggered
+4. *(M11a, not M8)* A blind-injection payload set carrying Beacon tokens flags the row that triggered
    an out-of-band DNS/HTTP interaction (OAST column) — this exercises FUZ-025, which is deferred to
-   M11 with Beacon, so it is not part of the M8 Definition of Done.
+   M11a with Beacon, so it is not part of the M8 Definition of Done.
 5. Turbo mode reaches the throughput budget (doc 01 §9) against VulnLab and can be cleanly cancelled.
 6. "Discover content" on VulnLab finds the hidden `/admin` and the backup files present in the
    fixtures; results show as a path tree with statuses; scope is honored (moved from F17).

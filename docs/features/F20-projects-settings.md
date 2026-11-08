@@ -1,6 +1,7 @@
 # F20 — Projects and settings
 
-> Milestones: M2 (basics), M16 (polish) · Modules: `GulpStore`, `GulpWorkspace`,
+> Milestones: M2 (basics), M6b (import/export service), M11a (panic stop), M16b (polish, throughput
+> panel) · Modules: `GulpStore`, `GulpWorkspace`,
 > `GulpFeatures/Settings` · Depends on: doc 04
 
 ## 1. Purpose

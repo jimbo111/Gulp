@@ -1,6 +1,7 @@
 # F03 — HTTP engine
 
-> Milestones: M1 (HTTP/1), M3 (HTTP/2), M5 (raw H2, race-condition modes) · Module: `GulpHTTP` ·
+> Milestones: M1 (HTTP/1), M3 (HTTP/2), M5 (raw H2, race-condition modes), M11a (shared limiter,
+> §3.4) · Module: `GulpHTTP` ·
 > Depends on: GulpCore, GulpTLS
 
 ## 1. Purpose
@@ -60,10 +61,11 @@ public struct GroupItem: Sendable {                // one request in a group sen
 
 `WebSocketSession` is the live-socket handle returned by `openWebSocket`; its full surface (send/
 receive frames, close, reconnect) is specified in F01 §2.4 / F06 REP-012 — for M1 the `openWebSocket` method
-and `WebSocketSession` type are declared but not implemented (WebSockets are M4), so in M1 calling
-`openWebSocket` throws `GulpError(message: "WebSockets are implemented in M4", underlying: nil)`.
+and `WebSocketSession` type are declared but not implemented (WebSockets are M4b), so in M1 calling
+`openWebSocket` throws `GulpError(message: "WebSockets are implemented in M4", underlying: nil)` (the
+message predates the M4a/M4b split; WebSockets are M4b).
 Because `openWebSocket` lives on the engine, the WebSocket frame codec (RFC 6455 framing +
-permessage-deflate) is implemented **in `GulpHTTP`** when WebSockets land at M4 — not in a
+permessage-deflate) is implemented **in `GulpHTTP`** when WebSockets land at M4b — not in a
 higher-layer module. `GulpProxy`, the WS Repeater (F06 REP-012), the post-1.0 WS Fuzzer (F07 §2.6)
 and any other consumer use that one codec; nothing lower than `GulpHTTP` needs it, so there is no
 upward import (doc 01 §3).
@@ -166,7 +168,9 @@ throughput panel are workspace features (F20 §2.4). Every active tool draws fro
   effect degrades: detect this, warn, and fall back to the HTTP/1 last-byte-sync mode (HTTP-034).
 - Hooks pipeline (`RequestHook` protocol): `func willSend(_ req: inout OutgoingRequest, context: HookContext) async throws`.
   Order: session rules (F15) → transform tags (F12) → match & replace (tool flag) → extensions
-  (F18) → content-length fixer. `ResponseHook`: extensions → session cookie jar update.
+  (F18) → content-length fixer → request signing (F15 SES-016…018, when a signing action applies —
+  last, so the signature covers the exact bytes sent). `ResponseHook`: extensions → session cookie
+  jar update.
 - Record every send through `ExchangeRecorder` with `source = options.recordAs`.
 - Shared limiter (§3.4): a `ResourcePool` in `GulpHTTP` — a token bucket for rate and a semaphore for
   concurrency, keyed global + per-host. Active tools already call `ScopeGuard.require` before sending

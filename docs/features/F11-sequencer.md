@@ -1,6 +1,13 @@
 # F11 — Sequencer
 
-> Milestone: M14 · Modules: `GulpSequencer`, `GulpFeatures/Sequencer` · Depends on: F03
+> Milestone: Post-1.0 backlog (out of v1 since the 2026-11-08 feature review) · Modules:
+> `GulpSequencer`, `GulpFeatures/Sequencer` · Depends on: F03
+
+**Out of v1 (2026-11-08 feature review, product decision #7).** Token-randomness analysis rarely
+finds bugs against modern frameworks and JWT-based sessions, and it cost a whole milestone (the
+retired M14). The spec is kept intact for when the owner schedules it; see the roadmap's Post-1.0
+backlog. The `GulpSequencer` module and the `sequencer_runs` table already exist as placeholders and
+stay unused until then.
 
 ## 1. Purpose
 

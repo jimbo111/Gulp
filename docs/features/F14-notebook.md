@@ -1,6 +1,7 @@
 # F14 — Notebook (organizer and notes)
 
-> Milestone: M9 · Modules: `GulpStore`, `GulpFeatures/Notebook` · Depends on: F05
+> Milestones: M9 (Notebook), M16b (engagement timeline, moved from F31) · Modules: `GulpStore`,
+> `GulpFeatures/Notebook` · Depends on: F04, F05
 
 ## 1. Purpose
 
@@ -16,9 +17,9 @@ report (F19).
 | NB-002 | P0 | Notebook view: a list/table of items (title, host/path, status, tags, time) with the item's request/response in the MessageEditor and an editable markdown note beside it. Reorder (drag), delete, and multi-select. |
 | NB-003 | P0 | Free-form note items (not tied to a request) for general observations; and per-item tags and highlight color. |
 | NB-004 | P1 | Filter/search Notebook (GulpQL-ish over title/note/tags/status) and group by status or host. |
-| NB-005 | P1 | Link an item to a Scanner issue (and vice versa), so manual and automated findings connect; "promote Notebook item to issue". *(later: M10 — the issue subsystem is F08/M10; the `issues`/`issue_evidence` tables exist in schema v1 but Notebook is M9, so the link is wired when F08 lands.)* |
+| NB-005 | P1 | Link an item to a Scanner issue (and vice versa), so manual and automated findings connect; "promote Notebook item to issue". *(later: M10a — the issue subsystem is F08/M10a; the `issues`/`issue_evidence` tables exist in schema v1 but Notebook is M9, so the link is wired when F08 lands.)* |
 | NB-006 | P1 | Send a Notebook item back to Repeater/Comparer/Fuzzer (it keeps the stored request). |
-| NB-007 | P1 | Include selected Notebook items in a report (F19) as manual findings, with their notes and evidence. *(later: M16 — Reporting is F19/M16; Notebook is M9, so "include in report" activates when F19 lands. The snapshot stored at M9 is what the report later consumes.)* |
+| NB-007 | P1 | Include selected Notebook items in a report (F19) as manual findings, with their notes and evidence. *(later: M16a — Reporting is F19/M16a; Notebook is M9, so "include in report" activates when F19 lands. The snapshot stored at M9 is what the report later consumes.)* |
 | NB-008 | P2 | Checklists/templates (e.g. an OWASP-style per-endpoint checklist) a tester can instantiate per host. |
 | NB-009 | P2 | Attach screenshots or files to an item (stored as blobs). |
 

@@ -1,6 +1,7 @@
 # F04 — Target: site map and scope
 
-> Milestone: M6 · Modules: `GulpCore` (ScopeService), `GulpStore`, `GulpFeatures/Target` ·
+> Milestones: M6a (site map, scope), M6b (import entry point TGT-009), M9 (coverage index), M16b
+> (coverage view) · Modules: `GulpCore` (ScopeService), `GulpStore`, `GulpFeatures/Target` ·
 > Depends on: F05
 
 ## 1. Purpose
