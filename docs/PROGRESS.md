@@ -6,13 +6,13 @@ order; within a milestone, do P0 first.
 
 ## Current status
 
-- **Phase**: **M3b DONE** — CI green on both platforms (run 42498773075, commit `11cd7d5`); the M3b
-  DoD (`Scripts/m3b-dod.sh`, Linux CI) PASS: `curl --http2` trusting only the Gulp CA speaks HTTP/2
-  to Gulp, Gulp speaks HTTP/2 to VulnLab `:8443` (its echo shows `GET /echo HTTP/2`), the `/chunked`
-  trailer arrives as an h2 trailer, https://example.com works over h2, and the reopened project
-  flags HTTP/2 and keeps the trailer. M0–M3a DoD scripts still pass in the same run.
-- **Active milestone**: **M4a — Message editor, Intercept, Match & Replace, Send to / Copy as**
-  (UI-010…030, PRX-010…025, UI-040, ETL-008), per the 2026-11-08 re-sequenced roadmap.
+- **Phase**: **M4a DONE** — CI green on both platforms (run 42500664587, commit `dee2424`); the M4a
+  DoD (`Scripts/m4a-dod.sh`, Linux CI) PASS: a curl login POST through `gulp-cli proxy` is held in
+  the Intercept queue, edited (user=alice → user=admin, Content-Length fixed) and forwarded; a Match
+  & Replace rule adds a header; the recorded row keeps the original and its Copy-as-cURL snippet
+  reproduces the request against VulnLab `/echo`. M1–M3b DoD scripts still pass in the same run.
+- **Active milestone**: **M4b — Streaming responses, WebSockets, Gulp Browser launch** (PRX-050,
+  HIS-007, PRX-030…036, BRW-001…004).
 - **Branching**: `main` holds merged milestones (PRs jimbo111/Gulp#1 M0–M2, #2 review fixes,
   #3 M3a, then M3b + the feature-review adoption). Work happens on
   the session branch and is merged by PR once CI is green.
@@ -48,9 +48,15 @@ order; within a milestone, do P0 first.
   ignored; ALPN pre-connect offers upstream `h2, http/1.1` rather than the client's exact list
   (decision log); a failed pre-connect still completes the client handshake (the request then gets
   a 502) instead of aborting it with a TLS alert.
-- **Next action**: M4a — the shared MessageEditor (Pretty/Raw/Hex/Render, Inspector), Intercept
-  (queue, forward/drop, rules), Match & Replace, the Send-to menu and Copy-as; executable DoD.
-  The plan after M3b follows the 2026-11-08 re-sequencing (milestone checklist below).
+- **M4a carry-overs**: MessageEditor Render tab, editable hex (UI-012), auto-scroll-to-match
+  (UI-015), Decoder popover (UI-021, with M7), DiffView (UI-030, with M7); Send-to destinations
+  arrive with their tools (Repeater M5, …); intercept P1s (GulpQL rules PRX-015, auto-forward timeout
+  PRX-016, Content-Length toggle — always on for edits); Match & Replace P1s (scope PRX-023, test
+  pane PRX-024, GulpQL conditions PRX-025); an edited *response* is sent to the client but History
+  keeps the received one; "in scope" intercept conditions are always true until scope (M6a).
+- **Next action**: M4b — streaming responses through the proxy with in-progress history rows and an
+  SSE view (fixes the M2 "buffered whole" carry-over), WebSockets (proxying, history, intercept), and
+  the Gulp Browser launch (BRW-001…004); executable DoD.
 - **Waiting on the owner**: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
   **adopted on 2026-11-08** (product decision #7 in `docs/07-decisions.md`) and applied to the specs:
   merges, cuts, deferrals, new requirements (incl. F33) and the re-sequenced roadmap with letter-
@@ -145,7 +151,7 @@ for behavior.
 - [x] M2 — Plain-HTTP proxy, storage, history UI — **CI green both platforms + executable DoD PASS (`1acf39c`)**
 - [x] M3a — TLS interception + CA (HTTP/1.1) — **CI green both platforms + executable DoD PASS (`054b24a`)**
 - [x] M3b — HTTP/2 (client side + upstream, trailers) — **CI green both platforms + executable DoD PASS (`11cd7d5`)**
-- [ ] M4a — Message editor, Intercept, Match & Replace, Send to / Copy as
+- [x] M4a — Message editor, Intercept, Match & Replace, Send to / Copy as — **CI green both platforms + executable DoD PASS (`dee2424`)**
 - [ ] M4b — Streaming responses, WebSockets, Gulp Browser launch
 - [ ] M5 — Repeater + advanced HTTP engine (HTTP/2 raw, group/race sends, streaming, paste-to-request)
 - [ ] M6a — Target: site map + scope + ScopeGuard
@@ -327,6 +333,20 @@ for behavior.
     `tooLarge(limit:)`; a captured `var` in a Sendable closure; the M3a DoD's echo check updated
     for the new h2 upstream.
   - Same branch: the feature-review adoption (docs agent; merged after all doc checkers passed).
+
+- 2026-11-08 — **M4a DONE** (CI run 42500664587, `dee2424`; DoD `Scripts/m4a-dod.sh`: PASS):
+  - GulpCodec `RequestExport`: Copy as cURL (exact bytes via ANSI-C quoting), PowerShell, fetch,
+    Python requests (bytes literal), Go.
+  - GulpProxy `MatchReplace`: rules on a byte-exact Latin-1 view (headers add/rewrite/remove, bodies
+    with Content-Length kept right, first lines, query/form params), presets, `MatchReplaceHook`
+    (proxy always, tools per rule); the engine records the original of any edited request.
+  - GulpProxy `InterceptQueue`: request/response toggles, AND/OR regex conditions (line-anchored),
+    held items await Forward (edited) / Drop; wired into HTTP/1 and HTTP/2 client paths.
+  - GulpUI `MessageEditor` (+ Linux-tested `MessageText`/`MessageInspection`); GulpFeatures Proxy
+    tabs (History, Intercept with a rules sheet, Match & Replace), History "Copy as" menu.
+  - gulp-cli: `proxy --add-header/--intercept-replace`, `copy-as`, `history --show` with originals.
+  - Caught by CI: missing `import Foundation` (UUID), ArraySlice concatenation, a lint line break,
+    `^` in header conditions needing line anchors.
 
 ## How to pick up work (reminder)
 
