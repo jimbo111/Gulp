@@ -4,6 +4,7 @@
 
 #if canImport(AppKit)
 import AppKit
+import GulpCodec
 import GulpCore
 import GulpStore
 import SwiftUI
@@ -279,6 +280,17 @@ struct HistoryTableView: NSViewRepresentable {
             menu.addItem(highlight)
             addItem("Comment…", #selector(editComment), to: menu)
             addItem("Copy URLs", #selector(copyURLs), to: menu)
+            let copyAs = NSMenuItem(title: "Copy as", action: nil, keyEquivalent: "")
+            let formats = NSMenu()
+            for format in RequestExportFormat.allCases {
+                let item = NSMenuItem(
+                    title: format.rawValue, action: #selector(copyAs(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = format.rawValue
+                formats.addItem(item)
+            }
+            copyAs.submenu = formats
+            menu.addItem(copyAs)
             menu.addItem(.separator())
             addItem("Delete", #selector(deleteRows), to: menu)
         }
@@ -317,6 +329,18 @@ struct HistoryTableView: NSViewRepresentable {
             let model = self.model
             Task {
                 let text = await model.urls(await targetIDs())
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            }
+        }
+
+        @objc func copyAs(_ sender: NSMenuItem) {
+            guard let raw = sender.representedObject as? String,
+                let format = RequestExportFormat(rawValue: raw)
+            else { return }
+            let model = self.model
+            Task {
+                let text = await model.copyAs(await targetIDs(), format: format)
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
             }

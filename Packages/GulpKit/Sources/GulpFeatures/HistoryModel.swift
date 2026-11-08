@@ -4,6 +4,7 @@
 
 #if canImport(AppKit)
 import Foundation
+import GulpCodec
 import GulpCore
 import GulpStore
 import GulpWorkspace
@@ -124,6 +125,18 @@ public final class HistoryModel {
             }
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// The rows' requests as runnable code (Copy as, ETL-008), separated by blank lines.
+    public func copyAs(_ ids: [ExchangeID], format: RequestExportFormat) async -> String {
+        var snippets: [String] = []
+        for id in ids {
+            if let exchange = try? await store.exchange(id: id) {
+                let snippet = RequestExport.export(exchange.request, target: exchange.target, as: format)
+                snippets.append(snippet)
+            }
+        }
+        return snippets.joined(separator: "\n\n")
     }
 
     // MARK: loading

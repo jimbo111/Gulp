@@ -127,7 +127,7 @@ public enum MatchReplace {
             let lf = head.firstIndex(of: 0x0A) ?? head.count
             let lineEnd = lf < head.count && lf > 0 && head[lf - 1] == 0x0D ? lf - 1 : lf
             let line = rewrite(Array(head[..<lineEnd]), rule)
-            return line + head[lineEnd...] + body
+            return line + Array(head[lineEnd...]) + body
         case .requestHeader, .responseHeader:
             return rewriteHeaders(head, rule) + body
         case .requestBody, .responseBody:
@@ -169,7 +169,7 @@ public enum MatchReplace {
         if let question = first.firstIndex(of: 0x3F) {
             let afterQuery = first[(question + 1)...].firstIndex(of: 0x20) ?? first.count
             let query = Array(first[(question + 1)..<afterQuery])
-            first = Array(first[...question]) + rewritePairs(query, rule) + first[afterQuery...]
+            first = Array(first[...question]) + rewritePairs(query, rule) + Array(first[afterQuery...])
             lines[0].text = first
         }
         var newHead = lines.flatMap { $0.text + $0.ending }

@@ -60,7 +60,7 @@ struct ProjectWindow: View {
     private func detail(session: ProjectSession) -> some View {
         switch selection {
         case .proxy:
-            SessionHistoryView(session: session, generation: generation)
+            ProxyToolView(session: session, generation: generation)
                 .toolbar {
                     Button("Listeners…") { showListeners = true }
                         .help("Proxy listeners for this project (PRX-001)")
