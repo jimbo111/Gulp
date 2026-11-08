@@ -114,10 +114,13 @@ final class InterceptModel {
 /// Proxy → Intercept.
 public struct InterceptView: View {
     @State private var model: InterceptModel
+    @State private var editingRules = false
+    let session: ProjectSession
 
     /// The Intercept screen for `session`.
     public init(session: ProjectSession) {
         _model = State(initialValue: InterceptModel(session: session))
+        self.session = session
     }
 
     public var body: some View {
@@ -133,6 +136,8 @@ public struct InterceptView: View {
                     "Responses",
                     isOn: Binding(
                         get: { model.interceptResponses }, set: { model.setIntercepting(responses: $0) }))
+                Button("Rules…") { editingRules = true }
+                    .help("Which requests and responses are held (PRX-013, PRX-014)")
                 Spacer()
                 Button("Forward") { model.forward() }
                     .keyboardShortcut("f", modifiers: [.command, .option])
@@ -165,6 +170,7 @@ public struct InterceptView: View {
             }
         }
         .navigationTitle("Intercept")
+        .sheet(isPresented: $editingRules) { InterceptRulesSheet(session: session) }
     }
 
     private var queue: some View {
@@ -192,6 +198,92 @@ public struct InterceptView: View {
     static func waiting(_ item: InterceptItem) -> String {
         let seconds = Int((ContinuousClock.now - item.queuedAt).components.seconds)
         return seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m \(seconds % 60)s"
+    }
+}
+/// The intercept rule editor (PRX-013 requests, PRX-014 responses).
+struct InterceptRulesSheet: View {
+    let session: ProjectSession
+    @State private var settings: InterceptSettings
+    @State private var status: String?
+    @Environment(\.dismiss) private var dismiss
+
+    init(session: ProjectSession) {
+        self.session = session
+        _settings = State(initialValue: session.settings.get(InterceptSettings.self))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Intercept rules").font(.headline)
+            Text("Conditions are evaluated top to bottom; each joins the result so far with AND or OR.")
+                .foregroundStyle(.secondary)
+            ConditionList(title: "Requests", conditions: $settings.requestRules)
+            ConditionList(title: "Responses", conditions: $settings.responseRules)
+            HStack {
+                if let status { Text(status).foregroundStyle(.secondary) }
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button("Apply") {
+                    let session = self.session
+                    let value = settings
+                    Task {
+                        do {
+                            try await session.setInterceptSettings(value)
+                            dismiss()
+                        } catch {
+                            status = "Not saved: \(error)"
+                        }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .frame(minWidth: 720, minHeight: 420)
+    }
+}
+
+/// An editable list of intercept conditions.
+struct ConditionList: View {
+    let title: String
+    @Binding var conditions: [InterceptCondition]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title).bold()
+                Spacer()
+                Button("Add") { conditions.append(InterceptCondition(field: .url, pattern: "")) }
+                Button("Remove last") { _ = conditions.popLast() }.disabled(conditions.isEmpty)
+            }
+            List {
+                ForEach($conditions) { $condition in
+                    HStack {
+                        Toggle("", isOn: $condition.enabled).labelsHidden()
+                        Picker("", selection: $condition.join) {
+                            Text("AND").tag(InterceptJoin.and)
+                            Text("OR").tag(InterceptJoin.or)
+                        }
+                        .labelsHidden()
+                        .frame(width: 70)
+                        Picker("", selection: $condition.field) {
+                            ForEach(InterceptField.allCases, id: \.self) { Text($0.rawValue) }
+                        }
+                        .labelsHidden()
+                        .frame(width: 170)
+                        Picker("", selection: $condition.negate) {
+                            Text("matches").tag(false)
+                            Text("doesn't match").tag(true)
+                        }
+                        .labelsHidden()
+                        .frame(width: 130)
+                        TextField("Regex (empty = anything)", text: $condition.pattern)
+                            .font(.system(.body, design: .monospaced))
+                    }
+                }
+            }
+            .frame(minHeight: 110)
+        }
     }
 }
 #endif
