@@ -6,7 +6,7 @@ order; within a milestone, do P0 first.
 
 ## Current status
 
-- **Phase**: **M4b DONE** — CI green on both platforms (run @@RUN@@, commit `@@SHA@@`); the M4b
+- **Phase**: **M4b DONE** — CI green on both platforms (run 42504816428, commit `0b0c6f7`); the M4b
   DoD: `Scripts/m4b-dod.sh` (Linux CI) PASS — `curl -N` through `gulp-cli proxy` to VulnLab `/sse`
   receives each event as it is sent (≈800 ms between first and last of 5), the row completes, and a
   WebSocket conversation (`gulp-cli ws` → VulnLab `/ws`) appears in WebSockets history in both
@@ -167,7 +167,7 @@ for behavior.
 - [x] M3a — TLS interception + CA (HTTP/1.1) — **CI green both platforms + executable DoD PASS (`054b24a`)**
 - [x] M3b — HTTP/2 (client side + upstream, trailers) — **CI green both platforms + executable DoD PASS (`11cd7d5`)**
 - [x] M4a — Message editor, Intercept, Match & Replace, Send to / Copy as — **CI green both platforms + executable DoD PASS (`dee2424`)**
-- [x] M4b — Streaming responses, WebSockets, Gulp Browser launch — **CI green both platforms + executable DoD PASS (`@@SHA@@`)**
+- [x] M4b — Streaming responses, WebSockets, Gulp Browser launch — **CI green both platforms + executable DoD PASS (`0b0c6f7`)**
 - [ ] M5 — Repeater + advanced HTTP engine (HTTP/2 raw, group/race sends, streaming, paste-to-request)
 - [ ] M6a — Target: site map + scope + ScopeGuard
 - [ ] M6b — Import/export service, API import, MCP read surface + `send_request`
@@ -363,7 +363,7 @@ for behavior.
   - Caught by CI: missing `import Foundation` (UUID), ArraySlice concatenation, a lint line break,
     `^` in header conditions needing line anchors.
 
-- 2026-11-08 — **M4b DONE** (CI run @@RUN@@, `@@SHA@@`; DoD `Scripts/m4b-dod.sh` + `Scripts/m4b-browser.sh`: PASS):
+- 2026-11-08 — **M4b DONE** (CI run 42504816428, `0b0c6f7`; DoD `Scripts/m4b-dod.sh` + `Scripts/m4b-browser.sh`: PASS):
   - Streaming (PRX-050/HIS-007): responses go to the client as they arrive; the row is recorded
     pending at the first bytes, refreshed every 250 ms with what arrived (live length/duration),
     completed in place; arrival marks feed the History Events tab (SSE id/event/data/time) and a

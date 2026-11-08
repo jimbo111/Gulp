@@ -6,7 +6,7 @@
 # the Gulp CA). Headless `--dump-dom` prints the page: VulnLab /echo reflects the request, and a
 # certificate warning would print Chrome's interstitial instead. Quitting is covered by the
 # BRW-004 unit test (BrowserLauncher.terminateAll).
-# Usage: Scripts/m4b-browser.sh   (needs a Chromium-family browser; skips with a notice without one)
+# Usage: Scripts/m4b-browser.sh   (needs a Chromium-family browser; skips without one, except in CI)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PKG=Packages/GulpKit
@@ -48,6 +48,11 @@ if kill -0 "$BROWSER" 2>/dev/null; then
 fi
 wait "$BROWSER" || true
 if grep -q "No Chromium-family browser found" "$WORK/browser.err"; then
+  # In CI the runner image ships Chrome: a missing browser there is a failure, not a skip.
+  if [ "${CI:-}" = "true" ]; then
+    echo "FAIL: no Chromium-family browser on the CI runner" >&2
+    exit 1
+  fi
   echo "SKIP: no Chromium-family browser on this machine"
   exit 0
 fi
