@@ -104,7 +104,7 @@ struct RequestImportTests {
         let original = RawRequest(
             Bytes(
                 "POST /echo?x=1 HTTP/1.1\r\nHost: 127.0.0.1:8088\r\nX-Token: a'b\"c\r\n"
-                    + "Content-Type: text/plain\r\nContent-Length: 11\r\n\r\nhello\r\nworld"))
+                    + "Content-Type: text/plain\r\nContent-Length: 12\r\n\r\nhello\r\nworld"))
         let target = HTTPTarget(scheme: .http, host: "127.0.0.1", port: 8088)
         let curl = RequestExport.export(original, target: target, as: .curl)
         let imported = try RequestImport.parse(curl)
