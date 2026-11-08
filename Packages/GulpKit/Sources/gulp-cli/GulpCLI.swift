@@ -5,6 +5,7 @@
 import ArgumentParser
 import Dispatch
 import Foundation
+import GulpCodec
 import GulpCore
 import GulpHTTP
 import GulpProxy
@@ -24,7 +25,7 @@ enum GulpCLI {
 struct GulpCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "gulp-cli", abstract: "Gulp, headless.", version: GulpCLI.version,
-        subcommands: [Send.self, Proxy.self, History.self, CA.self])
+        subcommands: [Send.self, Proxy.self, History.self, CA.self, CopyAs.self])
 }
 
 /// `gulp-cli send --raw request.txt --target http://host:port` writes the file's bytes exactly as
@@ -126,10 +127,35 @@ struct Proxy: AsyncParsableCommand {
     @Option(help: "Listener bind address.")
     var bind = "127.0.0.1"
 
+    @Option(name: .customLong("add-header"), help: "Match & Replace: add this header to every request.")
+    var addHeaders: [String] = []
+
+    @Option(
+        name: .customLong("intercept-replace"),
+        help: "Intercept every request and forward it with FROM replaced by TO (\"FROM=>TO\").")
+    var interceptReplacements: [String] = []
+
     func run() async throws {
         let session = try await ProjectSession.open(at: URL(fileURLWithPath: project))
         let listener = ProxyListenerConfig(bindAddress: bind, port: port)
         try await session.settings.set(ProxySettings(listeners: [listener]), scope: .project)
+        if !addHeaders.isEmpty {
+            let added = addHeaders.map { MatchReplaceRule(kind: .requestHeader, match: "", replace: $0) }
+            let existing = session.settings.get(MatchReplaceSettings.self).rules
+            try await session.setMatchReplaceRules(existing + added)
+        }
+        let replacements = try interceptReplacements.map { pair -> (String, String) in
+            let parts = pair.components(separatedBy: "=>")
+            guard parts.count == 2 else { throw ValidationError("--intercept-replace expects FROM=>TO") }
+            return (parts[0], parts[1])
+        }
+        if !replacements.isEmpty {
+            var intercept = InterceptSettings()
+            intercept.interceptRequests = true
+            intercept.requestRules = []
+            try await session.setInterceptSettings(intercept)
+            Task { await Self.autoForward(session, replacements) }
+        }
         let results = await session.startProxyListeners()
         switch results[listener.id] {
         case .success(let bound):
@@ -143,6 +169,49 @@ struct Proxy: AsyncParsableCommand {
         await Signals.wait(for: [SIGINT, SIGTERM])
         try await session.close()
         print("gulp-cli proxy: stopped; project saved")
+    }
+
+    /// A scripted intercept user: edit every held request and forward it (exercises PRX-010…012).
+    static func autoForward(_ session: ProjectSession, _ replacements: [(String, String)]) async {
+        for await delivery in await session.events.subscribe() {
+            guard case .interceptQueued = delivery.event else { continue }
+            for item in await session.intercept.items where item.kind == .request {
+                var text = item.request.bytes.string()
+                for (from, to) in replacements { text = text.replacingOccurrences(of: from, with: to) }
+                await session.intercept.decide(item.id, .forward(Bytes(text)))
+            }
+        }
+    }
+}
+
+/// `gulp-cli copy-as --project p.gulp --id 3 --format curl` prints a recorded request as code (ETL-008).
+struct CopyAs: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "copy-as",
+        abstract: "Print a recorded request as cURL, Python, fetch, PowerShell or Go.")
+
+    @Option(help: "Project file.")
+    var project: String
+
+    @Option(help: "Exchange id.")
+    var id: Int64
+
+    @Option(help: "curl, powershell, fetch, python or go.")
+    var format = "curl"
+
+    func run() async throws {
+        let formats: [String: RequestExportFormat] = [
+            "curl": .curl, "powershell": .powershell, "fetch": .fetch, "python": .python, "go": .go,
+        ]
+        guard let chosen = formats[format.lowercased()] else {
+            throw ValidationError("Unknown format \(format)")
+        }
+        let store = try ProjectStore.open(at: URL(fileURLWithPath: project))
+        defer { Task { try? await store.close() } }
+        guard let exchange = try await store.exchange(id: id) else {
+            throw ValidationError("No exchange \(id)")
+        }
+        print(RequestExport.export(exchange.request, target: exchange.target, as: chosen))
     }
 }
 
@@ -178,6 +247,10 @@ struct History: AsyncParsableCommand {
         if let show {
             guard let exchange = try await store.exchange(id: show) else {
                 throw ValidationError("No exchange \(show)")
+            }
+            if let original = exchange.edited?.originalRequest {
+                print("--- original request (before edits) ---")
+                print(original.bytes.string())
             }
             print("--- request (\(exchange.httpVersion.rawValue)) ---")
             print(exchange.request.bytes.string())

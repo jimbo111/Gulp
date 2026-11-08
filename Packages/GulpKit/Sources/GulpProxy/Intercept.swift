@@ -247,7 +247,8 @@ public enum InterceptRules {
 
     static func matchesPattern(_ pattern: String, _ value: String) -> Bool {
         guard !pattern.isEmpty else { return true }
-        guard let regex = try? Regex(pattern).ignoresCase() else { return false }
+        // Case-insensitive; ^ and $ match at line boundaries (header conditions see one line per header).
+        guard let regex = try? Regex(pattern).ignoresCase().anchorsMatchLineEndings() else { return false }
         return value.contains(regex)
     }
 }

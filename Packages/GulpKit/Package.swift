@@ -148,7 +148,7 @@ let package = Package(
             name: "gulp-cli",
             dependencies: [
                 "GulpWorkspace", "GulpAutomation", "GulpHTTP", "GulpProxy", "GulpStore", "GulpTLS",
-                "GulpCore",
+                "GulpCodec", "GulpCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),
         .executableTarget(
