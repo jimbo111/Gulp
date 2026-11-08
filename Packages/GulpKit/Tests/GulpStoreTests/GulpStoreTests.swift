@@ -66,6 +66,31 @@ struct StoreTests {
         #expect(loaded.state == .complete)
     }
 
+    @Test("HIS-007: update replaces a recorded exchange in place and announces exchangeUpdated")
+    func test_HIS007_update() async throws {
+        let bus = EventBus()
+        let events = await bus.subscribe()
+        let store = try ProjectStore.open(at: temporaryProject(), eventBus: bus)
+        var exchange = sampleExchange(path: "/stream")
+        exchange.state = .pending
+        exchange.id = await store.writer.record(exchange)
+        exchange.state = .complete
+        exchange.response = RawResponse(Bytes("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"))
+        await store.writer.update(exchange)
+        await store.writer.flush()
+        let count = try await store.count()
+        #expect(count == 1)
+        let loaded = try await store.exchange(id: exchange.id)
+        #expect(loaded?.response?.bytes.string().hasSuffix("ok") == true)
+        var sawUpdate = false
+        for await delivery in events {
+            if case .exchangeUpdated(let id) = delivery.event, id == exchange.id { sawUpdate = true }
+            if sawUpdate { break }
+        }
+        #expect(sawUpdate)
+        try await store.close()
+    }
+
     @Test("Interim 1xx responses are stored as received and split again on load")
     func test_interimRoundTrip() async throws {
         let store = try ProjectStore.open(at: temporaryProject())

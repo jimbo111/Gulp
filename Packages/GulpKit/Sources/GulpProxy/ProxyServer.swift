@@ -37,16 +37,19 @@ public actor ProxyServer {
     private let engine: any HTTPEngine
     private var tls: ProxyTLSOptions?
     private let intercept: InterceptQueue?
+    private let matchReplace: MatchReplaceHook?
     private var listeners: [UUID: (server: any Channel, clients: ClientConnections)] = [:]
 
     /// Create a proxy that forwards (and, through the engine's recorder, records) via `engine`.
     /// Without `tls`, CONNECT is refused (no CA to intercept with).
     public init(
-        engine: any HTTPEngine, tls: ProxyTLSOptions? = nil, intercept: InterceptQueue? = nil
+        engine: any HTTPEngine, tls: ProxyTLSOptions? = nil, intercept: InterceptQueue? = nil,
+        matchReplace: MatchReplaceHook? = nil
     ) {
         self.engine = engine
         self.tls = tls
         self.intercept = intercept
+        self.matchReplace = matchReplace
     }
 
     /// Change TLS interception for connections accepted from now on.
@@ -62,6 +65,7 @@ public actor ProxyServer {
         let engine = self.engine
         let tls = self.tls
         let intercept = self.intercept
+        let matchReplace = self.matchReplace
         let clients = ClientConnections()
         let channel: any Channel
         do {
@@ -74,7 +78,7 @@ public actor ProxyServer {
                     let pressure = Backpressure()
                     let upstream = ProxyUpstream(
                         engine: engine, client: client, forceHTTP1: tls?.forceHTTP1ToServer ?? false,
-                        intercept: intercept)
+                        intercept: intercept, matchReplace: matchReplace)
                     Task {
                         await ProxyConnection.serve(
                             items, channel: channel, upstream: upstream, pressure: pressure,
@@ -298,7 +302,7 @@ enum ProxyConnection {
             var tunnel: TunnelReady?
             switch item {
             case .request(let request, let target):
-                reply = await forward(request, tunnel: target, upstream: upstream)
+                reply = await forward(request, tunnel: target, upstream: upstream, client: channel)
             case .connect(let request):
                 if intercepts, let authority = connectAuthority(request) {
                     reply = (Array("HTTP/1.1 200 Connection established\r\n\r\n".utf8), false)
@@ -332,7 +336,8 @@ enum ProxyConnection {
 
     /// Forward one request (PRX-002) and decide whether the client connection stays open (PRX-003).
     static func forward(
-        _ request: RawRequest, tunnel: HTTPTarget?, upstream: ProxyUpstream
+        _ request: RawRequest, tunnel: HTTPTarget?, upstream: ProxyUpstream,
+        client: (any Channel)? = nil
     ) async -> (bytes: [UInt8], close: Bool) {
         let method = request.bytes[request.parsed.method].string()
         let version = request.bytes[request.parsed.version].string()
@@ -355,7 +360,13 @@ enum ProxyConnection {
             return (errorPage(400, message, close: clientWantsClose), clientWantsClose)
         }
         let forwarded = ForwardRewrite.strippingHopByHop(originForm)
-        switch await upstream.send(forwarded, to: target) {
+        switch await upstream.send(forwarded, to: target, streamTo: client) {
+        case .streamed(let response, let complete):
+            // The bytes already went to the client as they arrived (PRX-050).
+            let close =
+                !complete || clientWantsClose || response?.parsed.bodyFraming == .closeDelimited
+                || response?.hasHeaderToken("connection", "close") == true
+            return ([], close)
         case .response(let response):
             let close =
                 clientWantsClose || response.parsed.bodyFraming == .closeDelimited

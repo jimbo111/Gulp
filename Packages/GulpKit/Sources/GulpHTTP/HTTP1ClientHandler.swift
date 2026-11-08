@@ -17,6 +17,8 @@ struct RequestCommand: Sendable {
     let idleTimeout: TimeAmount
     let totalDeadline: NIODeadline
     let promise: EventLoopPromise<WireResponse>
+    /// Streaming (PRX-050): every inbound chunk, as it arrives.
+    var onBytes: (@Sendable ([UInt8]) -> Void)? = nil
 }
 
 /// The bytes and outcome of one request on the wire.
@@ -80,6 +82,7 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
         let isConnect: Bool
         let maxBytes: Int
         let idleTimeout: TimeAmount
+        let onBytes: (@Sendable ([UInt8]) -> Void)?
         var buffer: [UInt8] = []
         var interim: [[UInt8]] = []
         /// Where the current (non-interim) message starts in `buffer`.
@@ -112,7 +115,7 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
         }
         pending = Pending(
             promise: command.promise, isHead: command.isHead, isConnect: command.isConnect,
-            maxBytes: command.maxResponseBytes, idleTimeout: command.idleTimeout)
+            maxBytes: command.maxResponseBytes, idleTimeout: command.idleTimeout, onBytes: command.onBytes)
         let bound = NIOLoopBound(self, eventLoop: context.eventLoop)
         pending?.totalTimer = context.eventLoop.scheduleTask(deadline: command.totalDeadline) {
             bound.value.timedOut(.totalTimeout)
@@ -130,6 +133,7 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
         }
         if pending?.firstByteAt == nil { pending?.firstByteAt = .now() }
         pending?.buffer.append(contentsOf: incoming.readableBytesView)
+        pending?.onBytes?(Array(incoming.readableBytesView))
         if let p = pending, p.buffer.count > p.maxBytes {
             fail(.tooLarge(limit: p.maxBytes))
             context.close(promise: nil)

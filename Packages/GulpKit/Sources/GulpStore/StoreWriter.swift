@@ -17,7 +17,8 @@ public actor StoreWriter {
     private let eventBus: EventBus?
     private let durable: Bool
     private var nextID: ExchangeID
-    private var pending: [Exchange] = []
+    /// Queued writes; `replace` marks an update of an exchange recorded earlier (HIS-007).
+    private var pending: [(exchange: Exchange, replace: Bool)] = []
     private var timer: Task<Void, Never>?
     private var tail: Task<Void, Never>?
 
@@ -34,10 +35,22 @@ public actor StoreWriter {
         let id = nextID
         nextID += 1
         queued.id = id
-        pending.append(queued)
-        if durable {
-            await flush()
-        } else if pending.count >= Self.maxBatch {
+        pending.append((queued, false))
+        scheduleFlush()
+        if durable { await tail?.value }
+        return id
+    }
+
+    /// Replace an exchange recorded earlier (same id) — a streaming response that has finished
+    /// (HIS-007). Published as `exchangeUpdated`.
+    public func update(_ exchange: Exchange) async {
+        pending.append((exchange, true))
+        scheduleFlush()
+        if durable { await tail?.value }
+    }
+
+    private func scheduleFlush() {
+        if durable || pending.count >= Self.maxBatch {
             startFlush()
         } else if timer == nil {
             timer = Task {
@@ -45,7 +58,6 @@ public actor StoreWriter {
                 await self.timerFired()
             }
         }
-        return id
     }
 
     /// Write everything queued so far and wait until it is on disk.
@@ -73,14 +85,21 @@ public actor StoreWriter {
         }
     }
 
-    private func write(_ batch: [Exchange]) async {
+    private func write(_ batch: [(exchange: Exchange, replace: Bool)]) async {
         do {
             try await pool.write { db in
-                for exchange in batch { try ExchangeRows.insert(exchange, in: db) }
+                for (exchange, replace) in batch {
+                    if replace { try ExchangeRows.delete(exchange.id, in: db) }
+                    try ExchangeRows.insert(exchange, in: db)
+                }
             }
             if let eventBus {
-                for exchange in batch {
-                    await eventBus.publish(.exchangeRecorded(exchange.id, source: exchange.source))
+                for (exchange, replace) in batch {
+                    let event: GulpEvent =
+                        replace
+                        ? .exchangeUpdated(exchange.id)
+                        : .exchangeRecorded(exchange.id, source: exchange.source)
+                    await eventBus.publish(event)
                 }
             }
         } catch {

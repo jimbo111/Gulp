@@ -204,6 +204,10 @@ public struct SendOptions: Sendable {
     public var clientAddress: String?
     /// The request before someone edited it (intercept, PRX-012); recorded as the original.
     public var originalRequest: RawRequest?
+    /// Streaming (F01 PRX-050): HTTP/1 response bytes are handed here as they arrive (interim
+    /// responses and headers included), there is no total-time cap (the idle timeout still
+    /// applies), and the exchange is recorded as pending when bytes start and updated at the end.
+    public var onResponseBytes: (@Sendable ([UInt8]) -> Void)?
 
     /// Options with defaults, recorded as `recordAs`.
     public init(recordAs: ToolSource) {
@@ -303,6 +307,9 @@ public protocol ResponseHook: Sendable {
 public protocol ExchangeRecorder: Sendable {
     /// Store `exchange` and return its assigned id.
     func record(_ exchange: Exchange) async -> ExchangeID
+    /// Replace the exchange recorded earlier with the same id (a streaming response that finished,
+    /// F05 HIS-007).
+    func update(_ exchange: Exchange) async
 }
 
 // MARK: - Engine

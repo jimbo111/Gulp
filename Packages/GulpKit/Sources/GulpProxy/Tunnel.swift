@@ -11,6 +11,7 @@
 import GulpCore
 import GulpHTTP
 import GulpTLS
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
 import NIOSSL
@@ -50,6 +51,7 @@ struct ProxyUpstream: Sendable {
     let client: String?
     let forceHTTP1: Bool
     var intercept: InterceptQueue?
+    var matchReplace: MatchReplaceHook?
 
     var options: SendOptions {
         var options = SendOptions(recordAs: .proxy)
@@ -61,6 +63,9 @@ struct ProxyUpstream: Sendable {
     /// What the client gets back for one forwarded request.
     enum Reply: Sendable {
         case response(RawResponse)
+        /// Already written to the client as it arrived (PRX-050); `complete` is false when the
+        /// upstream failed part-way (the client connection must then be closed).
+        case streamed(RawResponse?, complete: Bool)
         case failed(String)
         case dropped
     }
@@ -68,8 +73,17 @@ struct ProxyUpstream: Sendable {
     /// Forward `request` to `target` through the engine, with intercept (PRX-010…PRX-014) on both
     /// legs: a held request may come back edited (sent with an updated Content-Length, PRX-018, and
     /// recorded with its original, PRX-012) or dropped; a held response may be edited or dropped.
-    func send(_ request: RawRequest, to target: HTTPTarget) async -> Reply {
+    func send(
+        _ request: RawRequest, to target: HTTPTarget, streamTo client: (any Channel)? = nil
+    ) async -> Reply {
         var options = self.options
+        let streamed = StreamedFlag()
+        if let client, await canStream() {
+            options.onResponseBytes = { bytes in
+                streamed.set()
+                client.writeAndFlush(client.allocator.buffer(bytes: bytes), promise: nil)
+            }
+        }
         var outgoing = request
         var requestWasHeld = false
         if let intercept {
@@ -86,6 +100,7 @@ struct ProxyUpstream: Sendable {
             }
         }
         let result = await engine.send(outgoing, to: target, options: options)
+        if streamed.isSet { return .streamed(result.exchange.response, complete: result.error == nil) }
         guard let response = result.exchange.response, result.error == nil else {
             return .failed(result.error?.userDescription ?? "no response")
         }
@@ -99,6 +114,24 @@ struct ProxyUpstream: Sendable {
         case .forward(nil): return .response(response)
         }
     }
+}
+
+extension ProxyUpstream {
+    /// Responses stream to the client unless something must see the whole response first: response
+    /// interception or a response Match & Replace rule (F01 §4.3).
+    func canStream() async -> Bool {
+        if let intercept, await intercept.interceptResponses { return false }
+        return !(matchReplace?.rewritesResponses(for: .proxy) ?? false)
+    }
+}
+
+/// Set once the first streamed byte has gone to the client.
+final class StreamedFlag: Sendable {
+    private let value = NIOLockedValueBox(false)
+
+    func set() { value.withLockedValue { $0 = true } }
+
+    var isSet: Bool { value.withLockedValue { $0 } }
 }
 
 /// Sent down the pipeline once `200 Connection established` is written: start sniffing.

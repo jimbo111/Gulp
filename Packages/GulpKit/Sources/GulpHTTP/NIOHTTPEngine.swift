@@ -229,6 +229,20 @@ public final class NIOHTTPEngine: HTTPEngine {
             outgoing.request = outgoing.request.forPlainHTTPProxy(
                 target: outgoing.target, proxyAuthorization: route.basicAuthorization)
         }
+        // HIS-007: a streamed response is recorded as pending when its first bytes arrive, then
+        // replaced in place when it completes.
+        let streamRecord = StreamRecord()
+        if let forward = options.onResponseBytes, let recorder {
+            var pendingExchange = Exchange(
+                source: options.recordAs, target: outgoing.target, request: outgoing.request,
+                clientAddress: options.clientAddress)
+            pendingExchange.state = .pending
+            let pendingCopy = pendingExchange
+            options.onResponseBytes = { bytes in
+                forward(bytes)
+                streamRecord.startOnce { await recorder.record(pendingCopy) }
+            }
+        }
         let attempt = await perform(
             outgoing, options: options, route: route, pool: pool, start: start, timing: &timing)
         if let wire = attempt.wire {
@@ -242,7 +256,7 @@ public final class NIOHTTPEngine: HTTPEngine {
         return await finish(
             outgoing, options: options, wire: attempt.wire, error: attempt.error,
             connectionID: attempt.connectionID, timing: timing, tls: attempt.tls,
-            httpVersion: attempt.httpVersion)
+            httpVersion: attempt.httpVersion, streamedAs: await streamRecord.id())
     }
 
     /// The upstream proxy for `target` (HTTP-006): the per-send override, else the first matching
@@ -286,7 +300,9 @@ public final class NIOHTTPEngine: HTTPEngine {
         let key = PoolKey(target: outgoing.target, options: options, route: route)
         let method = request.bytes[request.parsed.method].string()
         let idempotent = ["GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"].contains(method)
-        let totalDeadline = start + timeAmount(options.timeouts.total)
+        // A streaming response has no total-time cap (PRX-050); the idle timeout still applies.
+        let totalDeadline =
+            options.onResponseBytes == nil ? start + timeAmount(options.timeouts.total) : .distantFuture
         var policy = options.connection
 
         let wantsH2 =
@@ -626,7 +642,7 @@ public final class NIOHTTPEngine: HTTPEngine {
             isConnect: isConnect, maxResponseBytes: options.maxResponseBytes,
             firstByteTimeout: timeAmount(options.timeouts.firstByte),
             idleTimeout: timeAmount(options.timeouts.idleBetweenBytes), totalDeadline: totalDeadline,
-            promise: promise)
+            promise: promise, onBytes: options.onResponseBytes)
         let writeStart = NIODeadline.now()
         // The explicit-promise form: in an async context the plain `writeAndFlush(_:)` resolves to
         // NIO's `async throws` overload, but we need the future to chain a failure handler onto.
@@ -654,7 +670,8 @@ public final class NIOHTTPEngine: HTTPEngine {
     /// Build the exchange (response hooks, derived fields), record it, and wrap it as a result.
     private func finish(
         _ outgoing: OutgoingRequest, options: SendOptions, wire: WireResponse?, error: GulpNetworkError?,
-        connectionID: UInt64, timing: Timing, tls: TLSInfo? = nil, httpVersion: HTTPVersion = .http1_1
+        connectionID: UInt64, timing: Timing, tls: TLSInfo? = nil, httpVersion: HTTPVersion = .http1_1,
+        streamedAs: ExchangeID? = nil
     ) async -> ExchangeResult {
         let isHead = outgoing.request.bytes[outgoing.request.parsed.method].string() == "HEAD"
         var response: RawResponse?
@@ -691,7 +708,14 @@ public final class NIOHTTPEngine: HTTPEngine {
             edited: edited)
         exchange.tls = tls
         exchange.httpVersion = httpVersion
-        if let recorder { exchange.id = await recorder.record(exchange) }
+        if let recorder {
+            if let streamedAs {
+                exchange.id = streamedAs
+                await recorder.update(exchange)
+            } else {
+                exchange.id = await recorder.record(exchange)
+            }
+        }
         return ExchangeResult(exchange: exchange, error: error)
     }
 }
@@ -834,5 +858,23 @@ final class ReadGate: ChannelInboundHandler {
         held = []
         for read in reads { context.fireChannelRead(read) }
         context.fireChannelReadComplete()
+    }
+}
+
+/// The id of the pending row recorded for a streaming response (HIS-007), assigned once.
+final class StreamRecord: Sendable {
+    private let task = NIOLockedValueBox<Task<ExchangeID, Never>?>(nil)
+
+    /// Start `record` the first time this is called; later calls do nothing.
+    func startOnce(_ record: @escaping @Sendable () async -> ExchangeID) {
+        task.withLockedValue { current in
+            if current == nil { current = Task { await record() } }
+        }
+    }
+
+    /// The recorded id, waiting for the pending write if it is still in flight; nil if nothing streamed.
+    func id() async -> ExchangeID? {
+        guard let pending = task.withLockedValue({ $0 }) else { return nil }
+        return await pending.value
     }
 }

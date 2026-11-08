@@ -6,6 +6,7 @@
 
 import GulpCore
 import GulpTLS
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOHPACK
 import NIOHTTP2
@@ -80,10 +81,50 @@ final class AppHandler: ChannelInboundHandler {
         while let next = Self.nextRequest(buffer) {
             let (request, used) = next
             buffer.removeFirst(used)
+            let target = request.bytes[request.parsed.target].string()
+            if target == "/sse" || target.hasPrefix("/sse?") {
+                Self.streamEvents(request, context: context)  // the connection is the stream from now on
+                return
+            }
             let reply = VulnLab.respond(to: request)
             let close = request.hasHeaderToken("connection", "close")
             write(reply, context: context, close: close)
             if close { return }
+        }
+    }
+
+    /// `/sse[?n=N]` (doc 06 §3, M4b): a chunked `text/event-stream` with a heartbeat comment and one
+    /// numbered event every 200 ms, until `n` events were sent (then the stream ends) or the client
+    /// goes away.
+    static func streamEvents(_ request: RawRequest, context: ChannelHandlerContext) {
+        let target = request.bytes[request.parsed.target].string()
+        let limit = VulnLab.queryItems(target)["n"].flatMap(Int.init)
+        let head =
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n"
+            + "Transfer-Encoding: chunked\r\n\r\n"
+        let channel = context.channel
+        channel.writeAndFlush(channel.allocator.buffer(string: head), promise: nil)
+        let sent = NIOLockedValueBox(0)
+        let chunk: @Sendable (String) -> ByteBuffer = { text in
+            channel.allocator.buffer(string: String(text.utf8.count, radix: 16) + "\r\n" + text + "\r\n")
+        }
+        let interval = TimeAmount.milliseconds(200)
+        context.eventLoop.scheduleRepeatedTask(initialDelay: interval, delay: interval) { task in
+            guard channel.isActive else {
+                task.cancel()
+                return
+            }
+            let number = sent.withLockedValue {
+                $0 += 1
+                return $0
+            }
+            channel.write(chunk(": heartbeat\n\n"), promise: nil)
+            let event = "id: \(number)\nevent: tick\ndata: event \(number)\n\n"
+            channel.writeAndFlush(chunk(event), promise: nil)
+            if let limit, number >= limit {
+                task.cancel()
+                channel.writeAndFlush(channel.allocator.buffer(string: "0\r\n\r\n"), promise: nil)
+            }
         }
     }
 

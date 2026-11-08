@@ -74,8 +74,11 @@ final class H2ProxyStreamHandler: ChannelInboundHandler {
         Task {
             let reply: H2ResponseParts
             switch await upstream.send(request, to: target) {
-            case .response(let response):
+            case .response(let response), .streamed(let response?, _):
                 reply = HTTP2Text.responseParts(response)
+            case .streamed(nil, _):
+                let page = ProxyConnection.errorPage(502, "Gulp could not complete the request.")
+                reply = HTTP2Text.responseParts(RawResponse(Bytes(page)))
             case .failed(let reason):
                 let page = ProxyConnection.errorPage(502, "Gulp could not complete the request: \(reason).")
                 reply = HTTP2Text.responseParts(RawResponse(Bytes(page)))

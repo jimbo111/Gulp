@@ -42,8 +42,14 @@ struct AddHeaderHook: RequestHook {
 actor MemoryRecorder: ExchangeRecorder {
     var stored: [Exchange] = []
     func record(_ exchange: Exchange) -> ExchangeID {
-        stored.append(exchange)
-        return ExchangeID(stored.count)
+        var copy = exchange
+        copy.id = ExchangeID(stored.count + 1)
+        stored.append(copy)
+        return copy.id
+    }
+
+    func update(_ exchange: Exchange) {
+        if let index = stored.firstIndex(where: { $0.id == exchange.id }) { stored[index] = exchange }
     }
 }
 

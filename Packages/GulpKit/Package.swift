@@ -153,7 +153,7 @@ let package = Package(
             ]),
         .executableTarget(
             name: "gulp-vulnlab",
-            dependencies: ["GulpCore", "GulpTLS"] + nioCore + [
+            dependencies: ["GulpCore", "GulpTLS"] + nioCore + nioConcurrency + [
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
                 .product(name: "NIOTLS", package: "swift-nio"),
                 .product(name: "NIOHTTP2", package: "swift-nio-http2"),

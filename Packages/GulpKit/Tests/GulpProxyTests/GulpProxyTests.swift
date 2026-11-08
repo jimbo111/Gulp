@@ -85,8 +85,14 @@ final class OriginHandler: ChannelInboundHandler {
 actor Recorded: ExchangeRecorder {
     var exchanges: [Exchange] = []
     func record(_ exchange: Exchange) -> ExchangeID {
-        exchanges.append(exchange)
-        return ExchangeID(exchanges.count)
+        var stored = exchange
+        stored.id = ExchangeID(exchanges.count + 1)
+        exchanges.append(stored)
+        return stored.id
+    }
+
+    func update(_ exchange: Exchange) {
+        if let index = exchanges.firstIndex(where: { $0.id == exchange.id }) { exchanges[index] = exchange }
     }
 }
 

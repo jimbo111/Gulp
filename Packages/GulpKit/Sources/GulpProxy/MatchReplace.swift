@@ -327,6 +327,12 @@ public final class MatchReplaceHook: RequestHook, ResponseHook, Sendable {
     /// This hook's `HookSet` member.
     public var kind: HookSet { .matchReplace }
 
+    /// Whether any enabled rule rewrites responses for `source` (then a response can't be streamed
+    /// to the client as it arrives, F01 §4.3).
+    public func rewritesResponses(for source: ToolSource) -> Bool {
+        active(for: source).contains { !$0.kind.isRequest }
+    }
+
     func active(for source: ToolSource) -> [MatchReplaceRule] {
         rules.withLockedValue { $0 }.filter { $0.enabled && (source == .proxy || $0.applyToTools) }
     }

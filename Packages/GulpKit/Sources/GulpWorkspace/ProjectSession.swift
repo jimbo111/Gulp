@@ -108,6 +108,10 @@ actor ProjectRecorder: ExchangeRecorder {
         return await writer.record(exchange)
     }
 
+    func update(_ exchange: Exchange) async {
+        await writer.update(exchange)
+    }
+
     /// Hold new recordings (Save As copies the file meanwhile, PRJ-002).
     func pause() {
         paused = true
@@ -176,7 +180,8 @@ public actor ProjectSession {
         self.intercept = intercept
         let proxySettings = settings.get(ProxySettings.self)
         self.proxy = ProxyServer(
-            engine: engine, tls: minter.map { proxySettings.tlsOptions(minter: $0) }, intercept: intercept)
+            engine: engine, tls: minter.map { proxySettings.tlsOptions(minter: $0) }, intercept: intercept,
+            matchReplace: matchReplace)
     }
 
     /// Apply the stored intercept settings to the queue (call after opening or changing them).
