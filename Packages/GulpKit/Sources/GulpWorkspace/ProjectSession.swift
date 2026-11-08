@@ -150,6 +150,10 @@ public actor ProjectSession {
     /// Mints leaves for TLS interception; nil when the CA could not be loaded (CONNECT then fails
     /// with a clear page instead of the project failing to open).
     public nonisolated let minter: LeafMinter?
+    /// The intercept queue (PRX-010…PRX-014).
+    public nonisolated let intercept: InterceptQueue
+    /// Match & Replace for proxy traffic and, per rule, every tool (PRX-020…PRX-022).
+    public nonisolated let matchReplace: MatchReplaceHook
 
     private init(
         store: ProjectStore, events: EventBus, settings: LayeredSettings, isTemporary: Bool,
@@ -162,11 +166,37 @@ public actor ProjectSession {
         self.environment = environment
         let recorder = ProjectRecorder(writer: store.writer)
         self.recorder = recorder
-        let engine = NIOHTTPEngine(recorder: recorder)
+        let matchReplace = MatchReplaceHook(rules: settings.get(MatchReplaceSettings.self).rules)
+        self.matchReplace = matchReplace
+        let engine = NIOHTTPEngine(
+            requestHooks: [matchReplace], responseHooks: [matchReplace], recorder: recorder)
         self.http = engine
         self.minter = minter
+        let intercept = InterceptQueue(events: events)
+        self.intercept = intercept
         let proxySettings = settings.get(ProxySettings.self)
-        self.proxy = ProxyServer(engine: engine, tls: minter.map { proxySettings.tlsOptions(minter: $0) })
+        self.proxy = ProxyServer(
+            engine: engine, tls: minter.map { proxySettings.tlsOptions(minter: $0) }, intercept: intercept)
+    }
+
+    /// Apply the stored intercept settings to the queue (call after opening or changing them).
+    public func applyInterceptSettings() async {
+        let stored = settings.get(InterceptSettings.self)
+        await intercept.setRules(requests: stored.requestRules, responses: stored.responseRules)
+        await intercept.setIntercepting(
+            requests: stored.interceptRequests, responses: stored.interceptResponses)
+    }
+
+    /// Store and apply Match & Replace rules (PRX-020).
+    public func setMatchReplaceRules(_ rules: [MatchReplaceRule]) async throws {
+        try await settings.set(MatchReplaceSettings(rules: rules), scope: .project)
+        matchReplace.setRules(rules)
+    }
+
+    /// Store and apply intercept settings (PRX-010…PRX-014).
+    public func setInterceptSettings(_ value: InterceptSettings) async throws {
+        try await settings.set(value, scope: .project)
+        await applyInterceptSettings()
     }
 
     /// The project file.
@@ -207,9 +237,11 @@ public actor ProjectSession {
             try await settings.importProjectSettings(values)
         }
         let minter = (try? environment.certificateAuthority()).flatMap { try? LeafMinter(authority: $0) }
-        return ProjectSession(
+        let session = ProjectSession(
             store: store, events: events, settings: settings, isTemporary: temporary,
             environment: environment, minter: minter)
+        await session.applyInterceptSettings()
+        return session
     }
 
     /// Save the project to `url` and continue working there (PRJ-002). A saved temporary project

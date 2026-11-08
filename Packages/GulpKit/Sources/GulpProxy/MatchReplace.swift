@@ -174,8 +174,8 @@ public enum MatchReplace {
         var newHead = lines.flatMap { $0.text + $0.ending }
         var newBody = body
         let request = RawRequest(Bytes(head))
-        let form = request.headerValue("content-type")?.string().lowercased()
-            .contains("application/x-www-form-urlencoded") ?? false
+        let contentType = request.headerValue("content-type")?.string().lowercased() ?? ""
+        let form = contentType.contains("application/x-www-form-urlencoded")
         if form, !body.isEmpty {
             newBody = rewritePairs(body, rule)
             if newBody != body {
