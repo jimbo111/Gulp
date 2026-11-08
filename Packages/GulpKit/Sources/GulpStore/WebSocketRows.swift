@@ -123,3 +123,47 @@ extension ProjectStore {
         }
     }
 }
+
+/// The WebSockets History filter (PRX-032): direction, kind of message and text.
+public struct WebSocketMessageFilter: Sendable, Hashable {
+    /// Which messages by opcode.
+    public enum Kind: String, Sendable, CaseIterable {
+        /// Everything.
+        case all = "All"
+        /// Text and binary messages.
+        case data = "Data"
+        /// Close, ping and pong.
+        case control = "Control"
+    }
+
+    /// Only this direction (nil = both).
+    public var direction: WSDirection?
+    /// Which opcodes.
+    public var kind = Kind.all
+    /// Case-insensitive text the payload must contain (empty = any).
+    public var text = ""
+
+    /// No filtering.
+    public init(direction: WSDirection? = nil, kind: Kind = .all, text: String = "") {
+        self.direction = direction
+        self.kind = kind
+        self.text = text
+    }
+
+    /// Whether `message` passes.
+    public func matches(_ message: WebSocketMessageRecord) -> Bool {
+        if let direction, message.direction != direction.rawValue { return false }
+        switch kind {
+        case .all: break
+        case .data where message.opcode >= 8: return false
+        case .control where message.opcode < 8: return false
+        default: break
+        }
+        guard !text.isEmpty else { return true }
+        // UTF-8 for text, Latin-1 so bytes of a binary payload can match too.
+        let needle = text.lowercased()
+        let utf8 = String(decoding: message.payload, as: UTF8.self)
+        let latin1 = String(String.UnicodeScalarView(message.payload.map { Unicode.Scalar($0) }))
+        return utf8.lowercased().contains(needle) || latin1.lowercased().contains(needle)
+    }
+}

@@ -104,7 +104,7 @@ public struct MatchReplaceView: View {
     }
 }
 
-/// The Proxy tool: HTTP History, Intercept and Match & Replace tabs.
+/// The Proxy tool: HTTP History, Intercept, Match & Replace and WebSockets History tabs.
 public struct ProxyToolView: View {
     let session: ProjectSession
     let generation: Int
@@ -127,6 +127,9 @@ public struct ProxyToolView: View {
             MatchReplaceView(session: session)
                 .tabItem { Text("Match & Replace") }
                 .tag(2)
+            SessionWebSocketHistoryView(session: session, generation: generation)
+                .tabItem { Text("WebSockets History") }
+                .tag(3)
         }
     }
 }

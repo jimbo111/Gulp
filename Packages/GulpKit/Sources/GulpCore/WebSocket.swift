@@ -15,6 +15,14 @@ public enum WSOpcode: UInt8, Sendable, Codable, CaseIterable {
     public var isControl: Bool { rawValue >= 8 }
 }
 
+/// Direction of a WebSocket message (`ws_messages.direction`).
+public enum WSDirection: Int, Sendable, Codable {
+    /// Client → server.
+    case toServer = 0
+    /// Server → client.
+    case toClient = 1
+}
+
 /// One frame as it appeared on the wire.
 public struct WSFrame: Sendable, Equatable {
     /// Final fragment of its message.

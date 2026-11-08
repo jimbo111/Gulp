@@ -128,6 +128,24 @@ struct StoreTests {
         try await store.close()
     }
 
+    @Test("PRX-032: the message filter by direction, kind and text (UTF-8 or raw bytes)")
+    func test_PRX032_messageFilter() {
+        func message(_ direction: Int, _ opcode: Int, _ payload: [UInt8]) -> WebSocketMessageRecord {
+            WebSocketMessageRecord(
+                id: 1, direction: direction, opcode: opcode, createdAt: Date(), payload: payload, frames: [])
+        }
+        let text = message(0, 1, Array("Hello Wörld".utf8))
+        let binary = message(1, 2, [0x00, 0xFF, 0x41])
+        let ping = message(1, 9, [])
+        #expect(WebSocketMessageFilter().matches(text))
+        #expect(!WebSocketMessageFilter(direction: .toClient).matches(text))
+        #expect(WebSocketMessageFilter(kind: .control).matches(ping))
+        #expect(!WebSocketMessageFilter(kind: .data).matches(ping))
+        #expect(WebSocketMessageFilter(text: "wörld").matches(text))
+        #expect(WebSocketMessageFilter(text: "a").matches(binary))  // 0x41 'A', case-insensitive
+        #expect(!WebSocketMessageFilter(text: "zzz").matches(text))
+    }
+
     @Test("Interim 1xx responses are stored as received and split again on load")
     func test_interimRoundTrip() async throws {
         let store = try ProjectStore.open(at: temporaryProject())

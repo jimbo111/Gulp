@@ -110,6 +110,11 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
     }
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
+        if passThrough {
+            // Upgraded: writes are raw `ByteBuffer`s for the other protocol, not request commands.
+            context.write(data, promise: promise)
+            return
+        }
         let command = unwrapOutboundIn(data)
         guard pending == nil else {
             command.promise.fail(GulpNetworkError.other("A request is already in flight on this connection"))

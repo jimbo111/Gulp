@@ -6,14 +6,6 @@ import GulpCore
 import NIOConcurrencyHelpers
 import NIOCore
 
-/// Direction of a WebSocket message (`ws_messages.direction`).
-public enum WSDirection: Int, Sendable, Codable {
-    /// Client → server.
-    case toServer = 0
-    /// Server → client.
-    case toClient = 1
-}
-
 /// Records WebSocket connections and messages (PRX-031); implemented by the project (GulpStore).
 public protocol WebSocketRecorder: Sendable {
     /// A connection opened by the upgrade recorded as `upgradeExchangeID`; returns its id.
