@@ -137,7 +137,8 @@ public enum HTTP2Text {
         head += "transfer-encoding: chunked\r\n\r\n"
         var out = Array(head.utf8)
         if !parts.body.isEmpty {
-            out += Array(String(parts.body.count, radix: 16).utf8) + [0x0D, 0x0A] + parts.body + [0x0D, 0x0A]
+            let crlf: [UInt8] = [0x0D, 0x0A]
+            out += Array(String(parts.body.count, radix: 16).utf8) + crlf + parts.body + crlf
         }
         var tail = "0\r\n"
         for trailer in parts.trailers { tail += "\(trailer.name): \(trailer.value)\r\n" }
@@ -160,7 +161,8 @@ public enum HTTP2Text {
             return H2ResponseParts(
                 status: parsed.statusCode, headers: headers, body: walked.body, trailers: walked.trailers)
         }
-        return H2ResponseParts(status: parsed.statusCode, headers: headers, body: bytes[parsed.body].rawBytes)
+        let body = bytes[parsed.body].rawBytes
+        return H2ResponseParts(status: parsed.statusCode, headers: headers, body: body)
     }
 
     /// A request in HTTP/2 text form, made sendable over HTTP/1.1: the version token becomes
@@ -173,7 +175,8 @@ public enum HTTP2Text {
             result.headerValue("content-length") != nil || result.headerValue("transfer-encoding") != nil
         if !body.isEmpty, !framed {
             let end = result.parsed.headerBlockEnd
-            let insertAt = end - (result.bytes.rawBytes[..<end].suffix(4) == [0x0D, 0x0A, 0x0D, 0x0A] ? 2 : 1)
+            let crlfTerminated = result.bytes.rawBytes[..<end].suffix(2) == [0x0D, 0x0A]
+            let insertAt = end - (crlfTerminated ? 2 : 1)
             result = result.replacing(insertAt..<insertAt, with: Bytes("content-length: \(body.count)\r\n"))
         }
         return result
