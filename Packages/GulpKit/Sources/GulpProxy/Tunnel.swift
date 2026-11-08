@@ -21,16 +21,40 @@ public struct ProxyTLSOptions: Sendable {
     public var minter: LeafMinter
     /// Host globs (`*.apple.com`) whose TLS is spliced through without decrypting (PRX-007).
     public var passThroughHosts: [String]
+    /// PRX-008 "Force HTTP/1.1 to client": never offer h2 to the client.
+    public var forceHTTP1ToClient: Bool
+    /// PRX-008 "Force HTTP/1.1 to server": never offer h2 upstream.
+    public var forceHTTP1ToServer: Bool
 
     /// Interception with `minter`; hosts matching `passThroughHosts` are not decrypted.
-    public init(minter: LeafMinter, passThroughHosts: [String] = []) {
+    public init(
+        minter: LeafMinter, passThroughHosts: [String] = [], forceHTTP1ToClient: Bool = false,
+        forceHTTP1ToServer: Bool = false
+    ) {
         self.minter = minter
         self.passThroughHosts = passThroughHosts
+        self.forceHTTP1ToClient = forceHTTP1ToClient
+        self.forceHTTP1ToServer = forceHTTP1ToServer
     }
 
     /// Whether `host` is on the pass-through list.
     public func passesThrough(_ host: String) -> Bool {
         passThroughHosts.contains { UpstreamRule(hostPattern: $0, proxy: nil).matches(host) }
+    }
+}
+
+/// How the proxy talks to servers for one client connection: the engine and the send options every
+/// forwarded request (and the ALPN pre-connect) uses, so they share pooled connections.
+struct ProxyUpstream: Sendable {
+    let engine: any HTTPEngine
+    let client: String?
+    let forceHTTP1: Bool
+
+    var options: SendOptions {
+        var options = SendOptions(recordAs: .proxy)
+        options.clientAddress = client
+        options.httpVersion = forceHTTP1 ? .http1_1 : .auto
+        return options
     }
 }
 
@@ -60,13 +84,15 @@ final class TunnelSniffer: ChannelInboundHandler, RemovableChannelHandler {
     private let host: String
     private let port: Int
     private let tls: ProxyTLSOptions
+    private let upstream: ProxyUpstream
     private var pending: [UInt8]
     private var state = State.sniffing
 
-    init(host: String, port: Int, tls: ProxyTLSOptions, initial: [UInt8]) {
+    init(host: String, port: Int, tls: ProxyTLSOptions, upstream: ProxyUpstream, initial: [UInt8]) {
         self.host = host
         self.port = port
         self.tls = tls
+        self.upstream = upstream
         pending = initial
     }
 
@@ -109,23 +135,33 @@ final class TunnelSniffer: ChannelInboundHandler, RemovableChannelHandler {
             if tls.passesThrough(name) || tls.passesThrough(host) {
                 startRelay(context: context)
             } else {
-                startInterception(context: context, serverName: name)
+                startInterception(context: context, serverName: name, clientALPN: hello.alpn)
             }
         }
     }
 
     /// Mint (off the event loop), then install the TLS server handler and hand over the ClientHello.
-    private func startInterception(context: ChannelHandlerContext, serverName: String) {
+    private func startInterception(
+        context: ChannelHandlerContext, serverName: String, clientALPN: [String]
+    ) {
         let loop = context.eventLoop
         let bound = NIOLoopBound((self, context), eventLoop: loop)
         let minter = tls.minter
         var target = HTTPTarget(scheme: .https, host: host, port: port)
         if serverName != HostName.normalize(host) { target.sniOverride = serverName }
         let upstream = target
+        let engine = self.upstream.engine
+        let options = self.upstream.options
+        let mayOfferH2 = clientALPN.contains("h2") && !tls.forceHTTP1ToClient
         Task {
             do {
-                // M3a offers HTTP/1.1 to the client; ALPN mirroring and h2 arrive in M3b.
-                let ssl = try await minter.serverContext(for: serverName, alpn: ["http/1.1"])
+                // PRX-008 ALPN mirroring: offer the client h2 only if it asked for h2 AND the real
+                // server chose h2 (the pre-connect stays pooled for the requests that follow).
+                var alpn = ["http/1.1"]
+                if mayOfferH2, await engine.negotiatedProtocol(for: upstream, options: options) == "h2" {
+                    alpn = ["h2"]
+                }
+                let ssl = try await minter.serverContext(for: serverName, alpn: alpn)
                 loop.execute {
                     let (sniffer, context) = bound.value
                     let server = NIOSSLServerHandler(context: ssl)

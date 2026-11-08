@@ -154,6 +154,44 @@ public final class NIOHTTPEngine: HTTPEngine {
         throw GulpError(message: "WebSockets are implemented in M4", underlying: nil)
     }
 
+    /// Pre-connect for ALPN mirroring (PRX-008): an existing HTTP/2 or pooled HTTP/1 connection
+    /// answers immediately; otherwise a new connection is made and pooled.
+    public func negotiatedProtocol(for target: HTTPTarget, options: SendOptions) async -> String? {
+        guard target.scheme == .https else { return nil }
+        let route = upstreamRoute(for: target, options: options)
+        let key = PoolKey(target: target, options: options, route: route)
+        if options.httpVersion != .http1_1, await h2Pool.connection(for: key) != nil { return "h2" }
+        if let idle = await pool.takeIdle(key) {
+            await pool.putIdle(key, channel: idle.channel, id: idle.id, tls: idle.tls)
+            return idle.tls?.alpn ?? "http/1.1"
+        }
+        await pool.acquireSlot(key)
+        var timing = Timing()
+        let deadline = NIODeadline.now() + timeAmount(options.timeouts.total)
+        let channel: any Channel
+        let tls: TLSInfo?
+        do {
+            (channel, tls) = try await connect(
+                target, route: route, options: options, deadline: deadline, timing: &timing)
+        } catch {
+            await pool.releaseSlot(key)
+            return nil
+        }
+        let id = await pool.newConnectionID()
+        await pool.releaseSlot(key)
+        guard tls?.alpn == "h2" else {
+            await pool.putIdle(key, channel: channel, id: id, tls: tls)
+            return tls?.alpn ?? "http/1.1"
+        }
+        do {
+            await h2Pool.add(try await H2Connection.start(on: channel, id: id, tls: tls), for: key)
+            return "h2"
+        } catch {
+            channel.close(promise: nil)
+            return nil
+        }
+    }
+
     // MARK: send pipeline
 
     func send(
@@ -480,8 +518,9 @@ public final class NIOHTTPEngine: HTTPEngine {
     private func startTLS(
         on channel: any Channel, target: HTTPTarget, options: SendOptions, deadline: NIODeadline
     ) async throws -> TLSInfo {
-        var settings = options.tls
-        if settings.alpn.isEmpty { settings.alpn = Self.alpnOffer(options.httpVersion) }
+        var derived = options.tls
+        if derived.alpn.isEmpty { derived.alpn = Self.alpnOffer(options.httpVersion) }
+        let settings = derived  // captured by the verification callback, so immutable
         let context: NIOSSLContext
         do {
             context = try await tlsContexts.context(for: settings)

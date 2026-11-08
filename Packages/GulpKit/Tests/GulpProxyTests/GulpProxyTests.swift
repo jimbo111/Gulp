@@ -3,6 +3,8 @@ import GulpHTTP
 import GulpTLS
 import NIOConcurrencyHelpers
 import NIOCore
+import NIOHPACK
+import NIOHTTP2
 import NIOPosix
 import NIOSSL
 import Testing
@@ -394,5 +396,111 @@ struct TunnelTests {
         #expect(parse("[::1]:8443")! == ("::1", 8443))
         #expect(parse("example.com") == nil)
         #expect(parse("example.com:0") == nil)
+    }
+}
+
+/// An HTTP/2-only TLS origin: each stream answers `<method> <path>`; `/trailers` adds trailers.
+final class H2Origin: Sendable {
+    let channel: any Channel
+
+    private init(channel: any Channel) {
+        self.channel = channel
+    }
+
+    var port: Int { channel.localAddress?.port ?? 0 }
+
+    static func start() async throws -> H2Origin {
+        let minter = try LeafMinter(authority: CertificateAuthority.generate(keyType: .p256))
+        let tls = try await minter.serverContext(for: "localhost", alpn: ["h2"])
+        let channel = try await ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton)
+            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .childChannelInitializer { channel in
+                let secured: EventLoopFuture<Void> = channel.eventLoop.makeCompletedFuture {
+                    try channel.pipeline.syncOperations.addHandler(NIOSSLServerHandler(context: tls))
+                }
+                return secured.flatMap {
+                    channel.configureHTTP2Pipeline(mode: .server) { stream in
+                        stream.eventLoop.makeCompletedFuture {
+                            try stream.pipeline.syncOperations.addHandler(H2OriginHandler())
+                        }
+                    }.map { _ in }
+                }
+            }
+            .bind(host: "127.0.0.1", port: 0).get()
+        return H2Origin(channel: channel)
+    }
+
+    func stop() async { try? await channel.close().get() }
+}
+
+final class H2OriginHandler: ChannelInboundHandler {
+    typealias InboundIn = HTTP2Frame.FramePayload
+    typealias OutboundOut = HTTP2Frame.FramePayload
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        guard case .headers(let frame) = unwrapInboundIn(data), frame.endStream else { return }
+        let path = frame.headers.first(name: ":path") ?? ""
+        let text = "\(frame.headers.first(name: ":method") ?? "") \(path)"
+        let trailers = path == "/trailers"
+        let head = HPACKHeaders([(":status", "200"), ("content-type", "text/plain")])
+        context.write(wrapOutboundOut(.headers(.init(headers: head))), promise: nil)
+        let body = IOData.byteBuffer(context.channel.allocator.buffer(string: text))
+        context.write(wrapOutboundOut(.data(.init(data: body, endStream: !trailers))), promise: nil)
+        if trailers {
+            let tail = HPACKHeaders([("grpc-status", "0")])
+            context.write(wrapOutboundOut(.headers(.init(headers: tail, endStream: true))), promise: nil)
+        }
+        context.flush()
+    }
+}
+
+@Suite("GulpProxy — HTTP/2 through the proxy (PRX-008, PRX-009)", .serialized)
+struct ProxyHTTP2Tests {
+    func viaProxy(_ port: Int, _ version: HTTPVersionPreference) -> SendOptions {
+        var options = clientOptions()
+        options.httpVersion = version
+        options.upstreamProxy = .proxy(UpstreamProxy(kind: .http, host: "127.0.0.1", port: port))
+        return options
+    }
+
+    @Test("PRX-008/009: an h2 client gets h2 (ALPN mirrored from an h2 server); streams become exchanges")
+    func test_PRX009_h2Client() async throws {
+        let origin = try await H2Origin.start()
+        let recorded = Recorded()
+        let (proxy, port, _) = try await TunnelTests.interceptingProxy(recorder: recorded)
+        let client = NIOHTTPEngine()
+        let target = HTTPTarget(scheme: .https, host: "localhost", port: origin.port)
+        let request = RawRequest(Bytes("GET /trailers HTTP/1.1\r\nHost: localhost\r\n\r\n"))
+        let result = await client.send(request, to: target, options: viaProxy(port, .auto))
+        #expect(result.error == nil, "error: \(String(describing: result.error))")
+        #expect(result.exchange.httpVersion == .http2)
+        #expect(result.exchange.tls?.alpn == "h2")
+        let parts = HTTP2Text.responseParts(try #require(result.exchange.response))
+        #expect(parts.body == Array("GET /trailers".utf8))
+        #expect(parts.trailers == [H2Header("grpc-status", "0")])
+        try await Task.sleep(for: .milliseconds(100))
+        let proxied = await recorded.exchanges
+        #expect(proxied.first?.httpVersion == .http2)
+        await client.shutdown()
+        await proxy.stopAll()
+        await origin.stop()
+    }
+
+    @Test("An HTTP/1.1-only client still works against an h2 server (the proxy re-frames the reply)")
+    func test_h1ClientToH2Server() async throws {
+        let origin = try await H2Origin.start()
+        let (proxy, port, _) = try await TunnelTests.interceptingProxy(recorder: Recorded())
+        let client = NIOHTTPEngine()
+        let target = HTTPTarget(scheme: .https, host: "localhost", port: origin.port)
+        let request = RawRequest(Bytes("GET /trailers HTTP/1.1\r\nHost: localhost\r\n\r\n"))
+        let result = await client.send(request, to: target, options: viaProxy(port, .http1_1))
+        #expect(result.error == nil, "error: \(String(describing: result.error))")
+        #expect(result.exchange.httpVersion == .http1_1)
+        let response = try #require(result.exchange.response)
+        #expect(response.bytes.string().hasPrefix("HTTP/1.1 200 OK\r\n"))
+        #expect(HTTP2Text.responseParts(response).trailers == [H2Header("grpc-status", "0")])
+        await client.shutdown()
+        await proxy.stopAll()
+        await origin.stop()
     }
 }

@@ -4,6 +4,7 @@
 
 import Foundation
 import GulpProxy
+import GulpTLS
 import GulpStore
 
 /// A versionable group of settings stored under one key.
@@ -119,6 +120,10 @@ public struct ProxySettings: SettingsGroup, Hashable {
     public var listeners: [ProxyListenerConfig]
     /// Host globs whose TLS is not intercepted (PRX-007), e.g. `*.apple.com`.
     public var passThroughHosts: [String] = []
+    /// PRX-008: never offer HTTP/2 to clients.
+    public var forceHTTP1ToClient = false
+    /// PRX-008: never offer HTTP/2 to servers.
+    public var forceHTTP1ToServer = false
 
     /// Create proxy settings.
     public init(listeners: [ProxyListenerConfig], passThroughHosts: [String] = []) {
@@ -127,7 +132,14 @@ public struct ProxySettings: SettingsGroup, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case version, listeners, passThroughHosts
+        case version, listeners, passThroughHosts, forceHTTP1ToClient, forceHTTP1ToServer
+    }
+
+    /// Interception options for `minter` from these settings.
+    public func tlsOptions(minter: LeafMinter) -> ProxyTLSOptions {
+        ProxyTLSOptions(
+            minter: minter, passThroughHosts: passThroughHosts, forceHTTP1ToClient: forceHTTP1ToClient,
+            forceHTTP1ToServer: forceHTTP1ToServer)
     }
 
     /// Decode, accepting settings saved before a field existed.
@@ -136,5 +148,7 @@ public struct ProxySettings: SettingsGroup, Hashable {
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
         listeners = try container.decode([ProxyListenerConfig].self, forKey: .listeners)
         passThroughHosts = try container.decodeIfPresent([String].self, forKey: .passThroughHosts) ?? []
+        forceHTTP1ToClient = try container.decodeIfPresent(Bool.self, forKey: .forceHTTP1ToClient) == true
+        forceHTTP1ToServer = try container.decodeIfPresent(Bool.self, forKey: .forceHTTP1ToServer) == true
     }
 }

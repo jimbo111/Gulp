@@ -152,7 +152,7 @@ final class H2ResponseCollector: ChannelInboundHandler {
         case .data(let frame):
             if case .byteBuffer(let buffer) = frame.data { body += buffer.readableBytesView }
             if body.count > maxBytes {
-                fail(.tooLarge, context: context)
+                fail(.tooLarge(limit: maxBytes), context: context)
                 return
             }
             if frame.endStream { complete() }

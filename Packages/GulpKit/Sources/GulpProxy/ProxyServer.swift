@@ -8,6 +8,7 @@ import GulpHTTP
 import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
+import NIOTLS
 
 /// One proxy listener (PRX-001). Stored in the project's `proxy.listeners` settings group.
 public struct ProxyListenerConfig: Codable, Sendable, Hashable, Identifiable {
@@ -66,14 +67,16 @@ public actor ProxyServer {
                     let (items, continuation) = AsyncStream.makeStream(of: ProxyItem.self)
                     let client = channel.remoteAddress.map { "\($0.ipAddress ?? "?"):\($0.port ?? 0)" }
                     let pressure = Backpressure()
+                    let upstream = ProxyUpstream(
+                        engine: engine, client: client, forceHTTP1: tls?.forceHTTP1ToServer ?? false)
                     Task {
                         await ProxyConnection.serve(
-                            items, channel: channel, engine: engine, client: client, pressure: pressure,
+                            items, channel: channel, upstream: upstream, pressure: pressure,
                             intercepts: tls != nil)
                     }
                     return channel.eventLoop.makeCompletedFuture(withResultOf: {
                         let handler = ProxyConnectionHandler(
-                            items: continuation, pressure: pressure, tls: tls)
+                            items: continuation, pressure: pressure, tls: tls, upstream: upstream)
                         try channel.pipeline.syncOperations.addHandler(handler)
                     })
                 }
@@ -180,10 +183,16 @@ final class ProxyConnectionHandler: ChannelInboundHandler {
     private var rejected = false
     private var mode = Mode.forward
 
-    init(items: AsyncStream<ProxyItem>.Continuation, pressure: Backpressure, tls: ProxyTLSOptions?) {
+    private let upstream: ProxyUpstream
+
+    init(
+        items: AsyncStream<ProxyItem>.Continuation, pressure: Backpressure, tls: ProxyTLSOptions?,
+        upstream: ProxyUpstream
+    ) {
         self.items = items
         self.pressure = pressure
         self.tls = tls
+        self.upstream = upstream
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -229,7 +238,8 @@ final class ProxyConnectionHandler: ChannelInboundHandler {
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
         if let ready = event as? TunnelReady, let tls {
             // `200 Connection established` is out: let the sniffer decide what the tunnel carries.
-            let sniffer = TunnelSniffer(host: ready.host, port: ready.port, tls: tls, initial: buffer)
+            let sniffer = TunnelSniffer(
+                host: ready.host, port: ready.port, tls: tls, upstream: upstream, initial: buffer)
             buffer = []
             do {
                 try context.pipeline.syncOperations.addHandler(sniffer, position: .before(self))
@@ -239,9 +249,23 @@ final class ProxyConnectionHandler: ChannelInboundHandler {
         } else if let tunnel = event as? TunnelTarget {
             mode = .tunnel(tunnel.target)
             frame(context: context)
+        } else if case .tunnel(let target) = mode, Self.negotiatedH2(event) {
+            // PRX-009: the client speaks HTTP/2 inside the tunnel; hand the connection to an HTTP/2
+            // server pipeline where every stream becomes one exchange.
+            items.finish()
+            context.pipeline.removeHandler(context: context, promise: nil)
+            ProxyHTTP2.serve(channel: context.channel, target: target, upstream: upstream)
         } else {
             context.fireUserInboundEventTriggered(event)
         }
+    }
+
+    /// Whether `event` reports a finished TLS handshake that negotiated HTTP/2.
+    static func negotiatedH2(_ event: Any) -> Bool {
+        guard let tls = event as? TLSUserEvent, case .handshakeCompleted(let negotiated) = tls else {
+            return false
+        }
+        return negotiated == "h2"
     }
 
     private func enqueue(_ item: ProxyItem, context: ChannelHandlerContext) {
@@ -260,7 +284,7 @@ final class ProxyConnectionHandler: ChannelInboundHandler {
 /// Serves one client connection: forward each request upstream and write the response back.
 enum ProxyConnection {
     static func serve(
-        _ items: AsyncStream<ProxyItem>, channel: any Channel, engine: any HTTPEngine, client: String?,
+        _ items: AsyncStream<ProxyItem>, channel: any Channel, upstream: ProxyUpstream,
         pressure: Backpressure, intercepts: Bool
     ) async {
         for await item in items {
@@ -268,7 +292,7 @@ enum ProxyConnection {
             var tunnel: TunnelReady?
             switch item {
             case .request(let request, let target):
-                reply = await forward(request, tunnel: target, engine: engine, client: client)
+                reply = await forward(request, tunnel: target, upstream: upstream)
             case .connect(let request):
                 if intercepts, let authority = connectAuthority(request) {
                     reply = (Array("HTTP/1.1 200 Connection established\r\n\r\n".utf8), false)
@@ -302,7 +326,7 @@ enum ProxyConnection {
 
     /// Forward one request (PRX-002) and decide whether the client connection stays open (PRX-003).
     static func forward(
-        _ request: RawRequest, tunnel: HTTPTarget?, engine: any HTTPEngine, client: String?
+        _ request: RawRequest, tunnel: HTTPTarget?, upstream: ProxyUpstream
     ) async -> (bytes: [UInt8], close: Bool) {
         let method = request.bytes[request.parsed.method].string()
         let version = request.bytes[request.parsed.version].string()
@@ -324,10 +348,8 @@ enum ProxyConnection {
             let message = "Gulp is a forward proxy: configure it as your HTTP proxy (absolute-form requests)."
             return (errorPage(400, message, close: clientWantsClose), clientWantsClose)
         }
-        var options = SendOptions(recordAs: .proxy)
-        options.clientAddress = client
         let forwarded = ForwardRewrite.strippingHopByHop(originForm)
-        let result = await engine.send(forwarded, to: target, options: options)
+        let result = await upstream.engine.send(forwarded, to: target, options: upstream.options)
         if let response = result.exchange.response, result.error == nil {
             let close =
                 clientWantsClose || response.parsed.bodyFraming == .closeDelimited
