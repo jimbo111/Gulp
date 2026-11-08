@@ -42,7 +42,8 @@ struct UpstreamTLSEngineTests {
         #expect(tls.version.hasPrefix("TLSv1."))
         // A Gulp-minted server sends its CA after the leaf (BRW-002 pins match the chain).
         #expect(tls.serverChainSHA256.count == 2)
-        #expect(tls.serverChainSHA256.last == (try authority.sha256Fingerprint()))
+        let caFingerprint = try authority.sha256Fingerprint()
+        #expect(tls.serverChainSHA256.last == caFingerprint)
         #expect(tls.serverChainSHA256.first?.count == 64)
         #expect(tls.validation == .failed("untrusted"))
         #expect(result.exchange.timing.tlsMs != nil)
