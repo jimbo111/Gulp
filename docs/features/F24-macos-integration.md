@@ -31,10 +31,10 @@ bar presence, Shortcuts/Services integration, Quick Look, and the usual Mac nice
 
 | ID | Pri | Requirement |
 |---|---|---|
-| MAC-020 | P1 | **Menu bar extra** (optional): show proxy/intercept status, quick toggles (intercept, listener, open browser), and recent issues count; click to open the app. |
+| MAC-020 | P2 | **Menu bar extra** (optional): show proxy/intercept status, quick toggles (intercept, listener, open browser), and recent issues count; click to open the app. *(P1 → P2 by the 2026-11-08 feature review.)* |
 | MAC-021 | P1 | **Dock & notifications**: dock badge for new high-severity issues/intercept queue; macOS user notifications for long task completion and high-severity findings (UI-090). |
-| MAC-022 | P1 | **Services / Share**: a Service to "Send URL to Gulp (new Repeater request)" and to open a `.gulp`/HAR; register as a handler for `.gulp` and HAR files. |
-| MAC-023 | P1 | **App Intents / Shortcuts**: expose actions (start proxy, run a scan on a URL, export a report) as App Intents so users can script Gulp from Shortcuts/automations. |
+| MAC-022 | P2 | **Services / Share**: a Service to "Send URL to Gulp (new Repeater request)" and to open a `.gulp`/HAR; register as a handler for `.gulp` and HAR files. *(P1 → P2 by the 2026-11-08 feature review.)* |
+| MAC-023 | P2 | **App Intents / Shortcuts**: expose actions (start proxy, run a scan on a URL, export a report) as App Intents so users can script Gulp from Shortcuts/automations. *(P1 → P2 by the 2026-11-08 feature review.)* |
 | MAC-024 | P2 | **Quick Look** extension for `.gulp`: preview a project (summary: host counts, issue counts, created/modified) without opening the app. |
 | MAC-025 | P2 | **Universal Clipboard/Handoff** not required; ensure standard macOS behaviors (full-keyboard-access, window restoration, state restoration per window, dark mode, accent colors) work. |
 | MAC-026 | P1 | **Sparkle auto-update** UI (check now, channel, release notes) wired to the signed appcast (doc 02 §8). |

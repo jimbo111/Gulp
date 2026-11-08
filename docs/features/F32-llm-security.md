@@ -1,7 +1,7 @@
 # F32 — LLM/AI-feature security testing
 
 > Milestone: M26 · Modules: `GulpFeatures/LLMTest` + helpers in `GulpFuzzer`/`GulpScanner` ·
-> Depends on: F05, F07, F08, F09, F10, F16, F29 (Governor limiter)
+> Depends on: F03 (shared limiter, §3.4), F05, F07, F08, F09, F10, F16
 
 ## 1. Purpose
 
@@ -24,8 +24,9 @@ call abuse, and data exfiltration.
 | LLM-004 | P0 | Detect data exfiltration: inject payloads instructing the model to fetch an OAST URL (F10) or embed secrets in output, and correlate interactions/leaks back to the probe. |
 | LLM-005 | P1 | Test insecure output handling by routing model output into DOM Probe (F16) to detect XSS from AI-generated HTML/Markdown, and flag reflected output used in further sinks. |
 | LLM-006 | P1 | Test system-prompt / context leakage with extraction prompts and score how much hidden instruction/context is revealed. |
-| LLM-007 | P1 | Raise issues (F08) with the payload, a redacted model-response excerpt, and the category (injection/leak/exfil/output-handling); all active sends scope-gated and Governor-limited (F29). |
+| LLM-007 | P1 | Raise issues (F08) with the payload, a redacted model-response excerpt, and the category (injection/leak/exfil/output-handling); all active sends scope-gated and drawing from the shared limiter (F03 §3.4). |
 | LLM-008 | P2 | Probe tool/function-calling abuse where the app exposes agent actions (attempt to invoke unintended tools) with strong warnings and no auto-destructive calls. |
+| LLM-009 | P1 | **AI-agent endpoints**: test the target's remote **MCP servers** and agent tool interfaces — enumerate exposed tools/resources/prompts over the MCP HTTP transport, check authentication and per-tool authorization, and detect **tool poisoning** (instructions hidden in tool descriptions or results that steer a connected agent) and cross-tool data exfiltration, with OAST correlation (F10). All calls scope-gated and rate-limited; no destructive tool is invoked automatically. *(Added by the 2026-11-08 feature review, A8; post-1.0, M26.)* |
 
 ## 3. UI
 
@@ -49,7 +50,7 @@ field → observe endpoint); an exfil view correlated with the Beacon feed; and 
 - Non-determinism: LLM responses vary run to run — send each probe N times and classify on a
   majority/any-hit basis; report confidence, not a single sample.
 - Guardrail refusals are a *pass* for the target, not a tool failure — classify them correctly.
-- Rate limits / cost on the target's model — honor the Governor caps and inter-request delays.
+- Rate limits / cost on the target's model — honor the shared limiter's caps (F03 §3.4) and inter-request delays.
 - Indirect injection may surface only after a delay or a different user's session — coordinate timing
   and attribute via a unique planted canary.
 
@@ -61,3 +62,6 @@ field → observe endpoint); an exfil view correlated with the Beacon feed; and 
    + exfil correlated to the probe.
 3. The assistant renders attacker Markdown that becomes XSS in the UI; DOM Probe confirms the sink;
    the sanitizing twin is clean.
+4. AI-agent endpoints (LLM-009): against VulnLab's `/mcp` server the tool enumerates its tools,
+   reports the unauthenticated privileged tool and the poisoned tool description, and the
+   authenticated, clean twin produces no finding.

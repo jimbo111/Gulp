@@ -4,8 +4,8 @@
 
 Gulp is a fast, native macOS workbench for testing web applications and APIs. A tester points a
 browser (or a phone, simulator or CLI tool) at Gulp's proxy. Gulp records and lets them modify every
-request, maps the application, and provides manual tools (Repeater, Fuzzer, Decoder, Comparer,
-Sequencer) and automated ones (Crawler, passive and active Scanner, out-of-band Beacon) to find
+request, maps the application, and provides manual tools (Repeater, Fuzzer, Decoder and JWT
+Workbench, Comparer) and automated ones (Crawler, passive and active Scanner, out-of-band Beacon) to find
 vulnerabilities. It feels like a Mac app: fast to start, keyboard driven, light and dark mode,
 multi-window, at home on Apple Silicon. It also adds modern capabilities: an optional AI assistant,
 an MCP server so AI agents can drive it, and built-in access-control and API tooling.
@@ -56,22 +56,22 @@ put the reference tool's product names in Gulp's UI.
 | Intruder | **Fuzzer** | F07 |
 | Scanner, BChecks | **Scanner**, **Check Recipes** (YAML) | F08 |
 | Crawler | **Crawler** | F09 |
-| Collaborator | **Beacon** (self-hostable OAST server + interactsh compatibility) | F10 |
-| Sequencer | **Sequencer** | F11 |
+| Collaborator | **Beacon** (interactsh compatibility in v1; the self-hostable OAST server is post-1.0) | F10 |
+| Sequencer | **Sequencer** (post-1.0, out of v1 since 2026-11-08) | F11 |
 | Decoder, Hackvertor-style tags | **Decoder**, **Transform Tags** | F12 |
 | Comparer | **Comparer** | F13 |
 | Organizer | **Notebook** | F14 |
 | Session handling rules, Macros, Cookie jar | **Sessions** (Rules, Macros, Cookie Jar, Identities) | F15 |
-| Embedded browser, DOM Invader, Clickbandit | **Gulp Browser**, **DOM Probe**, **Frame Kit** | F16 |
-| Engagement tools | **Engagement Tools** | F17 |
-| Extensions, Montoya API, BApp Store | **Extensions**, **Gulp Extension API**, **Extension Gallery** | F18 |
+| Embedded browser, DOM Invader, Clickbandit | **Gulp Browser**, **DOM Probe** (the **Frame Kit** clickjacking recorder was cut on 2026-11-08) | F16 |
+| Engagement tools | Folded into the tools they extend (2026-11-08): content discovery in the **Fuzzer**, **CSRF PoC** in Reports, **Copy as** in the Send-to menu, the task **scheduler** in Automation | F07, F19, F21, doc 05 (was F17) |
+| Extensions, Montoya API, BApp Store | **Extensions**, **Gulp Extension API**, **Extension Gallery** (post-1.0) | F18 |
 | Bambdas (Java filter snippets) | **GulpQL** (query language) + **Snippets** (JS) | F05, F18 |
 | Logger | **Logger** | F05 |
 | Reports | **Reports** | F19 |
 | Project files, settings | **Projects** (`*.gulp`), **Settings** | F20 |
 | REST API, headless | **gulp CLI**, **REST API**, **MCP server** | F21 |
 | AI features | **Gulp Assistant** | F22 |
-| (BApps: Autorize, JWT Editor, Param Miner, HTTP Request Smuggler, InQL, Turbo Intruder, Logger++) | **Authz Matrix**, **JWT Workbench**, **Param Discovery**, **Smuggling Probe**, **GraphQL Workbench**, **Fuzzer Turbo mode**, **Logger** (built in) | F23, F07, F05 |
+| (BApps: Autorize, JWT Editor, Param Miner, HTTP Request Smuggler, InQL, Turbo Intruder, Logger++) | **Authz Matrix**, **JWT Workbench**, **Param Discovery**, **Smuggling Probe**, **GraphQL Workbench**, **Fuzzer Turbo mode**, **Logger** (built in) | F23, F12, F07, F05 |
 
 ## 5. Product principles
 
@@ -80,7 +80,7 @@ put the reference tool's product names in Gulp's UI.
 2. **Raw first, pretty second.** The raw bytes are canonical. Pretty, Hex, Inspector and Render are
    views of them.
 3. **Every message can be sent anywhere.** Any request, in any table or editor, has the same context
-   menu: Send to Repeater / Fuzzer / Comparer / Decoder / Sequencer / Scanner / Notebook, Copy as
+   menu: Send to Repeater / Fuzzer / Comparer / Decoder / Scanner / Notebook, Copy as
    cURL, and so on.
 4. **Keyboard first.** Every action has a shortcut or a command-palette entry (⌘K).
 5. **Safe by default.** Scope enforcement, no automatic sending of traffic to third parties (AI and

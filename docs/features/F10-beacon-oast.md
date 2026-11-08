@@ -1,7 +1,7 @@
 # F10 — Beacon (OAST / out-of-band application security testing)
 
-> Milestone: M11 · Modules: `GulpOAST`, `Beacon/` (separate package), `GulpFeatures/Beacon` ·
-> Depends on: F02, F03
+> Milestone: M11a (client, interactsh, dev Beacon; the deployable server is post-1.0) · Modules:
+> `GulpOAST`, `Beacon/` (separate package), `GulpFeatures/Beacon` · Depends on: F02, F03
 
 ## 1. Purpose
 
@@ -33,14 +33,21 @@ correlated back to the payload. Gulp calls this server **Beacon**.
 
 ### 2.2 Server (`gulp-beacon`, Linux/Docker)
 
+**The deployable server is post-1.0 (2026-11-08 feature review).** In v1, OAST works through
+interactsh servers (BCN-005, public or self-hosted). Only the local **dev mode** (BCN-024) ships in v1,
+because the integration tests and the scanner-accuracy test need a local OAST endpoint; it is the
+minimal subset of BCN-020/021 (HTTP + DNS on high ports, the polling API, in-memory) with no zone
+authority, ACME, retention or abuse protection. BCN-020…023 and BCN-025 are in the roadmap's
+**Post-1.0 backlog**.
+
 | ID | Pri | Requirement |
 |---|---|---|
-| BCN-020 | P0 | A deployable server that owns a domain/subdomain (the user sets NS records to point the subdomain at it). Listens for **DNS** (authoritative for the zone) and **HTTP/HTTPS** interactions; optionally **SMTP**. Records each with the full details and the queried hostname (to extract the token). |
-| BCN-021 | P0 | A polling API for the client (authenticated with the shared secret) returning new interactions since a cursor; data encrypted in transit (TLS) and, in interactsh-compat mode, with the client's key. |
-| BCN-022 | P0 | Automatic TLS for the HTTP listener (ACME/Let's Encrypt or user-provided cert) so https payloads work. |
-| BCN-023 | P1 | Retention/cleanup (interactions expire after N days), rate limiting, and abuse protection (it's internet-facing). Bind and log safely; no interaction data leaves the box except to authenticated pollers. |
-| BCN-024 | P1 | Dev mode (`make beacon`, which runs `gulp-beacon --dev`): runs locally on high ports with a self-signed cert and an in-memory store, used by integration tests. VulnLab's SSRF/cmd/XXE endpoints point at it. |
-| BCN-025 | P2 | A Docker image and a one-command deploy script; a minimal admin page (behind auth) showing recent interactions. |
+| BCN-020 | P0 | A deployable server that owns a domain/subdomain (the user sets NS records to point the subdomain at it). Listens for **DNS** (authoritative for the zone) and **HTTP/HTTPS** interactions; optionally **SMTP**. Records each with the full details and the queried hostname (to extract the token). *(Post-1.0.)* |
+| BCN-021 | P0 | A polling API for the client (authenticated with the shared secret) returning new interactions since a cursor; data encrypted in transit (TLS) and, in interactsh-compat mode, with the client's key. *(Post-1.0; dev mode implements the polling API.)* |
+| BCN-022 | P0 | Automatic TLS for the HTTP listener (ACME/Let's Encrypt or user-provided cert) so https payloads work. *(Post-1.0.)* |
+| BCN-023 | P1 | Retention/cleanup (interactions expire after N days), rate limiting, and abuse protection (it's internet-facing). Bind and log safely; no interaction data leaves the box except to authenticated pollers. *(Post-1.0.)* |
+| BCN-024 | P1 | Dev mode (`make beacon`, which runs `gulp-beacon --dev`): runs locally on high ports with a self-signed cert and an in-memory store, used by integration tests. VulnLab's SSRF/cmd/XXE endpoints point at it. *(v1, M11a: the only part of the server built before 1.0.)* |
+| BCN-025 | P2 | A Docker image and a one-command deploy script; a minimal admin page (behind auth) showing recent interactions. *(Post-1.0.)* |
 
 ## 3. UI
 

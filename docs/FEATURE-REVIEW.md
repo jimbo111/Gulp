@@ -6,6 +6,11 @@ bug-bounty hunters, built by a small team. This file records the verdicts, what 
 what is **proposed and waiting for the owner's decision** (scope cuts are product decisions,
 CLAUDE.md §4).
 
+> **Update 2026-11-08: the owner adopted every §3 proposal** ("Adopt the feature review
+> proposals"). §3 is kept unchanged as the record; how each proposal was applied — the new IDs, the
+> milestone splits and the beta gate, the merged stubs and the cuts — is in `docs/07-decisions.md`
+> (product decision #7 and the 2026-11-08 small decisions) and in `docs/03-roadmap.md`.
+
 ## 1. Summary
 
 The core workflow is sound and mostly current. The gaps are at the protocol edge (streaming
@@ -24,7 +29,7 @@ bigger issue is **scope**: about a third of the specs overlap, and several daily
 | **MAC-011** corrected: macOS *does* support per-app transparent proxying (Network Extension); post-1.0 P1 | F24 |
 | **BRW-002** corrected: fallback is the login-keychain install; Chrome on macOS doesn't use NSS | F16 |
 
-## 3. Proposed — waiting for the owner's decision
+## 3. Proposals — **Adopted 2026-11-08**
 
 ### 3.1 Missing capabilities (add)
 
@@ -74,7 +79,7 @@ bigger issue is **scope**: about a third of the specs overlap, and several daily
 | Reporting: PDF/branding (RPT-005/009) → P2; promote RPT-012 (bug-bounty Markdown) | | |
 | AI: AI-007/009 → P2 | | |
 | macOS: MAC-020/022/023 → P2 | | |
-| PRX-048 | cut | |
+| PRX-048 (Unix-socket listener) | cut | |
 
 Net effect: roughly 1.5–2 milestones removed from v1, and the most-used bug-bounty tools land
 months earlier.

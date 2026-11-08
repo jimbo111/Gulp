@@ -2,7 +2,8 @@
 
 **Gulp** is a native macOS application for web application security testing: an intercepting
 HTTP(S)/WebSocket proxy plus a full toolkit (Repeater, Fuzzer, Scanner, Crawler, OAST "Beacon",
-Sequencer, Decoder, Comparer, session handling, extensions, automation and an optional AI assistant).
+Decoder and JWT Workbench, Comparer, gRPC/protobuf, session handling, extensions, automation and an
+optional AI assistant).
 
 Its feature set matches a commercial-grade web security suite (Burp Suite Professional is the
 reference point) and adds features that suit a modern, native macOS tool.

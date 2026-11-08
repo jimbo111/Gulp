@@ -45,8 +45,10 @@ tests can measure false positives.
 
 | Area | Vulnerable endpoint(s) | Safe twin | Used by |
 |---|---|---|---|
-| Basics | `/echo` (reflects the request as a readable response), **`/echo-raw`** (a raw TCP listener on :8089 that writes back the exact bytes it received, verbatim — used for byte-fidelity tests with malformed/duplicate headers and bare LF), `/redirect?to=`, `/chunked`, `/gzip`, `/slow?ms=`, `/large?mb=`, `/status/{code}`, `/continue` (emits `100 Continue` then the final response), `/h2` (HTTPS listener on :8443 with ALPN h2) | — | F01, F03 |
-| Auth | `/login` (form + CSRF token), `/account` (session cookie), `/api/me` (Bearer JWT), session expires after N requests (configurable) | — | F15, F07 |
+| Basics | `/echo` (reflects the request as a readable response), **`/echo-raw`** (a raw TCP listener on :8089 that writes back the exact bytes it received, verbatim — used for byte-fidelity tests with malformed/duplicate headers and bare LF), `/redirect?to=`, `/chunked`, `/gzip`, `/slow?ms=`, `/large?mb=`, `/status/{code}`, `/continue` (emits `100 Continue` then the final response), `/h2` (HTTPS listener on :8443 with ALPN h2), **`/sse`** (a `text/event-stream` that emits one numbered event every 200 ms, with heartbeat comments, until the client disconnects or `?n=` events were sent — M4b streaming) | — | F01, F03, F05, F06 |
+| Auth | `/login` (form + CSRF token), `/account` (session cookie), `/api/me` (Bearer JWT that accepts `alg:none`, RS→HS key confusion, a weak HMAC secret from the bundled wordlist, and `kid` path traversal), session expires after N requests (configurable) | `/safe/api/me` (pinned algorithm, strong key, `kid` allowlist) | F15, F07, F12 (JWT Workbench), SCN (SCN-074) |
+| Request signing (M12a) | `/signed/dpop` (requires a valid DPoP proof bound to the access token, issues `DPoP-Nonce`), `/signed/http-sig` (verifies an RFC 9421 signature over `@method @target-uri content-digest`), `/signed/sigv4` (verifies AWS SigV4 with a fixture key, region and service) | — (each rejects unsigned/badly signed requests with 401) | F15 SES-016…018 |
+| Passkeys (M13a) | `/webauthn/register` + `/webauthn/login` (a WebAuthn relying party for `localhost`; the session cookie is issued only after a valid assertion) | — | F16 BRW-016, F15 SES-032 |
 | Reflected XSS | `/xss/html?q=`, `/xss/attr?q=`, `/xss/js?q=`, `/xss/url?q=` (into href) | `/safe/xss/...` (encoded per context) | SCN |
 | Stored XSS | `/guestbook` (POST, then rendered on GET) | `/safe/guestbook` | SCN |
 | DOM XSS | `/spa` (JS reads `location.hash` into `innerHTML`) | `/safe/spa` | BRW (DOM Probe) |
@@ -63,12 +65,23 @@ tests can measure false positives.
 | Request smuggling | A raw NIO listener on :8090 that emulates a CL.TE front-end/back-end pair | — | ADV |
 | Race condition | `/race/redeem` (a check-then-act with a 50 ms window; a coupon can be redeemed only once) | — | REP, F03 |
 | IDOR / access control | `/api/orders/{id}` (no owner check), `/admin` (role check by cookie `role=`) | `/safe/api/orders/{id}` | ADV (Authz Matrix) |
-| Tokens | `/token/weak` (sequential/time-based), `/token/strong` (CSPRNG) | — | SEQ |
+| Tokens | `/token/weak` (sequential/time-based), `/token/strong` (CSPRNG) — kept for the post-1.0 Sequencer (F11 is out of v1 since 2026-11-08); no v1 test uses them | — | SEQ (post-1.0) |
 | GraphQL | `/graphql` (introspection on, a field-level authz bug) | — | ADV |
 | OpenAPI | `/openapi.json` describing the `/api/*` routes | — | ADV, SCN |
 | WebSockets | `/ws/chat` (echo + broadcast; an XSS sink in messages) | — | PRX |
-| Clickjacking | `/frameable` (no X-Frame-Options / frame-ancestors) | `/safe/frameable` | BRW (Frame Kit) |
+| gRPC (M10b) | On the h2 listener :8443: a `vulnlab.Echo` service (`Say`, unary; `Stream`, server-streaming) with **server reflection** enabled and its `.proto` in `Fixtures/grpc/`; `vulnlab.Orders/Get` with a planted SQL injection in the `id` string field. On :8088: the same `Echo` service as **gRPC-Web** (binary and `-text`) and as a **Connect** unary endpoint | `vulnlab.SafeOrders/Get` (parameterized) | F33, SCN |
+| Clickjacking | `/frameable` (no X-Frame-Options / frame-ancestors) | `/safe/frameable` | SCN passive (Frame Kit was cut 2026-11-08) |
+| Prototype pollution (M11c) | `/pp/merge` (deep-merges a JSON body into a server-side object; a polluted `json spaces`-style property changes later response formatting) | `/safe/pp/merge` (rejects `__proto__`/`constructor`) | SCN-070 |
+| Client-side path traversal (M11c) | `/cspt/` (a page whose JS builds `fetch('/api/items/' + location.hash.slice(1))` with credentials) | `/safe/cspt/` (encodes the segment) | SCN-071 |
+| Mass assignment (M11c) | `/api/users/me` (`PATCH` JSON; accepts and persists an unexpected `role` property) | `/safe/api/users/me` (allowlists fields) | SCN-072 |
+| File upload (M11c) | `/upload` (checks only the `Content-Type` header; serves stored files from `/uploads/` with an extension-derived type, so `x.svg`/`x.html` render same-origin) | `/safe/upload` (content sniffing + `Content-Disposition: attachment` + sandbox CSP) | SCN-073 |
 | SPA | `/app/` (client-side routing, links rendered by JS) | — | CRL |
+| Discovery & recon (M8, M19a) | Unlinked content for content discovery (`/admin` is not linked from any page; backup files `/index.html.bak`, `/backup.zip`, `/.old/config.php~`); a hidden parameter (`/api/report` changes its output when an undocumented `debug=1` is sent); `/static/app.min.js`, a minified bundle with `//# sourceMappingURL` pointing to an exposed `app.min.js.map` (with `sourcesContent`), whose code references `/api/internal/*` routes that no page links to; a planted fake API key in that bundle and another in an HTML comment | — (the secret scanner's precision is checked on `/safe/*` pages, which carry none) | F07 ETL-003, F23 (Param Discovery, secret scanner), F27 (JS Recon core) |
+
+**Import fixtures (M6b).** `Tests/Fixtures/import/` holds files captured against VulnLab for the
+import/export service (F20 PRJ-012/013, F23 ADV-050/051): a HAR, a Postman v2.1 collection, an XML
+proxy-history export from the reference suite, a Caido export and a mitmproxy HAR. They are test data,
+not VulnLab routes.
 
 **M1 endpoint behaviors (so the M1 build isn't guessing).** `/echo` returns `200` with the request's
 method, target, headers and body reflected as `text/plain` (and `Content-Length` set). `/echo-raw`
@@ -78,7 +91,7 @@ oracle for HTTP-001 and the M1 DoD. `/redirect?to=` returns `302` with a `Locati
 value. `/chunked` responds `Transfer-Encoding: chunked` in several small chunks (e.g. 3 chunks) plus
 a terminating zero-chunk (optionally a trailer, to exercise trailer parsing). `/gzip` sets
 `Content-Encoding: gzip`; `/slow?ms=` delays before the body; `/large?mb=` streams N MB;
-`/status/{code}` returns that status (used for the Governor-backoff test). A `/continue` endpoint
+`/status/{code}` returns that status (used for the shared-limiter backoff test, F03 GOV-007). A `/continue` endpoint
 emits a `100 Continue` interim response before the final one, to exercise 1xx handling (recorded in
 `ParsedResponse.interimResponses`, doc 04 §2). Fixture files for the parser round-trip/edit tests
 live in `Tests/Fixtures/http/` and are authored as part of M1 (doc §2 lists the malformed cases).
@@ -121,14 +134,16 @@ post-1.0 feature adds (every vulnerable route gets a `/safe/*` twin unless noted
 | Feature (milestone) | VulnLab fixtures to add |
 |---|---|
 | F25 SSO (M21) | An **OIDC** authorization server: `/oidc/authorize`, `/oidc/token`, `/oidc/userinfo`, `/.well-known/openid-configuration`, JWKS — a vulnerable instance (over-accepts `redirect_uri`, missing/static `state`, PKCE downgradable to `plain`, implicit-flow token leak via `Referer`) and a hardened twin. A **SAML** SP `/saml/acs` that accepts a signature-stripped/XSW assertion, with a signature-validating twin. |
-| F26 WebSocket (M22) | Reuses `/ws/chat`; adds a socket that authorizes **only at handshake** (+ per-message-authz twin), a socket that **upgrades on a cross-origin `Origin`** returning authenticated data (+ Origin-checking twin, for CSWSH), and a socket whose messages reach a **blind sink** (command/SSRF) that calls the dev Beacon, for OAST-correlated WS injection. |
-| F27 JS Recon (M23) | A **minified JS bundle with an exposed `.map`**, `/api/internal/*` routes referenced only from JS (not linked), a bundled **known-vulnerable JS library** version, and a second **versioned capture** of the bundle (adds an endpoint) for the asset-diff test. |
-| F28 Cache (M24) | `/cache/reflect` that reflects **`X-Forwarded-Host`** into a cacheable response (+ non-caching twin) — and when that reflected header value is fetched server-side it reaches the dev Beacon, giving the cache-amplified **SSRF-into-cache** path (OAST-correlated); and an `/account` endpoint cacheable as **`/account.css`** (cache deception) with a `Cache-Control: private` twin. |
-| F30 Drift & Retest (M25) | No new routes required — reuses existing endpoints, plus a **config toggle** on one planted vuln so a fixture can flip vulnerable→patched between runs (for the Fixed/Still-Vulnerable verdict test). |
-| F32 LLM (M26) | `/ai/chat` (SSE) vulnerable to **direct prompt injection** (+ guarded twin); a stored-note path the assistant later ingests for **indirect injection + OAST exfil**; an endpoint that renders model **Markdown into HTML** (XSS sink) with a sanitizing twin. |
+| WebSocket checks, ex-F26 (M22: F07 §2.6, F08 §3.6, F23 WSX-004) | Reuses `/ws/chat`; adds a socket that authorizes **only at handshake** (+ per-message-authz twin), a socket that **upgrades on a cross-origin `Origin`** returning authenticated data (+ Origin-checking twin, for CSWSH), and a socket whose messages reach a **blind sink** (command/SSRF) that calls the dev Beacon, for OAST-correlated WS injection. |
+| F27 JS Recon, rest (M23) | Reuses the v1 "Discovery & recon" bundle and its `.map` (the core, JSR-001…005, is v1 in M19a); adds a bundled **known-vulnerable JS library** version and a second **versioned capture** of the bundle (adds an endpoint) for the asset-diff test. |
+| Cache family, ex-F28 (M24: F08 §3.5) | `/cache/reflect` that reflects **`X-Forwarded-Host`** into a cacheable response (+ non-caching twin) — and when that reflected header value is fetched server-side it reaches the dev Beacon, giving the cache-amplified **SSRF-into-cache** path (OAST-correlated); and an `/account` endpoint cacheable as **`/account.css`** (cache deception) with a `Cache-Control: private` twin. |
+| Retest, ex-F30 (M25: F08 §2.4, F21 DRF-009) | No new routes required — reuses existing endpoints, plus a **config toggle** on one planted vuln so a fixture can flip vulnerable→patched between runs (for the Fixed/Still-Vulnerable verdict test). |
+| F32 LLM (M26) | `/ai/chat` (SSE) vulnerable to **direct prompt injection** (+ guarded twin); a stored-note path the assistant later ingests for **indirect injection + OAST exfil**; an endpoint that renders model **Markdown into HTML** (XSS sink) with a sanitizing twin; and a remote **MCP server** at `/mcp` (HTTP transport) with an unauthenticated privileged tool and a **poisoned tool description** (+ an authenticated, clean twin) for LLM-009. |
 
-(F29 Governor and F31 Journal need no VulnLab fixtures — their acceptance tests drive Gulp's own
-tooling against existing endpoints.)
+(The merged Governor and Journal requirements — now F03 §3.4, F20 §2.4, F04 §2.3 and F14 — need no
+new VulnLab fixtures; their acceptance tests drive Gulp's own tooling against existing endpoints.
+F26, F28, F29, F30 and F31 were merged into other specs on 2026-11-08; the rows above name the new
+homes.)
 
 ## 4. Third-party targets for manual testing (optional, Docker)
 

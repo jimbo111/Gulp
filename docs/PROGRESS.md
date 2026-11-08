@@ -23,15 +23,15 @@ order; within a milestone, do P0 first.
     SOCKS5 username/password (NIOSOCKS client is no-auth only). Redirect following is declared but
     `.never`-only until the Repeater (M5).
   - M2: PRJ-001 save/discard prompt on closing a temporary project (the file is kept in Caches
-    instead; needs an NSWindow close hook, M16 polish). The proxy answers CONNECT with 501 until M3a
+    instead; needs an NSWindow close hook, M16b polish). The proxy answers CONNECT with 501 until M3a
     and origin-form (invisible) requests with 400 until PRX-040.
   - M2, found by the 2026-11-07 code review (partial requirements, now stated honestly):
     - **F01 §4.3 response streaming**: responses are buffered whole (50 MB / 120 s limits), so large
-      downloads and SSE/long-polling fail through the proxy. Planned with streaming exchanges (M4,
+      downloads and SSE/long-polling fail through the proxy. Now specified as PRX-050/HIS-007 (M4b,
       FEATURE-REVIEW A1). Request bodies are buffered too, capped at 256 MB (413 beyond).
-    - HIS-004: "add to scope" (needs M6) and "send to tools" (M5) are not there yet.
-    - HIS-005: comments are edited in a dialog, not inline (UI-041 lands with the editor, M4).
-    - HIS-006: in-scope (M6), MIME and method chips are missing from the UI (the query supports them).
+    - HIS-004: "add to scope" (needs M6a) and "send to tools" (M5) are not there yet.
+    - HIS-005: comments are edited in a dialog, not inline (UI-041 lands with the editor, M4a).
+    - HIS-006: in-scope (M6a), MIME and method chips are missing from the UI (the query supports them).
     - PRJ-005: "Use settings from…" has an API but no UI; import from a settings file is missing.
     - PRJ-006 (P1): name/notes API only, no Project Info panel.
     - F20 §4: `settingsChanged` is declared but never published.
@@ -41,12 +41,16 @@ order; within a milestone, do P0 first.
   import (PEM import works); pass-through tunnels are not yet logged (PRX-007 "tunnel entry" needs
   the Logger, M9); `TLSInfo.cipherSuite` is empty (NIOSSL doesn't expose the negotiated suite);
   PRX-046 `http://gulp/cert.pem` landing page (P1) not yet served.
-- **Next action**: M3b — HTTP/2 on both sides with ALPN mirroring, then its executable DoD.
-- **Waiting on the owner**: the scope proposals in `docs/FEATURE-REVIEW.md` §3 (add, merge, defer,
-  cut). Nothing has been removed from the specs until they are decided.
+- **Next action**: M3b — HTTP/2 on both sides with ALPN mirroring, then its executable DoD; then M4a.
+  The plan after M3b follows the 2026-11-08 re-sequencing (milestone checklist below).
+- **Waiting on the owner**: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
+  **adopted on 2026-11-08** (product decision #7 in `docs/07-decisions.md`) and applied to the specs:
+  merges, cuts, deferrals, new requirements (incl. F33) and the re-sequenced roadmap with letter-
+  suffixed splits and a daily-driver beta gate after M9.
 - **Product decisions**: resolved by the owner and recorded in `docs/07-decisions.md` §"Product
   decisions" (MIT license; macOS 14 min; Claude-only AI in v1; OAST off until configured;
-  `com.gulp.app` placeholder bundle id; no team server). Build to those.
+  `com.gulp.app` placeholder bundle id — to be replaced before the beta's signed build; no team
+  server; #7 the feature review adopted). Build to those.
 
 ### Documentation Definition of Done (the objective "build-ready" bar)
 
@@ -57,13 +61,13 @@ and are pure Python over the Markdown.)
 
 | # | Criterion (objective) | How measured | Status |
 |---|---|---|---|
-| D1 | Every feature has a spec file with the standard sections (Purpose, Requirements, UI, Implementation, Edge cases, Acceptance tests) | 32 `docs/features/Fxx-*.md`; grouped specs (F23) noted in docs/README | MET (32/32) |
+| D1 | Every feature has a spec file with the standard sections (Purpose, Requirements, UI, Implementation, Edge cases, Acceptance tests) | 33 `docs/features/Fxx-*.md` since 2026-11-08 (27 active specs incl. the new F33, plus 6 merged stubs F17/F26/F28–F31 that keep the section headings); grouped specs (F23) noted in docs/README | MET (32/32) |
 | D2 | Every requirement row has a stable ID + priority (P0/P1/P2) | ID-table scan | MET |
-| D3 | No duplicate requirement IDs; no referenced-but-undefined IDs (incl. slash-shorthand) | `idcheck` | MET (516 IDs, 0 dup, 0 dangling) |
+| D3 | No duplicate requirement IDs; no referenced-but-undefined IDs (incl. slash-shorthand) | `idcheck` | MET (544 IDs incl. the new `GRP` prefix, 0 dup, 0 dangling — re-run 2026-11-08; was 516) |
 | D4 | Every internal Markdown link, `Fxx` ref, and `Mxx` ref resolves | `linkcheck` | MET |
 | D5 | Every `## N`/`### N.M` numbering sequence has no gaps/dupes | `secnum` | MET |
 | D6 | Every `Fxx §N` / `doc NN §N` cross-ref points to a real section | `secref` | MET |
-| D7 | Each feature's milestone agrees across its header, the README index, and the roadmap | `featmap` | MET |
+| D7 | Each feature's milestone agrees across its header, the README index, and the roadmap | `featmap` (a suffix-aware copy since 2026-11-08) + `featmap2` (also checks roadmap sections and every suffixed `Mxx` ref) | MET (re-run 2026-11-08) |
 | D8 | Every feature is scheduled in the roadmap with a Definition of Done | roadmap M0–M26 inspection | MET |
 | D9 | Every acceptance test maps to a defined or milestone-scoped VulnLab fixture/endpoint | doc 06 §3 + §3.1; independently re-verified | MET |
 | D10 | Every persisted requirement has a backing table/column; all FKs resolve | doc 04 §4 incl. Phase F tables; independently verified | MET |
@@ -133,29 +137,40 @@ for behavior.
 - [x] M2 — Plain-HTTP proxy, storage, history UI — **CI green both platforms + executable DoD PASS (`1acf39c`)**
 - [x] M3a — TLS interception + CA (HTTP/1.1) — **CI green both platforms + executable DoD PASS (`054b24a`)**
 - [ ] M3b — HTTP/2 (client side + upstream, trailers)
-- [ ] M4 — Intercept, Match & Replace, message editor, WebSockets
-- [ ] M5 — Repeater + advanced HTTP engine (HTTP/2 raw, group/race sends)
-- [ ] M6 — Target: site map + scope + ScopeGuard
-- [ ] M7 — Decoder + Comparer
-- [ ] M8 — Fuzzer
-- [ ] M9 — Logger, GulpQL, search, Notebook **+ F31 Journal coverage index (fold-in)**
-- [ ] M10 — Passive scanner + issue model
-- [ ] M11 — Crawler + active scanner + Beacon + Check Recipes **+ F29 Governor limiter & panic stop (fold-in)**
-- [ ] M12 — Sessions, auth, macros
-- [ ] M13 — Gulp Browser, DOM Probe, Frame Kit
-- [ ] M14 — Sequencer
-- [ ] M15 — Extensions + scripting
-- [ ] M16 — Reporting, engagement tools, project polish **+ F29 Governor full panel & F31 Journal full tool (fold-ins)**
-- [ ] M17 — Automation: CLI, REST API, MCP server
-- [ ] M18 — Gulp Assistant (AI)
-- [ ] M19 — Advanced tools (Authz Matrix, JWT, Param Discovery, Smuggling, GraphQL, API import, secrets)
+- [ ] M4a — Message editor, Intercept, Match & Replace, Send to / Copy as
+- [ ] M4b — Streaming responses, WebSockets, Gulp Browser launch
+- [ ] M5 — Repeater + advanced HTTP engine (HTTP/2 raw, group/race sends, streaming, paste-to-request)
+- [ ] M6a — Target: site map + scope + ScopeGuard
+- [ ] M6b — Import/export service, API import, MCP read surface + `send_request`
+- [ ] M7 — Decoder + Comparer + JWT Workbench
+- [ ] M8 — Fuzzer (with content discovery)
+- [ ] M9 — Logger, GulpQL, search, Notebook, coverage index
+- [ ] **Daily-driver beta** — release gate after M9 (signed + notarized build to real testers)
+- [ ] M10a — Passive scanner + issue model
+- [ ] M10b — gRPC & protobuf (F33)
+- [ ] M11a — Crawler (static), Beacon client + dev Beacon, shared limiter + panic stop
+- [ ] M11b — Active scan engine + P0 checks
+- [ ] M11c — Full check catalog (incl. SCN-070…074) + crawl-and-audit
+- [ ] M12a — Sessions, auth, macros, request signing
+- [ ] M12b — Authz Matrix
+- [ ] M13a — Browser automation: CDP crawl, recorded logins, passkeys
+- [ ] M13b — DOM Probe + GraphQL Workbench
+- M14 — *(retired: Sequencer moved to the Post-1.0 backlog)*
+- [ ] M15 — Extensions + scripting + Check Recipes
+- [ ] M16a — Reporting (bug-bounty Markdown, CSRF PoC)
+- [ ] M16b — Project polish, throughput panel, coverage view + timeline
+- [ ] M17 — Automation: CLI, REST API, full MCP server, scheduler
+- [ ] M18 — Gulp Assistant (AI) incl. bounded agentic follow-up
+- [ ] M19a — Param Discovery, secret scanner, JS Recon core
+- [ ] M19b — Smuggling Probe
 - [ ] M20 — macOS polish, packaging, release
-- [ ] M21 — F25 SSO Workbench *(Phase F, post-1.0)*
-- [ ] M22 — F26 WebSocket Security Workbench
-- [ ] M23 — F27 JS Recon Studio
-- [ ] M24 — F28 Web Cache Poisoning & Deception
-- [ ] M25 — F30 Drift & Retest
-- [ ] M26 — F32 LLM/AI-feature security testing
+- [ ] M21 — F25 SSO Workbench *(Phase F, post-1.0; suggested first with M26)*
+- [ ] M22 — WebSocket fuzzing and checks (WSX, merged from F26)
+- [ ] M23 — F27 JS Recon Studio (rest)
+- [ ] M24 — Cache poisoning & deception check family (WCP, merged from F28)
+- [ ] M25 — Issue retest (DRF, merged from F30)
+- [ ] M26 — F32 LLM/AI-feature security testing (incl. MCP/agent endpoints)
+- Post-1.0 backlog (unscheduled): F11 Sequencer, deployable Beacon server, Extension Gallery, MAC-011 transparent proxy, HTTP-037 HTTP/3 client
 
 ## Log
 
@@ -270,6 +285,25 @@ for behavior.
   - Caught by CI: `localhost` → `::1` first on macOS (single-address connect), BoringSSL refusing a
     server certificate without `digitalSignature`, `TLSUserEvent` living in NIOTLS, internal
     memberwise inits on public structs (twice), `catch where` spacing.
+
+- 2026-11-08 — **Feature review adopted** (owner: "Adopt the feature review proposals"; product
+  decision #7). Docs only, no code:
+  - **Merged** F17, F26, F28, F29, F30, F31 into the specs they extend; the files are stubs listing
+    where each requirement went (IDs kept) and the cut ones. HAR/collection import consolidated on
+    one F20 service (PRJ-012).
+  - **Added** PRX-050/HIS-007/REP-016 (streaming), **F33 gRPC & protobuf** (GRP-001…007; supersedes
+    ADV-053), SES-016…018 (request signing), BRW-016/SES-032 (passkeys), REP-017/PRJ-013 (paste,
+    other-proxy import), SCN-070…074, AI-013, LLM-009, HTTP-037; VulnLab fixtures for each.
+  - **Deferred/cut**: F11 out of v1 (M14 retired), Frame Kit, PRX-048, Beacon server and Extension
+    Gallery post-1.0; priority changes per FEATURE-REVIEW §3.4.
+  - **Re-sequenced** without renumbering: M4a/b, M6a/b, M10a/b, M11a/b/c, M12a/b, M13a/b, M16a/b,
+    M19a/b, and a **daily-driver beta** gate after M9. M3b (in progress) is unchanged.
+  - Deviation: the original `featmap.py` predates letter-suffixed milestones (its README regex only
+    accepts `M\d+`, and the M3a/M3b split had kept bare "M3" in headers), so it now reports every
+    split feature as unindexed. D7 is checked with a suffix-aware copy (`featmap_sfx.py`, same logic)
+    and `featmap2.py` (also header ↔ roadmap sections and every suffixed `Mxx` ref): both clean. All
+    other checks pass (idcheck — 537 IDs as written, 544 with the new `GRP` prefix added — linkcheck,
+    secnum, secref, tables).
 
 ## How to pick up work (reminder)
 

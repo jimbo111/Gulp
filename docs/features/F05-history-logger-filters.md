@@ -1,6 +1,7 @@
 # F05 — History, Logger, GulpQL filters and search
 
-> Milestones: M2 (history), M9 (GulpQL, Logger, search) · Modules: `GulpQuery`, `GulpStore`,
+> Milestones: M2 (history), M4b (in-progress rows HIS-007), M6b (import/export HIS-044), M9 (GulpQL,
+> Logger, search) · Modules: `GulpQuery`, `GulpStore`,
 > `GulpFeatures/{Proxy,Logger}` · Depends on: F01, F04
 
 ## 1. Purpose
@@ -22,11 +23,12 @@ SQLite FTS for substring matching across millions of messages.
 | HIS-004 | P0 | Multi-select with bulk actions: highlight, comment, add to scope, send to tools, delete, save, copy URLs. |
 | HIS-005 | P0 | Highlight colors (9) and inline comment editing (UI-041). |
 | HIS-006 | P0 | Quick-filter chips (UI-002): in scope, hide images/CSS/JS/fonts, status classes, has params, commented/highlighted, MIME, method. |
+| HIS-007 | P0 | **In-progress rows and an event view** for streaming responses (F01 PRX-050): a row appears when the response headers arrive, shows a "streaming" state with a live length/duration (updates coalesced ≤100 ms), and completes in place. The message viewer gets an **Events** tab for `text/event-stream` (one row per SSE event: id, event, data, time) and a chunk timeline for other streamed bodies. *(Added by the 2026-11-08 feature review, A1; M4b.)* |
 | HIS-040 | P1 | **Logger**: one table of every exchange across all tools (source column prominent), independent of project history display settings; its own GulpQL filter and columns. |
 | HIS-041 | P1 | Logger "capture" toggle and a per-source include set (e.g. log Proxy + Repeater only). |
 | HIS-042 | P1 | Connection view: group by TCP/TLS/H2 connection, show reuse, ALPN, and per-connection events (F03 HTTP-026). |
 | HIS-043 | P1 | Custom columns via a Snippet (F18) or a GulpQL expression (e.g. a column `resp.header("x-cache")`). |
-| HIS-044 | P1 | Export selected or filtered rows as HAR, CSV, or `.gulp`-items; import HAR into history. |
+| HIS-044 | P1 | Export selected or filtered rows as HAR, CSV, or `.gulp`-items; import HAR into history. *(The History/Logger entry point of the shared import/export service, F20 PRJ-012; ships with it in M6b.)* |
 | HIS-045 | P2 | Live column of a regex capture (e.g. extract a request id) with match highlighting. |
 
 ### 2.2 GulpQL

@@ -34,7 +34,7 @@ permission):
 | EXT-002 | P0 | **JSON-RPC runtime**: spawn an extension process; communicate over stdio with JSON-RPC 2.0 (Gulp→ext: events/callbacks; ext→Gulp: API calls). Length-prefixed framing; robust to crashes (restart policy); a per-call timeout. |
 | EXT-003 | P0 | **Manifest** (`gulp-extension.json`): id, name, version, author, runtime (`js`/`process`), entry point/command, min API version, declared **permissions** (http-send, intercept-modify, read-traffic, create-issues, modify-scope, filesystem, network-direct, ui, oast, settings-read), and which hooks it registers. |
 | EXT-004 | P0 | **Permission approval** at install/enable time: show what the extension requests; user approves; permissions enforced at the API boundary at runtime (deny + log on violation). |
-| EXT-005 | P0 | Extension manager UI: install from file/folder (and the Gallery, EXT-020), enable/disable, per-extension log/output console, errors surfaced clearly, reload on change (dev mode). |
+| EXT-005 | P0 | Extension manager UI: install from file/folder (the Gallery, EXT-020, is post-1.0), enable/disable, per-extension log/output console, errors surfaced clearly, reload on change (dev mode). |
 | EXT-006 | P1 | Extension state persistence (`extension_state`), and per-extension settings rendered from a declared schema. |
 | EXT-007 | P1 | Versioned API with capability negotiation; deprecations warned; a compatibility shim layer kept small. |
 | EXT-008 | P1 | Resource governance: extensions run off the main thread; a misbehaving extension can be force-stopped without taking down Gulp; aggregate CPU/memory shown in the manager. |
@@ -45,11 +45,14 @@ permission):
 |---|---|---|
 | EXT-010 | P0 | **Snippets**: small JS evaluated for custom history/Logger columns (HIS-043), GulpQL escape-hatch predicates (HIS-028), Fuzzer payload processors (FUZ-013), and Transform Tag `js(...)` (DEC-024). Pure functions over a provided message object; sandboxed and timeout-bounded; a snippet library with save/reuse. |
 | EXT-011 | P0 | **JS SDK typings** (`SDK/js/gulp.d.ts`) and templates so authors get autocomplete; a sample set (header injector, a passive check, a custom column, a custom tab). |
-| EXT-012 | P0 | **Python SDK** (`SDK/python/gulp_sdk`): a thin library implementing the JSON-RPC protocol with decorators (`@passive_check`, `@context_menu`, `@on_request`), so a check is a few lines. Sample extensions included. |
+| EXT-012 | P1 | **Python SDK** (`SDK/python/gulp_sdk`): a thin library implementing the JSON-RPC protocol with decorators (`@passive_check`, `@context_menu`, `@on_request`), so a check is a few lines. Sample extensions included. *(P0 → P1 by the 2026-11-08 feature review: no community yet.)* |
 | EXT-013 | P1 | A TypeScript project template (bundled to a single JS file) for larger JS extensions. |
 | EXT-014 | P2 | A WebAssembly runtime option for sandboxed native-speed extensions (future; keep the API ready). |
 
-### 3.3 Gallery
+### 3.3 Gallery (post-1.0)
+
+**Post-1.0 (2026-11-08 feature review)**: there is no extension community to serve yet. Both rows are
+in the roadmap's Post-1.0 backlog; v1 installs extensions from a file or folder only.
 
 | ID | Pri | Requirement |
 |---|---|---|
