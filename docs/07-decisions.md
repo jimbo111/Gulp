@@ -132,6 +132,8 @@ accepted ones; supersede them.
 - **Consequences**: v1 ships on the original M0–M20 plan unchanged; the expansion is clearly fenced
   and owner-prioritized. The one structural touch the review forced — the shared agent tool surface
   in `GulpWorkspace` (ADR-010-adjacent, doc 01 rule 6) — was needed by v1 (F21/F22) regardless.
+- **Superseded in part (2026-11-08)** by product decision #7: F26, F28, F29, F30 and F31 were merged
+  into the v1 specs they extend, F27's core moved into v1 (M19a), and the v1 plan was re-sequenced.
 
 ---
 
@@ -172,16 +174,19 @@ accepted ones; supersede them.
 | 2026-11-07 | Leaf minting runs in a detached task from the `LeafMinter` actor (not `NIOThreadPool`): same effect — never on an event loop — with structured de-duplication | F02 TLS-005 |
 | 2026-11-07 | Lint: `AlwaysUseLowerCamelCase` disabled in `.swift-format`. It would force renaming the wire-faithful `HTTPVersion` cases (`http1_0`/`http1_1`, defined in doc 04 §2) and the byte constants `CR`/`LF`/`SP`/`HT`; keeping them is clearer and matches the spec. `AllPublicDeclarationsHaveDocumentation` stays on (CLAUDE.md §4) | `.swift-format`, verified by CI run 42346403079 |
 | 2026-11-07 | Linux CI builds SQLite from source with `SQLITE_ENABLE_SNAPSHOT` + `FTS5`/`RTREE`/`JSON1`: Ubuntu's `libsqlite3` lacks `SQLITE_ENABLE_SNAPSHOT`, so GRDB 7's `DatabaseSnapshotPool`/`WALSnapshot` fail to link (`undefined reference to sqlite3_snapshot_*`). macOS uses Apple's SQLite, which has it. FTS5 is also needed for HIS-050 | `.github/workflows/ci.yml` (core-linux), ADR-003, surfaced by CI run 42346403079 |
+| 2026-11-08 | **Feature-review adoption, interpretations** (product decision #7): (a) no milestone was renumbered — oversized ones were split with letter suffixes (M4a/b, M6a/b, M10a/b, M11a/b/c, M12a/b, M13a/b, M16a/b, M19a/b), M6 and M10 too because the import/MCP pull-forward and gRPC needed their own DoD; a bare "Mxx" means the group, M14 is retired and not reused. (b) Moved requirements keep their IDs and prefixes in their new home; merged specs stay as stubs, and cut requirements stay defined there as "Cut" rows. (c) Merged post-1.0 requirements (WSX, WCP, DRF) stay post-1.0, marked "(later: M22/M24/M25)" in their v1 home specs. (d) The dev Beacon (BCN-024) stays v1 because the integration and scanner-accuracy tests need a local OAST endpoint; the rest of the server is post-1.0. (e) F27 "trimmed, earlier" = JSR-001…005 + ETL-004 in M19a, JSR-006…009 in M23. (f) ETL items the review didn't name went to the tool they extend (ETL-004 → F27, ETL-006/010 → F21, ETL-009/011 → F06); ETL-007 (CSRF PoC) to F19. (g) F31 JRN-005/009 went with the timeline to F14; DRF-008 was cut with the baselines because proof replays already run the F15 session rules. (h) PRJ-013 imports other proxies' history without naming the reference suite in the UI (CLAUDE.md §4). (i) The beta gate requires a signed, notarized build, so signing/notarization (doc 02 §8) is pulled forward to the gate; Sparkle stays M20 | roadmap, README, F17/F26/F28–F31 stubs |
+| 2026-11-08 | F33 stores imported gRPC schemas as blobs referenced from a `GRPCSchemaSettings` settings group and the task scheduler uses `SchedulerSettings` — no new tables for either; the only schema changes the review causes are the cut `drift_*`/`journal_checklists` tables, which are now never created | doc 04 §4, F21 §4, F33 §4 |
 
 ---
 
-## Product decisions (resolved 2026-11-07)
+## Product decisions (resolved 2026-11-07; #7 on 2026-11-08)
 
 These were open questions; the product owner has answered them. They are binding for v1. To change
 one, ask the owner and update this list plus the "Where it applies" docs.
 
 1. **Bundle ID** — keep the placeholder `com.gulp.app` for now; it must be replaced with the final
-   reverse-DNS ID and an Apple Developer team before the first signed release (M20).
+   reverse-DNS ID and an Apple Developer team before the first signed build — since decision #7 that
+   is the **daily-driver beta** after M9, not M20.
    *Applies: doc 02 §4, `project.yml`.*
 2. **License** — **MIT** (open source). The Extension Gallery and update feeds may be public. See
    ADR-012 and the `LICENSE` file. *Applies: `LICENSE`, README, doc 02 §8.*
@@ -195,3 +200,27 @@ one, ask the owner and update this list plus the "Where it applies" docs.
    scope. *Applies: ADR-009, F22 AI-001/002/011.*
 6. **Team server** — **not planned**. Gulp is single-user; sharing is by exchanging `.gulp` files and
    reports. Recorded as a non-goal. *Applies: doc 00 §3.*
+7. **Feature review adopted (2026-11-08)** — the owner adopted every proposal in
+   `docs/FEATURE-REVIEW.md` §3. Summary:
+   - **Added** (with fresh IDs): streaming responses (PRX-050, HIS-007, REP-016; P0, M4b/M5);
+     gRPC/gRPC-Web/Connect with schema-less protobuf decode as a new spec **F33** (GRP-001…007, P1,
+     M10b; supersedes ADV-053); request signing — DPoP, HTTP Message Signatures, AWS SigV4
+     (SES-016…018, P1, M12a); passkeys via a CDP virtual authenticator (BRW-016, SES-032, P1, M13a);
+     paste-to-request and other-proxy history import (REP-017, PRJ-013, P1, M5/M6b); five scanner
+     checks (SCN-070…074, P1, M11c); bounded agentic AI follow-up (AI-013, P1, M18); AI-agent/MCP
+     endpoint testing (LLM-009, P1, post-1.0); an HTTP/3 Repeater client (HTTP-037, P2, post-1.0).
+   - **Re-sequenced** (no renumbering; letter-suffixed splits): a **daily-driver beta** release gate
+     after M9; Gulp Browser launch → M4b; the import/export service, API import and the MCP read
+     surface + `send_request` → M6b; JWT Workbench → F12/M7; content discovery → F07/M8; Authz
+     Matrix → M12b; GraphQL → M13b; Check Recipes → M15; M4, M6, M10, M11, M12, M13, M16 and M19 split.
+   - **Merged**: F17, F26, F28, F29, F30 and F31 into the specs they extend (IDs kept; the files are
+     stubs that list where each requirement went); the five HAR/collection imports consolidated on
+     one service (PRJ-012).
+   - **Deferred or cut**: F11 Sequencer out of v1 (Post-1.0 backlog; M14 retired); Frame Kit
+     (BRW-020…022), PRX-048, GOV-004/005/008/009, JRN-004/006/007, the F30 baselines and the F17
+     duplicates cut; the deployable Beacon server (BCN-020…023/025) and the Extension Gallery
+     (EXT-020/021) post-1.0; P0 → P1 for DOM Probe (BRW-010/011), Check Recipes (SCN-060…062) and the
+     Python SDK (EXT-012); P1 → P2 for RPT-005/009, AI-007/009 and MAC-020/022/023; RPT-012
+     promoted to P1 (bug-bounty Markdown).
+   *Applies: `03-roadmap.md`, `README.md`, the feature specs, doc 04 §4 (cut tables), doc 06 §3
+   (new fixtures); interpretations are in the 2026-11-08 small decisions above.*
