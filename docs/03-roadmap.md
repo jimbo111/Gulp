@@ -111,10 +111,10 @@ Split from the original M3 after the 2026-11-07 feature review (docs/FEATURE-REV
 - [x] The "Send to…" context-menu entry point with **Copy as** cURL/PowerShell/fetch/Python/Go (ETL-008); Send-to destinations arrive with their tools (M5+).
 - **DoD:** Intercept a login POST, change a parameter, and forward it; a match-replace rule adds a header to every request; "Copy as cURL" on a history row reproduces the request against `/echo` (F01 test 7).
 
-### M4b — Streaming responses, WebSockets, Gulp Browser launch
-- [ ] **Streaming responses** through the proxy with in-progress recording (PRX-050, F01 §4.3) and in-progress history rows with an SSE event view (HIS-007). (FEATURE-REVIEW A1; fixes the M2 "responses are buffered whole" carry-over.)
-- [ ] WebSockets: proxying, history, intercept and edit (PRX-030…PRX-036).
-- [ ] **Gulp Browser launch** — the zero-setup capture path: discover/download Chromium, launch with the CA SPKI pin and proxy flags, one-click ⌘⇧O, cleanup on quit (BRW-001…BRW-004). CDP automation is M13a.
+### M4b — Streaming responses, WebSockets, Gulp Browser launch — DONE
+- [x] **Streaming responses** through the proxy with in-progress recording (PRX-050, F01 §4.3) and in-progress history rows with an SSE event view (HIS-007). (FEATURE-REVIEW A1; fixes the M2 "responses are buffered whole" carry-over.)
+- [x] WebSockets: proxying, history, intercept and edit (PRX-030…PRX-034). (RFC 8441 WS-over-h2 not offered; PRX-035 with the Repeater in M5; PRX-036 P2 not scheduled — see PROGRESS carry-overs.)
+- [x] **Gulp Browser launch** — the zero-setup capture path: discover/download Chromium, launch with the CA SPKI pin and proxy flags, one-click ⌘⇧O, cleanup on quit (BRW-001…BRW-004). CDP automation is M13a.
 - **DoD:** `curl -N` through Gulp to VulnLab `/sse` receives every event as it is sent and the history row goes from "streaming" to complete (F01 test 8); WebSocket messages show up in WS history; one click launches Chromium proxied through Gulp with no certificate warning on `https://localhost:8443`, its traffic is recorded, and quitting Gulp closes it (F16 test 1).
 
 ### M5 — Repeater (and the advanced HTTP engine)
