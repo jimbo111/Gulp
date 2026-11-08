@@ -168,7 +168,7 @@ public struct InterceptView: View {
                 queue.frame(minHeight: 100, idealHeight: 160)
                 if let item = model.selected {
                     MessageEditor(title: Self.title(item), bytes: $model.editing, editable: true)
-                    .frame(minHeight: 200)
+                        .frame(minHeight: 200)
                 } else {
                     let on = model.interceptRequests || model.interceptResponses || model.interceptWebSockets
                     ContentUnavailableView(

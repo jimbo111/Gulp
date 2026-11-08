@@ -181,6 +181,8 @@ public actor ProjectSession {
     public private(set) var store: ProjectStore
     /// A temporary project is deleted on close unless saved (PRJ-001).
     public private(set) var isTemporary: Bool
+    /// Ports of the listeners started by `startProxyListeners`, in settings order.
+    public private(set) var listenerPorts: [Int] = []
     private let recorder: ProjectRecorder
     /// Mints leaves for TLS interception; nil when the CA could not be loaded (CONNECT then fails
     /// with a clear page instead of the project failing to open).
@@ -320,9 +322,12 @@ public actor ProjectSession {
     public func startProxyListeners() async -> [UUID: Result<Int, GulpError>] {
         var results: [UUID: Result<Int, GulpError>] = [:]
         if let minter { await proxy.setTLS(settings.get(ProxySettings.self).tlsOptions(minter: minter)) }
+        listenerPorts = []
         for listener in settings.get(ProxySettings.self).listeners where listener.enabled {
             do {
-                results[listener.id] = .success(try await proxy.start(listener))
+                let port = try await proxy.start(listener)
+                listenerPorts.append(port)
+                results[listener.id] = .success(port)
             } catch let error as GulpError {
                 results[listener.id] = .failure(error)
             } catch {

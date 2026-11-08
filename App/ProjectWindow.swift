@@ -15,6 +15,9 @@ struct ProjectWindow: View {
     @State private var showListeners = false
     /// Listener bind failures from opening the project (PRX-001), shown above the tools.
     @State private var bindErrors: [String] = []
+    /// Gulp Browser (BRW-001…004): offer Chrome for Testing when nothing is installed.
+    @State private var offerDownload = false
+    @State private var browserStatus: String?
 
     var body: some View {
         Group {
@@ -37,6 +40,25 @@ struct ProjectWindow: View {
                 }
                 .sheet(isPresented: $showListeners) {
                     ProxyListenersView(session: session)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            openBrowser(session)
+                        } label: {
+                            Label("Open Browser", systemImage: "globe")
+                        }
+                        .keyboardShortcut("o", modifiers: [.command, .shift])
+                        .help("Open a browser proxied through Gulp, with the Gulp CA trusted (⌘⇧O)")
+                    }
+                }
+                .alert("No Chromium-based browser found", isPresented: $offerDownload) {
+                    Button("Download Chrome for Testing") { downloadBrowser(session) }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(
+                        "Gulp launches Chrome, Chromium, Edge or Brave with its own profile. It can "
+                            + "download Google's Chrome for Testing into Gulp's support folder.")
                 }
             } else if let failure {
                 ContentUnavailableView(
@@ -72,7 +94,43 @@ struct ProjectWindow: View {
         }
     }
 
+    private func openBrowser(_ session: ProjectSession) {
+        Task {
+            do {
+                try await session.openBrowser()
+                browserStatus = nil
+            } catch is NoBrowserFound {
+                offerDownload = true
+            } catch {
+                browserStatus = ProjectSession.describe(error)
+            }
+        }
+    }
+
+    private func downloadBrowser(_ session: ProjectSession) {
+        browserStatus = "Downloading Chrome for Testing…"
+        Task {
+            do {
+                _ = try await session.environment.downloadChromeForTesting()
+                browserStatus = nil
+                openBrowser(session)
+            } catch {
+                browserStatus = "Download failed: \(ProjectSession.describe(error))"
+            }
+        }
+    }
+
     @ViewBuilder private var bindErrorBanner: some View {
+        if let browserStatus {
+            HStack {
+                Image(systemName: "globe")
+                Text(browserStatus)
+                Spacer()
+                Button("Dismiss") { self.browserStatus = nil }
+            }
+            .padding(8)
+            .background(.bar)
+        }
         if !bindErrors.isEmpty {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)

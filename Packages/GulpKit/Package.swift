@@ -116,7 +116,7 @@ let package = Package(
 
         // macOS-capability modules (empty shells on Linux). GulpBrowser implements
         // GulpCrawler's BrowserDriver; GulpWorkspace injects it on macOS.
-        .target(name: "GulpBrowser", dependencies: ["GulpCore", "GulpHTTP", "GulpCrawler"]),
+        .target(name: "GulpBrowser", dependencies: ["GulpCore", "GulpHTTP", "GulpCrawler"] + nioConcurrency),
         .target(name: "GulpScript", dependencies: ["GulpCore"]),
         .target(name: "GulpUI", dependencies: ["GulpCore"]),
 
@@ -148,7 +148,7 @@ let package = Package(
             name: "gulp-cli",
             dependencies: [
                 "GulpWorkspace", "GulpAutomation", "GulpHTTP", "GulpProxy", "GulpStore", "GulpTLS",
-                "GulpCodec", "GulpCore",
+                "GulpCodec", "GulpCore", "GulpBrowser",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),
         .executableTarget(

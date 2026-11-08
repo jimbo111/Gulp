@@ -5,6 +5,7 @@
 import ArgumentParser
 import Dispatch
 import Foundation
+import GulpBrowser
 import GulpCodec
 import GulpCore
 import GulpHTTP
@@ -25,7 +26,7 @@ enum GulpCLI {
 struct GulpCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "gulp-cli", abstract: "Gulp, headless.", version: GulpCLI.version,
-        subcommands: [Send.self, Proxy.self, History.self, CA.self, CopyAs.self, WS.self])
+        subcommands: [Send.self, Proxy.self, History.self, CA.self, CopyAs.self, WS.self, Browser.self])
 }
 
 /// `gulp-cli send --raw request.txt --target http://host:port` writes the file's bytes exactly as
@@ -494,5 +495,52 @@ struct WS: AsyncParsableCommand {
             return "code \(Int(payload[0]) << 8 | Int(payload[1]))"
         }
         return "\(payload.count) bytes"
+    }
+}
+
+/// `gulp-cli browser --proxy-port 8080 --url https://localhost:8443/` launches the Gulp Browser
+/// (F16 BRW-001…BRW-003) through a running Gulp listener, trusting the user's Gulp CA by its key pin.
+/// `--headless --dump-dom` prints the page and exits (the M4b browser check on macOS CI).
+struct Browser: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Launch a browser proxied through Gulp.")
+
+    @Option(help: "The Gulp listener port to proxy through.")
+    var proxyPort: Int
+
+    @Option(help: "A page to open (repeatable).")
+    var url: [String] = []
+
+    @Option(help: "Browser executable (default: the first Chromium-family browser found).")
+    var browser: String?
+
+    @Flag(help: "Run without a window.")
+    var headless = false
+
+    @Flag(help: "With --headless: print the page's DOM and exit.")
+    var dumpDom = false
+
+    func run() async throws {
+        let environment = WorkspaceEnvironment.standard
+        let chosen: InstalledBrowser
+        if let browser {
+            chosen = InstalledBrowser(name: "browser", executable: URL(fileURLWithPath: browser))
+        } else if let found = environment.installedBrowsers().first {
+            chosen = found
+        } else {
+            throw ValidationError("No Chromium-family browser found; pass --browser /path/to/chrome")
+        }
+        let authority = try environment.certificateAuthority()
+        // A fresh profile per CLI run; the proxy presents the CA in its chain, so its pin suffices.
+        let profile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gulp-browser-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: profile) }
+        let options = BrowserLaunchOptions(
+            proxyPort: proxyPort, spkiPins: [authority.key.spkiPin], profile: profile, urls: url,
+            headless: headless, dumpDOM: dumpDom)
+        print("gulp-cli browser: \(chosen.name) via 127.0.0.1:\(proxyPort)")
+        let launcher = BrowserLauncher()
+        let launched = try launcher.launch(chosen, options: options, output: .standardOutput)
+        let status = launcher.wait(launched) ?? 0
+        if status != 0 { throw ExitCode(status) }
     }
 }

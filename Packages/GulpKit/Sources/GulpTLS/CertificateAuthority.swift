@@ -49,6 +49,12 @@ public struct SigningKey: Sendable {
     /// DER of the public key (SubjectPublicKeyInfo), used for key identifiers and comparisons.
     public let publicKeyDER: [UInt8]
 
+    /// Base64 SHA-256 of the SubjectPublicKeyInfo: the pin Chromium's
+    /// `--ignore-certificate-errors-spki-list` takes (BRW-002).
+    public var spkiPin: String {
+        Data(SHA256.hash(data: publicKeyDER)).base64EncodedString()
+    }
+
     /// A new random key.
     public static func generate(_ type: CAKeyType) throws -> SigningKey {
         switch type {
