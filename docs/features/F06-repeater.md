@@ -26,6 +26,8 @@ A tester lives here, iterating on a single request to understand and exploit beh
 | REP-013 | P2 | "Send sequence": chain tabs so the output (variables) of one feeds the next; a lightweight multi-step runner (a precursor to macros, F15). |
 | REP-014 | P2 | Auto-resend on edit (debounced) mode for fast iteration; and a "resend every N seconds" option (polling), with a clear stop. |
 | REP-015 | P2 | Response rendering niceties: pin a search term (UI-015), word-wrap toggle, show non-printables, and a "render" tab for HTML (sandboxed, doc 01 §7). |
+| ETL-009 | P2 | **Manual request builder**: start a Repeater request from scratch (method/URL/headers templates). *(Moved from F17, 2026-11-08; complements paste-to-request, REP-017.)* |
+| ETL-011 | P2 | **Simulate a browser request**: build a realistic request (headers, order, UA) for a given URL to compare against what the app expects. *(Moved from F17, 2026-11-08.)* |
 
 ## 3. UI
 
@@ -68,3 +70,5 @@ A tester lives here, iterating on a single request to understand and exploit beh
 4. A group of 20 tabs in single-packet mode against `/race/redeem` yields more than one successful
    redemption (the bug triggers); the results table shows the timing spread.
 5. Tabs, groups and colors survive closing and reopening the project.
+6. WS Repeater (REP-012): against VulnLab `/ws/chat`, resending an edited frame shows the mutated
+   echo (from F26 test 1, which restated REP-012).

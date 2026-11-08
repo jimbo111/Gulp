@@ -359,7 +359,7 @@ CREATE TABLE session_rules (id INTEGER PRIMARY KEY, name TEXT, enabled INTEGER, 
 -- project config, stored as Codable SettingsGroups in `settings` (doc §6), e.g. key "proxy.intercept",
 -- "proxy.matchReplace". Ordered rule lists are arrays inside value_json (array order = rule order).
 
-CREATE TABLE sequencer_runs (id INTEGER PRIMARY KEY, name TEXT, config_json TEXT, tokens_blob INTEGER, results_json TEXT, created_at REAL);
+CREATE TABLE sequencer_runs (id INTEGER PRIMARY KEY, name TEXT, config_json TEXT, tokens_blob INTEGER, results_json TEXT, created_at REAL);  -- F11, post-1.0 since 2026-11-08: shipped in schema v1, unused until F11 is scheduled
 
 CREATE TABLE settings (scope TEXT, key TEXT, value_json TEXT, PRIMARY KEY(scope, key));      -- project-level settings
 CREATE TABLE extension_state (extension_id TEXT, key TEXT, value BLOB, PRIMARY KEY(extension_id, key));
@@ -367,22 +367,29 @@ CREATE TABLE extension_state (extension_id TEXT, key TEXT, value BLOB, PRIMARY K
 
 ### Post-1.0 expansion tables (Phase F, migration v2+)
 
-These back the Phase F features (F30 Drift & Retest, F31 Journal). They ship as **two** later additive
+These back the timeline markers and the post-1.0 issue retest. They ship as **two** later additive
 migrations, not in schema v1, so each lands with its feature under the "never edit a shipped
-migration" rule: `v2_journal` at **M16** (the `journal_*` tables back JRN-006/JRN-008, both M16; the
-M9 coverage index JRN-001 needs no table) and `v3_drift` at M25 (the `drift_*`, `issue_proofs`,
-`retest_runs` tables). Defined here together so the schema stays centralized.
+migration" rule: `v2_journal` at **M16b** (only `journal_markers`, for F14 JRN-008; the coverage index
+F04 JRN-001 needs no table) and `v3_drift` at M25 (only `issue_proofs` and `retest_runs`, for F08
+§2.4). Defined here together so the schema stays centralized.
+
+> **2026-11-08 feature review.** F30 and F31 were merged into F08/F21 and F04/F14. Their endpoint
+> **baselines** (DRF-001/002/006) and **methodology checklists** (JRN-006) were cut, so the
+> `drift_baselines`, `drift_endpoints`, `drift_runs`, `drift_results` and `journal_checklists` tables
+> below are **cut — not created by any migration**. They stay in this listing, marked, as the record of
+> the earlier design.
 
 ```sql
--- F30 Drift & Retest -------------------------------------------------------
-CREATE TABLE drift_baselines (id INTEGER PRIMARY KEY, name TEXT, created_at REAL, scope_json TEXT);
-CREATE TABLE drift_endpoints (                                 -- immutable per-endpoint snapshot (DRF-001)
+-- Retest (F08 §2.4, moved from F30) and the CUT F30 baselines --------------------
+-- CUT 2026-11-08 (DRF-001/002/004-baseline/006): drift_baselines, drift_endpoints, drift_runs, drift_results are not created.
+CREATE TABLE drift_baselines (id INTEGER PRIMARY KEY, name TEXT, created_at REAL, scope_json TEXT);  -- CUT, not created
+CREATE TABLE drift_endpoints (                                 -- CUT, not created (was DRF-001)
   id INTEGER PRIMARY KEY, baseline_id INTEGER REFERENCES drift_baselines(id) ON DELETE CASCADE,
   target_json TEXT, request_blob INTEGER REFERENCES blobs(id), response_blob INTEGER REFERENCES blobs(id),
-  facts_json TEXT, mask_json TEXT                              -- extracted facts + per-endpoint noise masks (DRF-006)
+  facts_json TEXT, mask_json TEXT                              -- extracted facts + per-endpoint noise masks (cut DRF-006)
 );
-CREATE TABLE drift_runs (id INTEGER PRIMARY KEY, baseline_id INTEGER REFERENCES drift_baselines(id) ON DELETE CASCADE, run_at REAL);
-CREATE TABLE drift_results (                                   -- one row per endpoint per run (DRF-004)
+CREATE TABLE drift_runs (id INTEGER PRIMARY KEY, baseline_id INTEGER REFERENCES drift_baselines(id) ON DELETE CASCADE, run_at REAL);  -- CUT, not created
+CREATE TABLE drift_results (                                   -- CUT, not created (was the baseline half of DRF-004)
   id INTEGER PRIMARY KEY,
   run_id INTEGER REFERENCES drift_runs(id) ON DELETE CASCADE,
   endpoint_id INTEGER REFERENCES drift_endpoints(id),          -- NULL for a `new` endpoint (no baseline row yet)
@@ -391,24 +398,24 @@ CREATE TABLE drift_results (                                   -- one row per en
   sample_request_blob INTEGER REFERENCES blobs(id), sample_response_blob INTEGER REFERENCES blobs(id),
   diff_json TEXT
 );  -- a surrogate id + target_json so `new` endpoints (DRF-004) are first-class, not an implicit NULL-PK row.
-CREATE TABLE issue_proofs (                                    -- replayable proof per issue (DRF-003)
+CREATE TABLE issue_proofs (                                    -- replayable proof per issue (F08 DRF-003) — created by v3_drift
   id INTEGER PRIMARY KEY, issue_id INTEGER REFERENCES issues(id) ON DELETE CASCADE,
   target_json TEXT, request_blob INTEGER REFERENCES blobs(id),
   steps_json TEXT,                                             -- ordered extra requests for multi-step proofs (smuggling/race/chains); request_blob is the primary one
-  identity_id INTEGER REFERENCES identities(id),               -- replay under a specific identity (DRF-008); NULL = scope-matched session rules
+  identity_id INTEGER REFERENCES identities(id),               -- replay as a specific F15 identity; NULL = scope-matched session rules (DRF-008's extra re-auth was cut)
   matcher_json TEXT, created_at REAL
 );
-CREATE TABLE retest_runs (                                     -- per-issue retest history (DRF-005)
+CREATE TABLE retest_runs (                                     -- per-issue retest history (F08 DRF-005) — created by v3_drift
   id INTEGER PRIMARY KEY, issue_id INTEGER REFERENCES issues(id) ON DELETE CASCADE, run_at REAL,
   verdict TEXT,                                                -- fixed | still_vulnerable | changed | needs_review
   evidence_exchange_id INTEGER REFERENCES exchanges(id), note TEXT
 );  -- the verdict axis is retest-run history; issues.status is updated from it, not replaced by it.
 
--- F31 Journal (coverage index is derived/rebuildable; only these need persistence) ---------------
-CREATE TABLE journal_checklists (                              -- per-endpoint methodology goals (JRN-006)
+-- Timeline markers (F14, moved from F31; the coverage index F04 JRN-001 is derived, no table) ------
+CREATE TABLE journal_checklists (                              -- CUT, not created (was JRN-006, cut 2026-11-08)
   id INTEGER PRIMARY KEY, host TEXT, endpoint_key TEXT, category TEXT, done INTEGER NOT NULL DEFAULT 0, note TEXT
 );
-CREATE TABLE journal_markers (id INTEGER PRIMARY KEY, at REAL, label TEXT, note TEXT);  -- timeline pins (JRN-008)
+CREATE TABLE journal_markers (id INTEGER PRIMARY KEY, at REAL, label TEXT, note TEXT);  -- timeline pins (F14 JRN-008) — created by v2_journal
 ```
 
 ### Notes
@@ -417,11 +424,10 @@ CREATE TABLE journal_markers (id INTEGER PRIMARY KEY, at REAL, label TEXT, note 
   `vN_description`. Never edit a migration that has shipped.
 - **Blob dedup**: identical responses (static assets) are stored once. A periodic vacuum task
   (`Project → Compact`) removes unreferenced blobs. Its reference walk must enumerate **every**
-  blob-referencing column, not a hardcoded v1 list — including the Phase F ones
-  (`drift_endpoints.request_blob`/`response_blob`, `drift_results.sample_request_blob`/
-  `sample_response_blob`, `issue_proofs.request_blob`) — or it would vacuum the immutable snapshots
-  F30 promises. Derive the column list from the schema (or keep it beside the migration that adds
-  each blob column).
+  blob-referencing column, not a hardcoded v1 list — including the post-1.0 one
+  (`issue_proofs.request_blob`; the cut `drift_*` tables add none) — or it would vacuum the stored
+  retest proofs (F08 §2.4). Derive the column list from the schema (or keep it beside the migration
+  that adds each blob column).
 - **Write coalescer**: `StoreWriter` actor gathers `PendingWrite`s and flushes them in one
   transaction every 50 ms or 500 items. A crash loses at most the last 50 ms of traffic; for proxy
   traffic that is acceptable, and the Settings "Durable mode" flushes on every write.

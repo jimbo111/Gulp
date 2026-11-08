@@ -59,14 +59,14 @@ public struct GroupItem: Sendable {                // one request in a group sen
 ```
 
 `WebSocketSession` is the live-socket handle returned by `openWebSocket`; its full surface (send/
-receive frames, close, reconnect) is specified in F01 §2.4 / F26 — for M1 the `openWebSocket` method
+receive frames, close, reconnect) is specified in F01 §2.4 / F06 REP-012 — for M1 the `openWebSocket` method
 and `WebSocketSession` type are declared but not implemented (WebSockets are M4), so in M1 calling
 `openWebSocket` throws `GulpError(message: "WebSockets are implemented in M4", underlying: nil)`.
 Because `openWebSocket` lives on the engine, the WebSocket frame codec (RFC 6455 framing +
 permessage-deflate) is implemented **in `GulpHTTP`** when WebSockets land at M4 — not in a
-higher-layer module. `GulpProxy`, the WS Repeater (F26) and any other consumer use that one codec;
-nothing lower than `GulpHTTP` needs it, so there is no upward import (doc 01 §3). F26 §4's note about
-the codec "currently housed" elsewhere defers to this placement.
+higher-layer module. `GulpProxy`, the WS Repeater (F06 REP-012), the post-1.0 WS Fuzzer (F07 §2.6)
+and any other consumer use that one codec; nothing lower than `GulpHTTP` needs it, so there is no
+upward import (doc 01 §3).
 
 `ExchangeResult` contains the final `Exchange` (recorded or not, depending on options), the redirect
 chain if one was followed, and timing.
@@ -89,7 +89,7 @@ chain if one was followed, and timing.
 | HTTP-010 | P0 | Timing breakdown: DNS, connect, TLS, request write, time to first byte, download, total. |
 | HTTP-011 | P1 | HTTP/1 pipelining API for Turbo mode (F07): write N requests on one connection back to back and read N responses in order. |
 | HTTP-012 | P1 | Platform authentication (Basic, Digest, NTLMv2) per host as a hook: auto-responds to `401` challenges (NTLM needs connection affinity). |
-| HTTP-013 | P1 | Throttling: a global and per-host requests-per-second cap shared by every tool (token bucket), so the user can protect fragile targets. |
+| HTTP-013 | P1 | Throttling: a global and per-host requests-per-second cap shared by every tool (token bucket), so the user can protect fragile targets. Extended in M11a with concurrency budgets and adaptive backoff (§3.4). |
 
 ### 3.2 HTTP/2
 
@@ -123,6 +123,24 @@ chain if one was followed, and timing.
 > since many requests share one connection. For HTTP/1, "last-byte sync" across several connections
 > gets close.
 
+### 3.4 Shared limiter and adaptive backoff (moved from F29 Governor, 2026-11-08)
+
+The Governor (F29) was merged: its limiter is HTTP-013 extended here, and its panic stop and
+throughput panel are workspace features (F20 §2.4). Every active tool draws from this **one**
+`GulpHTTP` limiter — there is no second, parallel one. *(M11a, when the first active tools ship.)*
+
+| ID | Pri | Requirement |
+|---|---|---|
+| GOV-002 | P0 | **Global caps**: max total concurrent outbound connections and max requests/sec across *all* tools. This **is** the HTTP-013 shared token bucket, extended with a global concurrency semaphore; every active tool draws from it. *(Moved from F29; M11a.)* |
+| GOV-003 | P0 | **Per-host budgets**: per-host req/s (from HTTP-013) **plus** a per-host concurrency limit, shared across tools so Scanner + Fuzzer hitting one host can't collectively overrun it; conservative defaults, overridable per host. A per-host cap of 0 blocks a host for active tools (document it). *(Moved from F29; M11a.)* |
+| GOV-007 | P1 | **Adaptive backoff**: automatically reduce a host's rate when it returns a burst of 429/503/timeouts, with a visible "throttled" badge and a manual override; restore the rate as the host recovers. Supersedes the per-tool hints (FUZ-034, the Scanner's WAF back-off) with one shared mechanism. *(Moved from F29; M11a.)* |
+
+### 3.5 HTTP/3 (post-1.0)
+
+| ID | Pri | Requirement |
+|---|---|---|
+| HTTP-037 | P2 | **HTTP/3 upstream client** for Repeater sends (QUIC, `h3` ALPN) and an "`Alt-Svc: h3` advertised" flag on history rows, so testers notice HTTP/3-only behavior. HTTP/3 **interception** stays a non-goal (doc 00 §3): the Gulp Browser disables QUIC. *(Added by the 2026-11-08 feature review, A9; post-1.0 — see the roadmap's Post-1.0 backlog.)* |
+
 ## 4. Implementation notes
 
 - Channel pipeline for an HTTP/1 client connection: `[TLS?] → RawResponseFramer → EngineConnectionHandler`.
@@ -150,6 +168,13 @@ chain if one was followed, and timing.
   Order: session rules (F15) → transform tags (F12) → match & replace (tool flag) → extensions
   (F18) → content-length fixer. `ResponseHook`: extensions → session cookie jar update.
 - Record every send through `ExchangeRecorder` with `source = options.recordAs`.
+- Shared limiter (§3.4): a `ResourcePool` in `GulpHTTP` — a token bucket for rate and a semaphore for
+  concurrency, keyed global + per-host. Active tools already call `ScopeGuard.require` before sending
+  (F04 TGT-023); the limiter sits at the **same gate** (`acquire()` before send, `release()` after).
+  The workspace panic stop (F20 GOV-001) flips a shared `paused` flag the pool checks and cancels
+  in-flight permits; tasks observe cancellation (HTTP-009) and move to Paused. Backoff (GOV-007)
+  watches status/latency per host and shrinks that host's bucket. The hot path must add negligible
+  overhead (lock-free or striped counters).
 
 ## 5. Edge cases
 
@@ -170,3 +195,8 @@ chain if one was followed, and timing.
 4. HTTP/2: 50 parallel streams on one connection; `GOAWAY` mid-flight → the unfinished streams are
    retried or reported.
 5. Group send: `sendGroup` in each `GroupSendMode` returns one result per item, in order, with per-item timing recorded.
+6. Shared limiter (moved from F29): a Fuzzer configured for 2,000 req/s plus a concurrent crawl never
+   exceed a 1,000 req/s global cap in aggregate (measured), and two tools targeting one host share a
+   50-concurrency budget (combined in-flight ≤ 50).
+7. Backoff (moved from F29): a VulnLab endpoint returning 503 bursts (`/status/503`) drives the
+   measured send rate down and flips the throttled badge, then recovers.

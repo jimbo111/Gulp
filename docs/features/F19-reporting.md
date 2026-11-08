@@ -10,6 +10,8 @@ machine-readable formats for CI and ticketing.
 
 ## 2. Requirements
 
+### 2.1 Reports
+
 | ID | Pri | Requirement |
 |---|---|---|
 | RPT-001 | P0 | Select what to include: by issue severity/confidence/status, by host, selected issues, and selected Notebook items (manual findings). Preview the selection. |
@@ -25,6 +27,12 @@ machine-readable formats for CI and ticketing.
 | RPT-011 | P2 | Diff/"delta" report vs. a previous report (new/fixed/still-open issues) for retests. |
 | RPT-012 | P2 | Ticketing export helpers (e.g. a per-issue Markdown block sized for Jira/GitHub issues) and a CSV. |
 | RPT-013 | P2 | AI-assisted drafting of the executive summary and per-issue narratives (F22), clearly marked and user-edited before use. |
+
+### 2.2 CSRF PoC generator (moved from F17, 2026-11-08)
+
+| ID | Pri | Requirement |
+|---|---|---|
+| ETL-007 | P1 | **Generate CSRF PoC**: from a request, generate an HTML form/fetch PoC that reproduces it cross-site (auto-handles method, params, content-type: form, multipart, or a fetch for JSON with the right mode), with options (auto-submit, include cookies note). Export HTML, and attach it to an issue or Notebook item as evidence. Reachable from UI-040 ("Generate CSRF PoC"). *(Moved from F17; the "small CSRF PoC" the feature review kept.)* |
 
 ## 3. UI
 
@@ -45,6 +53,16 @@ preview of masked evidence.
 - Redaction runs on the `ReportModel` evidence before any exporter sees it; keep the original
   untouched in the project.
 - PDF: paginate the HTML with print CSS; verify page breaks don't split evidence blocks badly.
+- CSRF PoC generator (ETL-007) inspects the request's method/content-type to choose the right shape:
+  - form-urlencoded / multipart / text-plain bodies → an auto-submitting HTML `<form>` (these are
+    CORS "simple" content types and need no preflight) — the reliable, classic CSRF PoC.
+  - A body that *requires* `Content-Type: application/json` → a simple form or `no-cors` fetch
+    **cannot** set that header (no-cors restricts Content-Type to the simple set, and a custom type
+    triggers a CORS preflight), so such an endpoint is generally **not** CSRF-able via a cross-site
+    PoC. The generator must say exactly that (and why — preflight), rather than emit a `no-cors`
+    JSON fetch that silently won't send the JSON body. It emits a working `fetch` PoC only when the
+    endpoint accepts a simple content type, or when observed CORS (`Access-Control-Allow-Origin` +
+    credentials) actually permits the cross-site request.
 
 ## 5. Edge cases
 
@@ -52,6 +70,8 @@ preview of masked evidence.
 - Non-text evidence (binary) → show a hex excerpt around the marker.
 - Many findings (hundreds) → the HTML stays navigable (TOC, lazy sections) and the PDF paginates.
 - Redaction false negatives → patterns are best-effort; warn that manual review is advised.
+- CSRF PoC for JSON endpoints that require a custom header → explain it's likely *not* CSRF-able and
+  say why (preflight), rather than emitting a PoC that won't work.
 
 ## 6. Acceptance tests
 
@@ -62,3 +82,5 @@ preview of masked evidence.
 3. Redaction masks a session cookie in included evidence; the project's stored exchange is
    unchanged.
 4. PDF output is multi-page, with a TOC and no broken evidence blocks.
+5. "Generate CSRF PoC" for a VulnLab state-changing form produces an auto-submitting HTML PoC that,
+   when loaded through the Gulp Browser, reproduces the request (moved from F17).

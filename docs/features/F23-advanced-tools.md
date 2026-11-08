@@ -21,15 +21,12 @@ Build them as first-class tools sharing the common engines/components.
 | ADV-004 | P1 | "Live" mode: as you browse as the high-priv user, each request is auto-replayed as the other identities in the background and flagged (Autorize-style). |
 | ADV-005 | P1 | Handle CSRF tokens/nonces per identity (use session rules/macros) so replays are valid; exclude logout/destructive requests. |
 | ADV-006 | P2 | IDOR helper: detect object-id parameters and try adjacent/other-user ids (within scope) to find missing ownership checks. |
+| WSX-004 | P0 | **WebSocket per-message authorization**: distinguish handshake-time vs per-message authorization by replaying captured WS messages (over a fresh `openWebSocket` connection) with a stripped/other-identity session and reporting whether privileged actions still succeed; servers that authorize only at handshake are flagged, not treated as benign. *(Moved from F26, 2026-11-08; later: M22 — post-1.0.)* |
 
-## 2. JWT Workbench
+## 2. JWT Workbench (moved to F12, 2026-11-08)
 
-| ID | Pri | Requirement |
-|---|---|---|
-| ADV-010 | P0 | Decode JWTs (header/payload/signature) from any message; edit claims; re-sign with a provided key (HS256/384/512, RS/PS, ES) and insert back into the request. |
-| ADV-011 | P0 | Attack helpers: `alg:none`, algorithm confusion (RS256→HS256 using the public key as the HMAC secret), weak-HMAC-secret brute force (wordlist), `kid`/`jku`/`x5u` injection probes, expired/`nbf` manipulation. Each clearly labeled; scope-gated when sent. |
-| ADV-012 | P1 | Key management: paste/import keys (PEM/JWK), generate keys, and a JWKS fetch/inspect helper. Verify signatures against a key/JWKS. |
-| ADV-013 | P1 | Integrate with Repeater/Fuzzer (a JWT Transform Tag / payload processor) so manipulated tokens flow into attacks. |
+The JWT Workbench (ADV-010…ADV-013) moved to **F12 §2.3** so it ships with the Decoder in **M7**,
+where it sits on the same `GulpCodec` operations. The requirement IDs are unchanged.
 
 ## 3. Param Discovery (hidden parameters)
 
@@ -62,7 +59,7 @@ Build them as first-class tools sharing the common engines/components.
 | ID | Pri | Requirement |
 |---|---|---|
 | ADV-050 | P0 | Import **OpenAPI/Swagger** (2.0/3.x) and build requests for every operation (paths, methods, params, example/required bodies, auth), adding them to the site map and offering a scan of the whole API. |
-| ADV-051 | P1 | Import **Postman** collections and **HAR**; map to requests/site map. |
+| ADV-051 | P1 | Import **Postman** collections and **HAR**; map to requests/site map. *(The API-import entry point of the shared import/export service, F20 PRJ-012.)* |
 | ADV-052 | P1 | Schema-aware insertion points and value generation (types/enums/formats) so scans send plausible, well-typed inputs. |
 | ADV-053 | P2 | gRPC-Web / protobuf decode helpers (best-effort) for API traffic. |
 
@@ -87,11 +84,13 @@ Build them as first-class tools sharing the common engines/components.
 
 1. Authz Matrix: replaying VulnLab `/api/orders/{id}` and `/admin` as user-A/user-B/unauth flags the
    IDOR and the admin bypass; `/safe/*` twins show "Enforced".
-2. JWT Workbench: forge an `alg:none` token and an RS→HS confusion token for VulnLab's `/api/me` and
-   confirm acceptance/rejection correctly; brute-force a weak HMAC secret from a wordlist.
+2. JWT Workbench: moved to F12 §6 (test 5) with the tool.
 3. Param Discovery finds a hidden parameter planted in a VulnLab endpoint via response-diff.
 4. Smuggling Probe classifies VulnLab's CL.TE emulation listener (:8090) as vulnerable via timing
    differentials; a correctly-behaving endpoint is classified safe.
 5. GraphQL Workbench introspects `/graphql`, renders the schema, and flags the field-level authz bug.
 6. Importing `/openapi.json` creates requests for every `/api/*` operation and a scan covers them.
 7. The secret scanner finds a planted API key in a VulnLab JS file and reports it redacted.
+8. *(post-1.0, M22)* A VulnLab socket that authenticates only at handshake accepts a replayed
+   privileged message under a stripped session and is flagged; the per-message-authz twin rejects it
+   (moved from F26).

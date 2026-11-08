@@ -2,14 +2,14 @@
 
 > Milestone: M21 · Modules: `GulpFeatures/SSO` + helpers in `GulpScanner`/`GulpSession` ·
 > Depends on: F03, F05, F08, F12 (JWT/codec primitives — sign/verify, base64, inflate), F15, F16,
-> F23 (the JWT Workbench's attack helpers, which themselves sit on F12/GulpCodec), F29 (Governor limiter)
+> the JWT Workbench's attack helpers (F12 §2.3, moved from F23 on 2026-11-08), the shared limiter (F03 §3.4)
 
 ## 1. Purpose
 
 Modern apps delegate authentication to OAuth2/OIDC/SAML, and the serious bugs live in the **flow**,
 not in an isolated token. The SSO Workbench reconstructs the whole authorization dance from captured
 traffic (authorize → callback → token → userinfo, or SAML AuthnRequest → IdP → assertion POST),
-visualizes it, and runs flow-specific attacks. It complements F23's JWT Workbench (which manipulates
+visualizes it, and runs flow-specific attacks. It complements the JWT Workbench (F12 §2.3, which manipulates
 a single token and knows nothing about the surrounding grant) and F15 (which keeps you logged in but
 doesn't attack the protocol).
 
@@ -47,10 +47,10 @@ per-variant accept/reject results; and a metadata inspector. Findings feed Issue
 - SAML: base64-decode (+ raw-inflate for redirect binding) via F12 codecs; parse XML and compute the
   signed-node set (reference URIs) to drive the signature-scope highlight and XSW mutations.
 - Token manipulation reuses the JWT sign/verify/alg-confusion ops that live in **F12/GulpCodec**
-  (surfaced by the F23 JWT Workbench); this tool adds the flow context around them.
+  (surfaced by the JWT Workbench, F12 §2.3); this tool adds the flow context around them.
 - Browser-drive JS-heavy logins via F16 to capture the full flow when it isn't all in history.
-- All active sends (SAML replays, redirect_uri probes) go through ScopeGuard and the shared Governor
-  limiter (F29).
+- All active sends (SAML replays, redirect_uri probes) go through ScopeGuard and the shared limiter
+  (F03 §3.4, GOV-002/003).
 
 ## 5. Edge cases
 

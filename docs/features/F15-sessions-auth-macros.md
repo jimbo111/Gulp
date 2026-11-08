@@ -39,6 +39,7 @@ testing).
 | SES-021 | P0 | Parameter handling per step: automatically carry forward cookies; configurable "update this param from a previous response" (e.g. CSRF token chaining); and use identity credentials via variables. |
 | SES-022 | P1 | Build a macro from selected history items; edit each step's request; test-run the macro and view the resulting cookies/variables. |
 | SES-023 | P1 | Macros run with the engine (scope-gated for active contexts) and are reused by Crawler/Scanner re-auth; a macro can itself be the login flow for an identity. |
+| WSX-008 | P2 | Scripted WebSocket message sequences (send A, await a frame matching X, then send B) for stateful protocols, as a macro step type over one `openWebSocket` connection. *(Moved from F26, 2026-11-08; later: M22 — post-1.0.)* |
 
 ### 2.4 Login recording and client certs
 

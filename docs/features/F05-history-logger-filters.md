@@ -26,7 +26,7 @@ SQLite FTS for substring matching across millions of messages.
 | HIS-041 | P1 | Logger "capture" toggle and a per-source include set (e.g. log Proxy + Repeater only). |
 | HIS-042 | P1 | Connection view: group by TCP/TLS/H2 connection, show reuse, ALPN, and per-connection events (F03 HTTP-026). |
 | HIS-043 | P1 | Custom columns via a Snippet (F18) or a GulpQL expression (e.g. a column `resp.header("x-cache")`). |
-| HIS-044 | P1 | Export selected or filtered rows as HAR, CSV, or `.gulp`-items; import HAR into history. |
+| HIS-044 | P1 | Export selected or filtered rows as HAR, CSV, or `.gulp`-items; import HAR into history. *(The History/Logger entry point of the shared import/export service, F20 PRJ-012; ships with it in M6b.)* |
 | HIS-045 | P2 | Live column of a regex capture (e.g. extract a request id) with match highlighting. |
 
 ### 2.2 GulpQL

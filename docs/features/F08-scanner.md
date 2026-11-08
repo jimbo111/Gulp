@@ -50,6 +50,24 @@ The Scanner finds vulnerabilities automatically. **Passive** checks analyze traf
 | SCN-037 | P1 | Re-scan an issue to verify (re-run just that check) and mark fixed/still-present. |
 | SCN-038 | P1 | Scan speed/safety guards: max requests per insertion point, global budget, and "safe checks only" (no payloads that could modify data). |
 
+### 2.4 Retest and remediation tracking (moved from F30, 2026-11-08; post-1.0)
+
+Extends SCN-037 (re-scan one issue) into a stored, replayable proof per issue with a verdict history.
+F30's endpoint **baselines** (drift detection) were cut; only the per-issue retest remains.
+*(later: M25 — post-1.0, see the roadmap's Phase F.)*
+
+| ID | Pri | Requirement |
+|---|---|---|
+| DRF-003 | P0 | **Retest proof per issue**: store, per issue, a replayable proof (originating request(s)/insertion point + the matcher/extractor that confirmed it, auto-captured from Scanner/Repeater/Recipes or user-attached). *(Moved from F30; later: M25.)* |
+| DRF-004 | P0 | **Verdicts**: re-running an issue's proof computes Fixed / Still-Vulnerable / Changed / Needs-Review with the new evidence attached and a per-field breakdown in `DiffView` (UI-030). *(Moved from F30, minus the cut endpoint-baseline verdicts; later: M25.)* |
+| DRF-005 | P0 | **History** per issue (round, date, verdict, evidence); surface the latest verdict in the issue list and in reports (F19) as a "remediation status" column. *(Moved from F30, minus the cut baseline history; later: M25.)* |
+
+Retest notes: proofs and verdicts persist in the post-1.0 `issue_proofs`/`retest_runs` tables (doc 04
+§4); the verdict axis is orthogonal to `issues.status` (a verdict may update it, never replaces it).
+Replays reuse the Repeater/engine send path, so session rules (F15) apply. An endpoint that 404s on
+re-run is Needs-Review ("gone" is not "patched"); a proof that can't be re-run (a one-time token) is
+Needs-Review with the reason.
+
 ## 3. Built-in checks catalog
 
 Each entry = one or more issue definitions. Mark the P0 set that the VulnLab accuracy test (doc 06
@@ -140,6 +158,38 @@ volatile.
 - **CRLF / header injection**: confirm a **real new response header or status-line split** was
   created (observe it in the parsed response), not merely that the payload is reflected in the body.
 
+### 3.5 Cache poisoning & deception family (moved from F28, 2026-11-08; post-1.0)
+
+An opt-in active check family (and Check-Recipe primitives) for web cache poisoning and web cache
+deception. **Victim-safe by default**: every probe uses a per-run unique cache key (a cache-buster
+the confirming request repeats) so a poisoned entry can only be observed by Gulp's own confirming
+request, never by a real user. *(later: M24 — post-1.0, see the roadmap's Phase F.)*
+
+| ID | Pri | Requirement |
+|---|---|---|
+| WCP-001 | P0 | Detect cacheability and infer cache status/age from `Age`, `X-Cache`, `CF-Cache-Status`, `Cache-Control`, `Vary`, ETag and response-time deltas, per URL. *(Moved from F28; later: M24.)* |
+| WCP-002 | P0 | Probe candidate **unkeyed inputs** (a maintained header/param list) by injecting a unique canary, then issue a clean follow-up request to confirm the canary was cached and served *without* the input — proving a poisoning vector — using per-run unique keys so no real user is served a poisoned page. *(Moved from F28; later: M24.)* |
+| WCP-003 | P0 | Test **cache deception** via path/extension confusion (`/profile`, `/profile.css`, `/profile/..%2f`, encoded suffixes) and report when authenticated/private content becomes publicly cacheable. *(Moved from F28; later: M24.)* |
+| WCP-004 | P0 | Raise issues with the exact poisoning request, the confirming cached response, the inferred cache key, and blast-radius notes; all sends scope-gated and drawing from the shared limiter (F03 §3.4). *(Moved from F28; later: M24.)* |
+| WCP-005 | P1 | Integrate with OAST (F10) for header-based SSRF/interaction that is cache-amplified; reuse the header wordlist from Param Discovery (F23). *(Moved from F28; later: M24.)* |
+| WCP-006 | P1 | Detect cache-key normalization quirks (case, port, trailing dot, duplicate headers) that enable keyed-but-equivalent poisoning. *(Moved from F28; later: M24.)* |
+| WCP-007 | P1 | Ship as an opt-in active check family in scan configurations and as Check-Recipe primitives (cacheability matchers). *(Moved from F28; later: M24.)* |
+| WCP-008 | P2 | A guided multi-request confirmation workbench (poison → observe → auto-expire) with strong warnings; never auto-run on shared production caches without explicit confirmation. *(Moved from F28; later: M24.)* |
+
+Notes for this family: a cached hit is typically much faster and carries `Age`/cache-status headers;
+factor `Vary` (cookies, encodings) into the cache-key model; short TTLs mean the confirming request
+must race the TTL (retry with timing awareness); reuse the F13 diff machinery to detect reflected
+effects; and don't confuse mere reflection with a *cached* reflection — the clean follow-up is what
+proves it.
+
+### 3.6 WebSocket checks (moved from F26, 2026-11-08; post-1.0)
+
+*(later: M22 — post-1.0, see the roadmap's Phase F.)*
+
+| ID | Pri | Requirement |
+|---|---|---|
+| WSX-003 | P0 | **CSWSH** (cross-site WebSocket hijacking): replay the upgrade handshake with a forged/absent/cross-origin `Origin` header (cookies kept) and report whether the server still upgrades and returns authenticated data in the first frames; raise a CSWSH issue. *(Moved from F26; later: M22.)* |
+
 ## 4. Live passive scanning (M10)
 
 - A background consumer of `exchangeRecorded` runs passive checks on in-scope traffic (configurable
@@ -188,3 +238,14 @@ volatile.
   dev Beacon; the scan waits for the OAST grace period before finishing.
 - A YAML Check Recipe for a custom header-leak detects it on a crafted VulnLab route and renders the
   templated issue with the captured value.
+- *(post-1.0, M25)* Retest: a VulnLab issue's proof re-run after the endpoint is patched returns
+  "Fixed" with the new (now-safe) evidence; before patching it returns "Still-Vulnerable" (moved
+  from F30).
+- *(post-1.0, M24)* Cache family: VulnLab reflects `X-Forwarded-Host` into a cached response; the
+  family confirms poisoning via a clean follow-up and reports the key, and the non-caching twin is
+  clean. An `/account` endpoint cached as `/account.css` is flagged as cache deception; the hardened
+  twin (`Cache-Control: private`) is clean. A header-based SSRF reflected into cache produces an
+  OAST interaction correlated to the probe. Run as the opt-in family, there are no false positives
+  on the safe twins (moved from F28).
+- *(post-1.0, M22)* CSWSH: a socket that upgrades with a cross-origin `Origin` and returns user data
+  is reported; the Origin-checking twin is clean (moved from F26).

@@ -22,7 +22,7 @@ settings live in each feature's spec and in Settings panes listed in doc 05 §1)
 | PRJ-005 | P0 | "Use settings from…": start a project with a chosen settings profile (default, or import from a file/another project). |
 | PRJ-006 | P1 | Project metadata (name, notes, created/modified, engagement scope summary) editable in a Project Info panel. |
 | PRJ-007 | P1 | **Compact** (vacuum + drop unreferenced blobs) and **Rebuild indexes** (site map/FTS) actions; show project size and a breakdown (exchanges, blobs, FTS). |
-| PRJ-008 | P1 | Import/merge: bring exchanges/issues from another `.gulp`, a HAR, or saved items into the current project (dedup-aware). |
+| PRJ-008 | P1 | Import/merge: bring exchanges/issues from another `.gulp`, a HAR, or saved items into the current project (dedup-aware). *(The project-menu entry point of the shared import/export service, PRJ-012.)* |
 | PRJ-009 | P1 | Auto-save-as reminder for long temporary sessions; optional periodic checkpoint. |
 | PRJ-010 | P2 | A size cap/retention policy (e.g. cap proxy history to N items or M GB, evicting oldest non-flagged, never evicting flagged/Notebook items). |
 | PRJ-011 | P2 | Open a project read-only; and a lightweight "project viewer" via the CLI (`gulp open --readonly`). |
@@ -38,6 +38,25 @@ settings live in each feature's spec and in Settings panes listed in doc 05 §1)
 | PRJ-024 | P1 | First-run experience: the authorized-testing acknowledgment (doc 00 §6), CA setup prompt, and an offer to install the CA / open the browser. |
 | PRJ-025 | P1 | Diagnostics: log level, a "collect diagnostics bundle" action (logs + non-sensitive config), and performance counters. |
 | PRJ-026 | P2 | Settings sync via a user-chosen file location (no cloud by default). |
+
+### 2.3 Import and export (one service, 2026-11-08)
+
+HAR/collection import used to be specified five times (HIS-044, PRJ-008, TGT-009, ADV-051, AUT-004).
+The 2026-11-08 feature review consolidated it into **one service**; those five requirements are now
+entry points (History, Project menu, Target, API import, CLI) that call it.
+
+| ID | Pri | Requirement |
+|---|---|---|
+| PRJ-012 | P1 | **Import/export service** (`ImportExportService` in `GulpWorkspace`, UI-free so the CLI/MCP use it too): **import** HAR, Postman collections (v2.1), OpenAPI/Swagger documents (handed to ADV-050 for request building), `sitemap.xml`/URL lists, and another `.gulp` (exchanges, issues, Notebook items); **export** selected/filtered exchanges as HAR, CSV or `.gulp` items. Imports never send traffic; they are dedup-aware, tag imported exchanges `imported` (`exchange_tags`, doc 04 §4) with the source the file states (default `.proxy`), feed the site map, and report what was skipped and why. Every import entry point (HIS-044, PRJ-008, TGT-009, ADV-051, AUT-004) calls this one service. |
+
+### 2.4 Resource control (moved from F29 Governor, 2026-11-08)
+
+The shared limiter itself is F03 §3.4 (GOV-002/003/007); these are its workspace-level controls.
+
+| ID | Pri | Requirement |
+|---|---|---|
+| GOV-001 | P0 | **Panic stop** (⌃. plus a toolbar item and a menu command; also in the menu bar extra, MAC-020, when enabled): immediately pause all active, network-generating tasks across the project (Scanner, Crawler, Fuzzer, Beacon injection, scheduled tasks, agent-driven actions); show what was stopped and offer "resume all". It pauses *sending*, not the store's write coalescer, so queued writes still flush. *(Moved from F29; M11a.)* |
+| GOV-006 | P1 | **Live throughput panel** (status bar + Dashboard): current req/s, in-flight, per-host leaders, and which cap (F03 §3.4) is the current bottleneck; caps and per-host overrides are edited in Settings → Network. *(Moved from F29; M16b.)* |
 
 ## 3. UI
 
@@ -75,3 +94,8 @@ settings live in each feature's spec and in Settings panes listed in doc 05 §1)
    where set; export→import reproduces the configuration.
 4. Compact reduces size after deleting many exchanges; Rebuild indexes reconstructs the site map and
    FTS; quick_check passes.
+5. Panic stop (moved from F29): ⌃. during a scan+fuzz leaves zero in-flight requests within one
+   limiter tick and all tasks Paused; "resume all" restarts them.
+6. Import/export round trip (PRJ-012): exporting 1,000 history rows as HAR and importing the file
+   into a new project reproduces the same requests and responses byte-for-byte; importing the same
+   HAR twice adds nothing the second time (dedup).

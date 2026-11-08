@@ -33,6 +33,19 @@ same transforms written inline inside Repeater/Fuzzer requests so they're applie
 | DEC-024 | P1 | A Snippet op `js(name)` runs a JS transform (F18) for custom logic; sandboxed and timeout-bounded. |
 | DEC-025 | P2 | A palette/autocomplete for tags in the editor; "wrap selection in tag ▸". |
 
+### 2.3 JWT Workbench (moved from F23, 2026-11-08)
+
+A JWT tool on top of the Decoder's JWT and signing operations: decode, edit, re-sign and attack
+tokens, then send them on. It ships with the Decoder because it is the same `GulpCodec` code and
+testers need it from the first day (it is part of the daily-driver beta).
+
+| ID | Pri | Requirement |
+|---|---|---|
+| ADV-010 | P0 | Decode JWTs (header/payload/signature) from any message; edit claims; re-sign with a provided key (HS256/384/512, RS/PS, ES) and insert back into the request. *(Moved from F23, 2026-11-08; M7.)* |
+| ADV-011 | P0 | Attack helpers: `alg:none`, algorithm confusion (RS256→HS256 using the public key as the HMAC secret), weak-HMAC-secret brute force (wordlist), `kid`/`jku`/`x5u` injection probes, expired/`nbf` manipulation. Each clearly labeled; scope-gated when sent. *(Moved from F23, 2026-11-08; M7.)* |
+| ADV-012 | P1 | Key management: paste/import keys (PEM/JWK), generate keys, and a JWKS fetch/inspect helper. Verify signatures against a key/JWKS. *(Moved from F23, 2026-11-08; M7.)* |
+| ADV-013 | P1 | Integrate with Repeater/Fuzzer (a JWT Transform Tag / payload processor) so manipulated tokens flow into attacks. *(Moved from F23, 2026-11-08. The Transform Tag is M7; the Fuzzer payload processor lands with the Fuzzer — later: M8.)* |
+
 ## 3. Operations (implement in `GulpCodec`, all reversible pairs round-trip)
 
 - **URL**: encode / encode-all / decode (+ `+`-as-space option).
@@ -43,7 +56,7 @@ same transforms written inline inside Repeater/Fuzzer requests so they're applie
 - **Decimal / octal / binary** per-byte conversions.
 - **Unicode escapes** (`\uXXXX`, `\xNN`), **JS string escape**, **CSS escape**.
 - **Gzip / zlib(deflate) / raw-deflate / brotli / zstd**: compress / decompress.
-- **JWT decode**: split and decode header/payload, show claims, and (JWT Workbench, F23) verify/sign.
+- **JWT decode**: split and decode header/payload, show claims, and (JWT Workbench, §2.3) verify/sign.
 - **Hashes**: md5, sha1, sha256, sha384, sha512, sha3, crc32; **HMAC** variants with a key.
 - **Char case**, **reverse**, **rot13**, **XOR with key** (hex/ascii key).
 - **Escape/unescape for contexts**: SQL string, shell arg, regex, JSON string.
@@ -76,3 +89,6 @@ same transforms written inline inside Repeater/Fuzzer requests so they're applie
 3. In Repeater, `Authorization: Basic «base64{ «var(user)»:«var(pass)» }»` sends the right header;
    the preview matches what's sent; disabling tag evaluation sends the literal text.
 4. Every reversible op round-trips over random bytes (property tests).
+5. JWT Workbench (moved from F23): forge an `alg:none` token and an RS→HS confusion token for
+   VulnLab's `/api/me` and confirm acceptance/rejection correctly (the `/safe/api/me` twin rejects
+   both); brute-force a weak HMAC secret from a wordlist.

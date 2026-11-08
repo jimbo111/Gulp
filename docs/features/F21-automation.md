@@ -17,7 +17,7 @@ All three use the same `ProjectSession` as the app, so behavior matches.
 | AUT-001 | P0 | `gulp send` — send a raw request (`--raw file\|-`, `--target`, version/connection/redirect options) and print the response (raw or `--json`), with exit codes for transport errors. |
 | AUT-002 | P0 | `gulp scan --url <seed> [--config fast\|balanced\|thorough\|<file>] [--scope <file>] [--report out.html\|.json\|.sarif] [--fail-on high\|medium\|...]` — headless crawl-and-audit; progress to stderr; exits non-zero when issues at/above the threshold are found (for CI gating). |
 | AUT-003 | P0 | `gulp proxy --port 8080 [--project f.gulp]` — run a headless proxy that records to a project (useful for capturing traffic in CI/e2e runs). |
-| AUT-004 | P0 | `gulp project` subcommands: `new`, `info`, `compact`, `export (har\|json\|sarif)`, `import`. |
+| AUT-004 | P0 | `gulp project` subcommands: `new`, `info`, `compact`, `export (har\|json\|sarif)`, `import`. *(`export`/`import` are the CLI entry point of the shared import/export service, F20 PRJ-012.)* |
 | AUT-005 | P1 | `gulp fuzz` — run a saved/declared Fuzzer attack headlessly and emit results (CSV/JSON). |
 | AUT-006 | P1 | `gulp replay <har\|.gulp>` — replay requests through the engine/proxy (test fixtures; VulnLab-driven tests). |
 | AUT-007 | P1 | `gulp api --port 9000 --token <t>` — start the REST+MCP server (AUT-010/AUT-020) headlessly against a project. |
@@ -46,6 +46,14 @@ All three use the same `ProjectSession` as the app, so behavior matches.
 | AUT-024 | P1 | Reuses the same auth/token and OpenAPI-derived schemas as the REST API where possible; a quickstart for connecting Claude Code. |
 | AUT-025 | P2 | Prompts/recipes: packaged MCP "prompts" for common workflows (triage issues, explain an exchange, draft a report section) that call the tools. |
 
+### 2.4 Scheduling and headless retest (moved from F17 and F30, 2026-11-08)
+
+| ID | Pri | Requirement |
+|---|---|---|
+| ETL-006 | P1 | **Schedule tasks**: run a scan/crawl/fuzz at a time or on an interval, and auto-pause/resume; a simple scheduler with a task list (useful for long engagements). The app must be running (no background daemon in v1). *(Moved from F17.)* |
+| ETL-010 | P2 | **Task scheduler notifications** via macOS notifications (UI-090) when scheduled tasks finish or find high-severity issues. *(Moved from F17.)* |
+| DRF-009 | P1 | **Headless retest** via CLI/REST: `gulp retest --project f.gulp --fail-on regression` re-runs the stored issue proofs (F08 §2.4) and exits non-zero when a previously-fixed issue is vulnerable again; SARIF/JSON includes remediation status. *(Moved from F30; later: M25 — post-1.0.)* |
+
 ## 3. UI
 
 Minimal GUI: Settings → an "Automation" area to enable the REST/MCP server, show the token (regenerate/copy), the bind address (with the egress warning), the approval mode for agent-driven active actions, and an audit log viewer. The CLI is documented in `--help` and the README.
@@ -61,6 +69,10 @@ Minimal GUI: Settings → an "Automation" area to enable the REST/MCP server, sh
   stdio and the HTTP transport; keep tool outputs compact and paginated; map errors cleanly.
 - Approval mode: an active action from `.automation`/`.ai` enqueues an approval the app surfaces
   (toast + dashboard); headless mode can auto-approve within scope only if explicitly configured.
+- Scheduler (ETL-006) is a lightweight actor persisting scheduled jobs in the project as a
+  `SchedulerSettings` group in the `settings` table (doc 04 §6; same pattern as proxy/intercept
+  rules — no dedicated table); it drives the existing task APIs. Time/interval triggers only.
+  Scheduled runs need the app (or `gulp api`) running; document that.
 
 ## 5. Edge cases
 
@@ -82,3 +94,6 @@ Minimal GUI: Settings → an "Automation" area to enable the REST/MCP server, sh
    reads `list_issues`; an out-of-scope `send_request` is refused with a structured error; actions
    appear in the audit log as `.automation`.
 4. CLI and GUI produce identical scan results on the same target/config (same `ProjectSession`).
+5. A scheduled scan starts at the set time and notifies on completion (moved from F17).
+6. *(post-1.0, M25)* `gulp retest --fail-on regression` exits non-zero when a previously-fixed issue
+   is vulnerable again (moved from F30).

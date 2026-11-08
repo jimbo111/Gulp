@@ -22,6 +22,15 @@ report (F19).
 | NB-008 | P2 | Checklists/templates (e.g. an OWASP-style per-endpoint checklist) a tester can instantiate per host. |
 | NB-009 | P2 | Attach screenshots or files to an item (stored as blobs). |
 
+### Engagement timeline (moved from F31 Journal, 2026-11-08)
+
+| ID | Pri | Requirement |
+|---|---|---|
+| JRN-003 | P0 | **Activity timeline**: a reverse-chronological feed of meaningful actions (sends, issues found, notes, scope changes) grouped by day/host, searchable with GulpQL-style filters; a "Timeline" view beside the Notebook list. *(Moved from F31; M16b.)* |
+| JRN-005 | P1 | **"Resume where I left off"**: on project open, a card summarizing the last session (last endpoints touched, open Notebook "Investigating" items, the untested in-scope count from the coverage index, F04 JRN-001) with one-click jumps. *(Moved from F31; M16b.)* |
+| JRN-008 | P2 | Pin **milestone markers** on the timeline ("got auth bypass", "client rotated creds") for the report narrative. *(Moved from F31; M16b.)* |
+| JRN-009 | P2 | Feed coverage + timeline into reports (F19) as an appendix ("endpoints tested"). *(Moved from F31; M16b.)* |
+
 ## 3. UI
 
 Notebook tool: a filterable list on the left; on the right, the saved request/response (read-only
@@ -35,6 +44,11 @@ editor) on top and the markdown note editor (with preview) below; a status/tag b
   optional back-reference to the original exchange if it still exists).
 - Markdown rendered with a small, safe renderer (no raw HTML execution); store the source.
 - Promotion to/from issues writes the link in both `notebook_items` and `issue_evidence`.
+- The timeline (JRN-003) reads a curated subset of stored actions through the existing indexes, not
+  an in-memory copy. Everything except scope changes is reconstructable from timestamped rows; scope
+  changes (`GulpEvent.scopeChanged` — `scope_rules` holds only the current rules) are captured as
+  `log`/`LogEntry` records so the timeline can show them. Markers (JRN-008) use the
+  `journal_markers` table (doc 04 §4, post-1.0 expansion tables, `v2_journal` at M16b).
 
 ## 5. Edge cases
 
@@ -47,5 +61,9 @@ editor) on top and the markdown note editor (with preview) below; a status/tag b
 1. ⌘⇧N on a history row creates an item with the exact request/response; editing later history
    doesn't change the saved snapshot.
 2. Setting status and tags persists; filtering by status works; the item survives project reopen.
-3. *(M16, not M9)* "Include in report" adds the item as a manual finding with its note and evidence —
-   this depends on F19 (Reporting) and is validated in M16, not at Notebook's own M9 milestone.
+3. *(M16a, not M9)* "Include in report" adds the item as a manual finding with its note and
+   evidence — this depends on F19 (Reporting) and is validated in M16a, not at Notebook's own M9
+   milestone.
+4. *(M16b)* Timeline and resume card (moved from F31): after a session of sends, a scan and a note,
+   the timeline lists them grouped by day/host; on reopening the project the resume card's
+   "untested in-scope" count matches the coverage index after a fixture crawl.

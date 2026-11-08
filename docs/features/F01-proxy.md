@@ -71,6 +71,7 @@ editing (intercept), rewrite them automatically (match & replace), and feeds the
 | PRX-034 | P1 | Decompress `permessage-deflate` for display and editing; re-compress on forward (or negotiate it away via a match-replace preset removing `Sec-WebSocket-Extensions`). |
 | PRX-035 | P1 | Send a WS message to Repeater: Repeater opens a WS session (F06 REP-012) on a new connection with the same upgrade request. |
 | PRX-036 | P2 | Socket.IO / STOMP / GraphQL-WS / JSON-RPC message pretty-printing. |
+| WSX-006 | P1 | Extends PRX-036: decode common WS sub-protocols/envelopes (JSON, STOMP, SignalR, socket.io, GraphQL-WS `connection_init`/`subscribe`) into an editable structured view and re-encode on send; shared by WS history, the WS Repeater (F06 REP-012) and the WS Fuzzer (F07 §2.6). Same registry idea as the F12 transforms; unknown protocols fall back to raw text/hex. *(Moved from F26, 2026-11-08; later: M22 — post-1.0.)* |
 
 ## 3. UI
 
@@ -173,3 +174,5 @@ and re-encodes (or drops `Content-Encoding` when the "simplify encoding" option 
    shows the tunnel entry.
 6. A WebSocket chat via the Gulp Browser → messages in both directions appear; an intercepted
    message, edited, arrives changed.
+7. "Copy as cURL / Python / fetch" on a history row (UI-040, ETL-008) produces runnable snippets that
+   reproduce the request, verified against `/echo` (moved from F17).

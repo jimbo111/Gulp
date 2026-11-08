@@ -25,7 +25,7 @@
 | F04 | [Target: site map & scope](features/F04-target-sitemap-scope.md) | M6 |
 | F05 | [History, Logger, GulpQL filters & search](features/F05-history-logger-filters.md) | M2, M9 |
 | F06 | [Repeater](features/F06-repeater.md) | M5 |
-| F07 | [Fuzzer (Intruder-equivalent)](features/F07-fuzzer.md) | M8 |
+| F07 | [Fuzzer (Intruder-equivalent), incl. content discovery and WebSocket fuzzing](features/F07-fuzzer.md) | M8, M22 |
 | F08 | [Scanner (passive, active, check recipes)](features/F08-scanner.md) | M10, M11 |
 | F09 | [Crawler](features/F09-crawler.md) | M11, M13 |
 | F10 | [Beacon (OAST / out-of-band)](features/F10-beacon-oast.md) | M11 |
@@ -35,7 +35,6 @@
 | F14 | [Notebook (organizer & notes)](features/F14-notebook.md) | M9 |
 | F15 | [Sessions, authentication & macros](features/F15-sessions-auth-macros.md) | M12 |
 | F16 | [Gulp Browser, DOM Probe, Frame Kit](features/F16-browser.md) | M13 |
-| F17 | [Engagement tools](features/F17-engagement-tools.md) | M16 |
 | F18 | [Extensions & scripting](features/F18-extensions.md) | M15 |
 | F19 | [Reporting](features/F19-reporting.md) | M16 |
 | F20 | [Projects & settings](features/F20-projects-settings.md) | M2, M16 |
@@ -52,13 +51,22 @@ ship after release; a few parts could be pulled earlier where noted in each spec
 | ID | Feature | Milestone |
 |---|---|---|
 | F25 | [SSO Workbench (OAuth/OIDC/SAML flow testing)](features/F25-sso-workbench.md) | M21 |
-| F26 | [WebSocket Security Workbench](features/F26-websocket-workbench.md) | M22 |
 | F27 | [JS Recon Studio (source-map recovery & API inventory)](features/F27-js-recon-studio.md) | M23 |
-| F28 | [Web Cache Poisoning & Deception scanner](features/F28-cache-poisoning.md) | M24 |
-| F29 | [Governor (global resource control + panic stop)](features/F29-governor.md) | M11, M16 |
-| F30 | [Drift & Retest (baselines, regression, remediation)](features/F30-drift-retest.md) | M25 |
-| F31 | [Journal (coverage map & engagement timeline)](features/F31-journal.md) | M9, M16 |
 | F32 | [LLM/AI-feature security testing](features/F32-llm-security.md) | M26 |
+
+### Merged specs (2026-11-08 feature review)
+
+These files are now short stubs that record where each requirement went (IDs unchanged) and which
+were cut. See `docs/07-decisions.md` product decision #7.
+
+| ID | Former feature | Merged into |
+|---|---|---|
+| F17 | [Engagement tools](features/F17-engagement-tools.md) | F07 (content discovery), F19 (CSRF PoC), F21 (scheduler), F27 (scripts/comments), F06 and doc 05 UI-040 (Copy as, request builder); search/references/analyze duplicates cut |
+| F26 | [WebSocket Security Workbench](features/F26-websocket-workbench.md) | F07 (WS fuzzing), F08 (CSWSH), F23 (per-message authz), F01 (sub-protocol decoding), F15 (scripted sequences) — still post-1.0 (M22) |
+| F28 | [Web Cache Poisoning & Deception scanner](features/F28-cache-poisoning.md) | F08 §3.5 check family — still post-1.0 (M24) |
+| F29 | [Governor (global resource control + panic stop)](features/F29-governor.md) | F03 §3.4 (shared limiter, backoff), F20 §2.4 (panic stop, throughput panel); watchpoints/quiet hours/dry-run/layered caps cut |
+| F30 | [Drift & Retest](features/F30-drift-retest.md) | F08 §2.4 (issue retest), F21 (`gulp retest`) — still post-1.0 (M25); baselines cut |
+| F31 | [Journal (coverage map & engagement timeline)](features/F31-journal.md) | F04 §2.3 (coverage), F14 (timeline, resume card, markers); treemap/checklists/effort rollup cut |
 
 ### Backlog (proposed, not yet specified)
 

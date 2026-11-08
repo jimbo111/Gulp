@@ -8,7 +8,7 @@
 ## 1. Purpose
 
 Front-end bundles are the richest recon source in modern SPAs. Today Gulp only regex-scans JS for
-secrets (F23 ADV-060) and lists scripts/comments (F17 ETL-004). JS Recon Studio aggregates every JS
+secrets (F23 ADV-060). JS Recon Studio (which absorbs the scripts/comments listing, ETL-004) aggregates every JS
 asset seen for the in-scope hosts, beautifies/unminifies it, recovers original source trees from
 `.map` files, and mines them for an **API/endpoint inventory** (fetch/XHR/axios URLs, route tables,
 GraphQL operations), parameter names, feature flags, cloud/storage URLs, and library versions — then
@@ -27,7 +27,8 @@ code into live attack surface.
 | JSR-006 | P1 | Mine candidate parameter names, feature flags and config keys from JS and hand them to Param Discovery (F23 ADV-021). |
 | JSR-007 | P1 | Fingerprint JS libraries/framework versions and cross-link to the Scanner's vulnerable-JS dataset (F08). |
 | JSR-008 | P1 | Flag interesting literals (cloud storage URLs, internal hostnames, API bases, source-map exposure itself) as info observations; link secrets to the F23 secret scanner rather than re-implementing it. |
-| JSR-009 | P2 | Diff an asset across captures to surface newly-added endpoints/routes between app versions (retest/engagement value; pairs with F30). |
+| JSR-009 | P2 | Diff an asset across captures to surface newly-added endpoints/routes between app versions (retest/engagement value; pairs with the issue retest in F08 §2.4). |
+| ETL-004 | P1 | **Find scripts/comments**: list all JavaScript files and HTML comments seen for a host (useful for secrets/endpoints); link secrets to the secret scanner (F23 ADV-060). Folded into the JSR-001 asset inventory as its "comments" view. *(Moved from F17, 2026-11-08.)* |
 
 ## 3. UI
 
