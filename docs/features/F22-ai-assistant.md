@@ -72,3 +72,7 @@ acknowledgment. A clear on/off indicator in the status bar when enabled.
    approval mode on, it waits for confirmation; all actions appear in the audit log as `.ai`.
 5. (AI-011, post-v1) When a local OpenAI-compatible provider is added, switching to it keeps all data
    on-prem (no external calls observed). Not required for the Claude-only v1 (doc 07 decision #5).
+6. "Investigate this endpoint" (AI-013) on VulnLab `/sqli/bool?id=` with a 30-request budget plans
+   its steps, waits for approval before each active send, stops at the budget (or immediately on
+   the panic stop), never touches an out-of-scope host, and ends with a cited summary; on
+   `/safe/sqli/bool` it concludes "not confirmed".

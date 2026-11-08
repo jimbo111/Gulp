@@ -62,3 +62,6 @@ field → observe endpoint); an exfil view correlated with the Beacon feed; and 
    + exfil correlated to the probe.
 3. The assistant renders attacker Markdown that becomes XSS in the UI; DOM Probe confirms the sink;
    the sanitizing twin is clean.
+4. AI-agent endpoints (LLM-009): against VulnLab's `/mcp` server the tool enumerates its tools,
+   reports the unauthenticated privileged tool and the poisoned tool description, and the
+   authenticated, clean twin produces no finding.
