@@ -49,12 +49,55 @@ struct ProxyUpstream: Sendable {
     let engine: any HTTPEngine
     let client: String?
     let forceHTTP1: Bool
+    var intercept: InterceptQueue?
 
     var options: SendOptions {
         var options = SendOptions(recordAs: .proxy)
         options.clientAddress = client
         options.httpVersion = forceHTTP1 ? .http1_1 : .auto
         return options
+    }
+
+    /// What the client gets back for one forwarded request.
+    enum Reply: Sendable {
+        case response(RawResponse)
+        case failed(String)
+        case dropped
+    }
+
+    /// Forward `request` to `target` through the engine, with intercept (PRX-010…PRX-014) on both
+    /// legs: a held request may come back edited (sent with an updated Content-Length, PRX-018, and
+    /// recorded with its original, PRX-012) or dropped; a held response may be edited or dropped.
+    func send(_ request: RawRequest, to target: HTTPTarget) async -> Reply {
+        var options = self.options
+        var outgoing = request
+        var requestWasHeld = false
+        if let intercept {
+            let (decision, held) = await intercept.holdRequest(request, target: target)
+            requestWasHeld = held
+            switch decision {
+            case .drop:
+                return .dropped
+            case .forward(let edited?):
+                outgoing = RawRequest(edited).updatingContentLength()
+                if outgoing != request { options.originalRequest = request }
+            case .forward(nil):
+                break
+            }
+        }
+        let result = await engine.send(outgoing, to: target, options: options)
+        guard let response = result.exchange.response, result.error == nil else {
+            return .failed(result.error?.userDescription ?? "no response")
+        }
+        guard let intercept else { return .response(response) }
+        let (decision, _) = await intercept.holdResponse(
+            response, for: outgoing, target: target, requestWasHeld: requestWasHeld)
+        switch decision {
+        case .drop: return .dropped
+        case .forward(let edited?):
+            return .response(RawResponse(edited, headRequest: response.isHeadResponse))
+        case .forward(nil): return .response(response)
+        }
     }
 }
 

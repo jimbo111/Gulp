@@ -201,9 +201,14 @@ public final class NIOHTTPEngine: HTTPEngine {
         var timing = Timing(start: Date())
         var outgoing = OutgoingRequest(request: request, target: target)
         let context = HookContext(source: options.recordAs)
+        let beforeHooks = outgoing.request
+        var options = options
         do {
             for hook in requestHooks where options.applyHooks.contains(hook.kind) {
                 try await hook.willSend(&outgoing, context: context)
+            }
+            if outgoing.request != beforeHooks, options.originalRequest == nil {
+                options.originalRequest = beforeHooks  // keep what the tool asked for (PRX-012)
             }
         } catch {
             return await finish(
@@ -657,7 +662,10 @@ public final class NIOHTTPEngine: HTTPEngine {
             let interim = wire.interim.map { RawResponse(Bytes($0)) }
             response = RawResponse(Bytes(wire.bytes), interim: interim, headRequest: isHead)
         }
-        var edited: EditInfo?
+        // The request as it was before intercept edits or request hooks changed it (PRX-012).
+        var edited: EditInfo? = options.originalRequest.map {
+            EditInfo(originalRequest: $0, editedBy: options.recordAs)
+        }
         if let original = response, error == nil, !responseHooks.isEmpty {
             var modified = original
             let context = HookContext(source: options.recordAs)
@@ -665,7 +673,9 @@ public final class NIOHTTPEngine: HTTPEngine {
                 try? await hook.didReceive(&modified, for: outgoing, context: context)
             }
             if modified != original {
-                edited = EditInfo(originalResponse: original, editedBy: options.recordAs)
+                edited = EditInfo(
+                    originalRequest: edited?.originalRequest, originalResponse: original,
+                    editedBy: options.recordAs)
                 response = modified
             }
         }

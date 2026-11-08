@@ -36,13 +36,17 @@ public struct ProxyListenerConfig: Codable, Sendable, Hashable, Identifiable {
 public actor ProxyServer {
     private let engine: any HTTPEngine
     private var tls: ProxyTLSOptions?
+    private let intercept: InterceptQueue?
     private var listeners: [UUID: (server: any Channel, clients: ClientConnections)] = [:]
 
     /// Create a proxy that forwards (and, through the engine's recorder, records) via `engine`.
     /// Without `tls`, CONNECT is refused (no CA to intercept with).
-    public init(engine: any HTTPEngine, tls: ProxyTLSOptions? = nil) {
+    public init(
+        engine: any HTTPEngine, tls: ProxyTLSOptions? = nil, intercept: InterceptQueue? = nil
+    ) {
         self.engine = engine
         self.tls = tls
+        self.intercept = intercept
     }
 
     /// Change TLS interception for connections accepted from now on.
@@ -57,6 +61,7 @@ public actor ProxyServer {
         if listeners[config.id] != nil { await stop(config.id) }
         let engine = self.engine
         let tls = self.tls
+        let intercept = self.intercept
         let clients = ClientConnections()
         let channel: any Channel
         do {
@@ -68,7 +73,8 @@ public actor ProxyServer {
                     let client = channel.remoteAddress.map { "\($0.ipAddress ?? "?"):\($0.port ?? 0)" }
                     let pressure = Backpressure()
                     let upstream = ProxyUpstream(
-                        engine: engine, client: client, forceHTTP1: tls?.forceHTTP1ToServer ?? false)
+                        engine: engine, client: client, forceHTTP1: tls?.forceHTTP1ToServer ?? false,
+                        intercept: intercept)
                     Task {
                         await ProxyConnection.serve(
                             items, channel: channel, upstream: upstream, pressure: pressure,
@@ -349,19 +355,23 @@ enum ProxyConnection {
             return (errorPage(400, message, close: clientWantsClose), clientWantsClose)
         }
         let forwarded = ForwardRewrite.strippingHopByHop(originForm)
-        let result = await upstream.engine.send(forwarded, to: target, options: upstream.options)
-        if let response = result.exchange.response, result.error == nil {
+        switch await upstream.send(forwarded, to: target) {
+        case .response(let response):
             let close =
                 clientWantsClose || response.parsed.bodyFraming == .closeDelimited
                 || response.hasHeaderToken("connection", "close")
             // An HTTP/2 upstream response is stored as `HTTP/2 200` text; an HTTP/1.1 client needs
             // HTTP/1.1 framing (status line, content-length or chunked trailers).
             return (HTTP2Text.http1Response(from: response), close)
+        case .failed(let reason):
+            let message = "Gulp could not complete the request to \(target.host): \(reason)."
+            return (errorPage(502, message, close: clientWantsClose), clientWantsClose)
+        case .dropped:
+            return (errorPage(502, droppedMessage, close: true), true)
         }
-        let reason = result.error?.userDescription ?? "no response"
-        let message = "Gulp could not complete the request to \(target.host): \(reason)."
-        return (errorPage(502, message, close: clientWantsClose), clientWantsClose)
     }
+
+    static let droppedMessage = "The request was dropped in Gulp's Intercept."
 
     /// A small HTML error response. `close` announces that the proxy will close the connection after
     /// it, so a keep-alive client doesn't reuse a connection that is about to go away.

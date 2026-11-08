@@ -107,6 +107,42 @@ public final class LayeredSettings: @unchecked Sendable {
     }
 }
 
+/// Match & Replace rules (PRX-020…PRX-022), stored with the project.
+public struct MatchReplaceSettings: SettingsGroup, Hashable {
+    /// Storage key.
+    public static let key = "proxy.matchReplace"
+    /// The built-in presets, all disabled.
+    public static let defaultValue = MatchReplaceSettings(rules: MatchReplaceRule.presets)
+
+    /// Rules, applied in order.
+    public var rules: [MatchReplaceRule]
+
+    /// Rules settings.
+    public init(rules: [MatchReplaceRule]) {
+        self.rules = rules
+    }
+}
+
+/// Intercept toggles and rules (PRX-010…PRX-014), stored with the project.
+public struct InterceptSettings: SettingsGroup, Hashable {
+    /// Storage key.
+    public static let key = "proxy.intercept"
+    /// Off, with the default request rule (skip static assets).
+    public static let defaultValue = InterceptSettings()
+
+    /// Hold matching requests.
+    public var interceptRequests = false
+    /// Hold matching responses.
+    public var interceptResponses = false
+    /// Request rule conditions.
+    public var requestRules = InterceptCondition.defaultRequestRules
+    /// Response rule conditions.
+    public var responseRules: [InterceptCondition] = []
+
+    /// Default settings.
+    public init() {}
+}
+
 /// Proxy settings (PRX-001): the listeners to run.
 public struct ProxySettings: SettingsGroup, Hashable {
     /// Storage key.

@@ -139,7 +139,8 @@ let package = Package(
         .target(
             name: "GulpFeatures",
             dependencies: [
-                "GulpCore", "GulpStore", "GulpProxy", "GulpTLS", "GulpWorkspace", "GulpUI", "GulpAI",
+                "GulpCore", "GulpCodec", "GulpStore", "GulpProxy", "GulpTLS", "GulpWorkspace", "GulpUI",
+                "GulpAI",
             ]),
 
         // ---- Executables ----
@@ -147,7 +148,7 @@ let package = Package(
             name: "gulp-cli",
             dependencies: [
                 "GulpWorkspace", "GulpAutomation", "GulpHTTP", "GulpProxy", "GulpStore", "GulpTLS",
-                "GulpCore",
+                "GulpCodec", "GulpCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),
         .executableTarget(
@@ -163,7 +164,7 @@ let package = Package(
 
         // ---- Tests (one per module + integration) ----
         .testTarget(name: "GulpCoreTests", dependencies: ["GulpCore"], resources: [.copy("Fixtures")]),
-        .testTarget(name: "GulpCodecTests", dependencies: ["GulpCodec"]),
+        .testTarget(name: "GulpCodecTests", dependencies: ["GulpCodec", "GulpCore"]),
         .testTarget(name: "GulpQueryTests", dependencies: ["GulpQuery"]),
         .testTarget(name: "GulpDiffTests", dependencies: ["GulpDiff"]),
         .testTarget(name: "GulpStoreTests", dependencies: ["GulpStore"]),
@@ -201,7 +202,7 @@ let package = Package(
         .testTarget(name: "GulpAITests", dependencies: ["GulpAI"]),
         .testTarget(name: "GulpBrowserTests", dependencies: ["GulpBrowser"]),
         .testTarget(name: "GulpScriptTests", dependencies: ["GulpScript"]),
-        .testTarget(name: "GulpUITests", dependencies: ["GulpUI"]),
+        .testTarget(name: "GulpUITests", dependencies: ["GulpUI", "GulpCore"]),
         .testTarget(name: "GulpFeaturesTests", dependencies: ["GulpFeatures"]),
         .testTarget(name: "GulpWorkspaceTests", dependencies: ["GulpWorkspace", "GulpTLS"]),
         .testTarget(name: "GulpAutomationTests", dependencies: ["GulpAutomation"]),

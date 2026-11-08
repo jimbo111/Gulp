@@ -104,11 +104,11 @@ Split from the original M3 after the 2026-11-07 feature review (docs/FEATURE-REV
 
 ## Phase B — Manual testing core (M4a–M9) → Daily-driver beta
 
-### M4a — Message editor, Intercept, Match & Replace, Send to / Copy as
-- [ ] Shared `MessageEditor` component: Pretty/Raw/Hex/Render tabs, syntax highlighting, search, Inspector sidebar (doc 05 §4, UI-010…UI-030).
-- [ ] Intercept: queue, forward/drop, edit, intercept rules, intercept responses (PRX-010…PRX-019).
-- [ ] Match & Replace rules (PRX-020…PRX-025).
-- [ ] The global "Send to…" context menu infrastructure (UI-040) with **Copy as** cURL/PowerShell/fetch/Python/Go (ETL-008, moved from F17).
+### M4a — Message editor, Intercept, Match & Replace, Send to / Copy as — DONE
+- [x] Shared `MessageEditor` component: Pretty/Raw/Hex tabs, header highlighting, search, invisibles, Inspector sidebar (doc 05 §4, UI-010…UI-014, UI-020). (Render tab, editable hex, UI-015/021/030 follow with the tools that need them — see PROGRESS carry-overs.)
+- [x] Intercept: queue, forward/drop, edit, intercept rules, intercept responses (PRX-010…PRX-014, PRX-018). (P1 PRX-015/016/017-UI, P2 PRX-019 later.)
+- [x] Match & Replace rules (PRX-020…PRX-022). (P1 PRX-023…025 later.)
+- [x] The "Send to…" context-menu entry point with **Copy as** cURL/PowerShell/fetch/Python/Go (ETL-008); Send-to destinations arrive with their tools (M5+).
 - **DoD:** Intercept a login POST, change a parameter, and forward it; a match-replace rule adds a header to every request; "Copy as cURL" on a history row reproduces the request against `/echo` (F01 test 7).
 
 ### M4b — Streaming responses, WebSockets, Gulp Browser launch
