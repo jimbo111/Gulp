@@ -86,6 +86,7 @@ let package = Package(
             name: "GulpHTTP",
             dependencies: ["GulpCore", "GulpTLS", "CZlib"] + nioHTTP + nioConcurrency + [
                 .product(name: "NIOTLS", package: "swift-nio"),
+                .product(name: "NIOHPACK", package: "swift-nio-http2"),
                 .product(name: "NIOHTTPCompression", package: "swift-nio-extras"),
                 .product(name: "NIOSOCKS", package: "swift-nio-extras"),
             ]),
@@ -170,7 +171,9 @@ let package = Package(
         .testTarget(
             name: "GulpHTTPTests",
             dependencies: ["GulpHTTP", "GulpTLS"] + nioCore + nioConcurrency + [
-                .product(name: "NIOSSL", package: "swift-nio-ssl")
+                .product(name: "NIOSSL", package: "swift-nio-ssl"),
+                .product(name: "NIOHTTP2", package: "swift-nio-http2"),
+                .product(name: "NIOHPACK", package: "swift-nio-http2"),
             ]),
         .testTarget(
             name: "GulpProxyTests",

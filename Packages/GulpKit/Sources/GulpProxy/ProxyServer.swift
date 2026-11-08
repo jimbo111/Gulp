@@ -332,7 +332,9 @@ enum ProxyConnection {
             let close =
                 clientWantsClose || response.parsed.bodyFraming == .closeDelimited
                 || response.hasHeaderToken("connection", "close")
-            return (response.wireBytes.rawBytes, close)
+            // An HTTP/2 upstream response is stored as `HTTP/2 200` text; an HTTP/1.1 client needs
+            // HTTP/1.1 framing (status line, content-length or chunked trailers).
+            return (HTTP2Text.http1Response(from: response), close)
         }
         let reason = result.error?.userDescription ?? "no response"
         let message = "Gulp could not complete the request to \(target.host): \(reason)."

@@ -7,6 +7,7 @@ import GulpCore
 import GulpTLS
 import NIOConcurrencyHelpers
 import NIOCore
+import NIOHTTP2
 import NIOPosix
 import NIOSOCKS
 import NIOSSL
@@ -44,6 +45,9 @@ public final class NIOHTTPEngine: HTTPEngine {
     private let configuration: Configuration
     private let pool: ConnectionPool
     private let tlsContexts = TLSContextCache()
+    private let h2Pool = H2Pool()
+    /// The pipeline name of the HTTP/1 handler (removed when a connection switches to HTTP/2).
+    static let http1HandlerName = "gulp.http1"
     private let requestHooks: [any RequestHook]
     private let responseHooks: [any ResponseHook]
     private let recorder: (any ExchangeRecorder)?
@@ -67,6 +71,7 @@ public final class NIOHTTPEngine: HTTPEngine {
     /// Close every pooled connection.
     public func shutdown() async {
         await pool.closeAll()
+        await h2Pool.closeAll()
     }
 
     // MARK: HTTPEngine
@@ -78,13 +83,15 @@ public final class NIOHTTPEngine: HTTPEngine {
         await send(request, to: target, options: options, pool: pool)
     }
 
-    /// HTTP/2 arrives in M3; until then this records a failed exchange.
+    /// Raw HTTP/2 from a structured spec (HTTP-025, P1) arrives with the Repeater (M5); ordinary
+    /// requests already use HTTP/2 when the server negotiates it.
     public func send(
         _ request: H2RequestSpec, to target: HTTPTarget, options: SendOptions
     ) async -> ExchangeResult {
         let outgoing = OutgoingRequest(request: RawRequest(Bytes()), target: target)
         return await finish(
-            outgoing, options: options, wire: nil, error: .other("HTTP/2 is implemented in M3b"),
+            outgoing, options: options, wire: nil,
+            error: .other("Raw HTTP/2 (H2RequestSpec) sends arrive with the Repeater (M5)"),
             connectionID: 0, timing: Timing())
     }
 
@@ -191,7 +198,8 @@ public final class NIOHTTPEngine: HTTPEngine {
         timing.totalMs = milliseconds(from: start, to: .now())
         return await finish(
             outgoing, options: options, wire: attempt.wire, error: attempt.error,
-            connectionID: attempt.connectionID, timing: timing, tls: attempt.tls)
+            connectionID: attempt.connectionID, timing: timing, tls: attempt.tls,
+            httpVersion: attempt.httpVersion)
     }
 
     /// The upstream proxy for `target` (HTTP-006): the per-send override, else the first matching
@@ -207,9 +215,8 @@ public final class NIOHTTPEngine: HTTPEngine {
     private func unsupported(
         _ target: HTTPTarget, _ options: SendOptions, route: UpstreamProxy?
     ) -> GulpNetworkError? {
-        switch options.httpVersion {
-        case .http2, .http2PriorKnowledge: return .other("HTTP/2 is implemented in M3b")
-        case .auto, .http1_1: break
+        if options.httpVersion == .http2PriorKnowledge, target.scheme == .https {
+            return .other("HTTP/2 prior knowledge (h2c) is for http:// targets; https negotiates h2")
         }
         if let route, route.kind == .socks5, route.username != nil {
             return .upstreamProxyError("SOCKS5 username/password authentication is not supported yet")
@@ -224,6 +231,7 @@ public final class NIOHTTPEngine: HTTPEngine {
         var writeStart = NIODeadline.now()
         var writeEnd = NIODeadline.now()
         var tls: TLSInfo?
+        var httpVersion = HTTPVersion.http1_1
     }
 
     /// Get a connection, write, read; retry once on a stale pooled connection (HTTP-003).
@@ -237,6 +245,16 @@ public final class NIOHTTPEngine: HTTPEngine {
         let idempotent = ["GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"].contains(method)
         let totalDeadline = start + timeAmount(options.timeouts.total)
         var policy = options.connection
+
+        let wantsH2 =
+            options.httpVersion != .http1_1
+            && (outgoing.target.scheme == .https || options.httpVersion == .http2PriorKnowledge)
+        if wantsH2, policy == .reuse, let shared = await h2Pool.connection(for: key) {
+            timing.dnsMs = nil
+            timing.connectMs = nil
+            timing.tlsMs = nil
+            return await sendH2(outgoing, on: shared, key: key, options: options, deadline: totalDeadline)
+        }
 
         await pool.acquireSlot(key)
         for attemptNumber in 1...2 {
@@ -267,12 +285,37 @@ public final class NIOHTTPEngine: HTTPEngine {
                     return Attempt(error: Task.isCancelled ? .cancelled : mapped)
                 }
                 connectionID = await pool.newConnectionID()
+                // HTTP-020: the server picked h2 via ALPN, or the caller asked for cleartext h2.
+                let negotiatedH2 = tls?.alpn == "h2"
+                let priorKnowledge =
+                    options.httpVersion == .http2PriorKnowledge && outgoing.target.scheme == .http
+                if options.httpVersion == .http2, outgoing.target.scheme == .https, !negotiatedH2 {
+                    channel.close(promise: nil)
+                    await pool.releaseSlot(key)
+                    return Attempt(error: .other("The server did not negotiate HTTP/2 (ALPN)"), tls: tls)
+                }
+                if negotiatedH2 || priorKnowledge {
+                    await pool.releaseSlot(key)
+                    let h2: H2Connection
+                    do {
+                        h2 = try await H2Connection.start(on: channel, id: connectionID, tls: tls)
+                    } catch {
+                        channel.close(promise: nil)
+                        return Attempt(error: HTTP1ClientHandler.networkError(error), tls: tls)
+                    }
+                    if options.connection == .reuse { await h2Pool.add(h2, for: key) }
+                    let attempt = await sendH2(
+                        outgoing, on: h2, key: key, options: options, deadline: totalDeadline)
+                    if options.connection != .reuse { channel.close(promise: nil) }
+                    return attempt
+                }
             }
 
             // Cancelling the task closes the channel; the handler then fails the response (HTTP-009).
             let result = await withTaskCancellationHandler {
                 await self.exchange(
-                    on: channel, request: request, options: options, totalDeadline: totalDeadline)
+                    on: channel, request: HTTP2Text.http1Request(from: request), options: options,
+                    totalDeadline: totalDeadline)
             } onCancel: {
                 channel.close(promise: nil)
             }
@@ -291,7 +334,8 @@ public final class NIOHTTPEngine: HTTPEngine {
                 && KeepAlive.requestAllowsReuse(request) && !Task.isCancelled
             if keep {
                 let timeout = KeepAlive.serverTimeout(wire.bytes)
-                await pool.putIdle(key, channel: channel, id: connectionID, serverTimeout: timeout, tls: tls)
+                await pool.putIdle(
+                    key, channel: channel, id: connectionID, serverTimeout: timeout, tls: tls)
             } else {
                 channel.close(promise: nil)
             }
@@ -344,7 +388,8 @@ public final class NIOHTTPEngine: HTTPEngine {
                         let socks = SOCKSClientHandler(targetAddress: socksTarget)
                         try channel.pipeline.syncOperations.addHandler(socks)
                     }
-                    try channel.pipeline.syncOperations.addHandler(HTTP1ClientHandler())
+                    try channel.pipeline.syncOperations.addHandler(
+                        HTTP1ClientHandler(), name: Self.http1HandlerName)
                 })
             }
         let channel: any Channel
@@ -380,6 +425,48 @@ public final class NIOHTTPEngine: HTTPEngine {
         }
     }
 
+    /// ALPN protocols to offer for a version preference (HTTP-020).
+    static func alpnOffer(_ preference: HTTPVersionPreference) -> [String] {
+        switch preference {
+        case .auto: ["h2", "http/1.1"]
+        case .http1_1: ["http/1.1"]
+        case .http2, .http2PriorKnowledge: ["h2"]
+        }
+    }
+
+    /// Send `outgoing` as one stream on an HTTP/2 connection; the response is stored in the
+    /// HTTP/2 text form (HTTP-022, trailers per HTTP-027).
+    private func sendH2(
+        _ outgoing: OutgoingRequest, on connection: H2Connection, key: PoolKey, options: SendOptions,
+        deadline: NIODeadline
+    ) async -> Attempt {
+        let target = outgoing.target
+        let defaultPort = target.scheme == .https ? 443 : 80
+        let authority = target.port == defaultPort ? target.host : "\(target.host):\(target.port)"
+        let parts = HTTP2Text.requestParts(
+            outgoing.request, scheme: target.scheme, defaultAuthority: authority)
+        let writeStart = NIODeadline.now()
+        let result = await withTaskCancellationHandler {
+            await connection.send(parts, maxResponseBytes: options.maxResponseBytes, deadline: deadline)
+        } onCancel: {
+            // Cancelling one request must not take down the shared connection; the stream timeout
+            // and the collector end the stream.
+        }
+        if result.error == .connectionReset || result.error == .incompleteResponse {
+            await h2Pool.remove(connection, for: key)  // GOAWAY or a dead connection: don't reuse
+        }
+        var wire: WireResponse?
+        if let received = result.received {
+            let text = HTTP2Text.response(received.parts)
+            wire = WireResponse(
+                bytes: text.bytes.rawBytes, interim: [], error: nil, firstByteAt: received.firstByteAt,
+                lastByteAt: received.lastByteAt, reusable: false, receivedAny: true)
+        }
+        return Attempt(
+            wire: wire, error: Task.isCancelled ? .cancelled : result.error, connectionID: connection.id,
+            writeStart: writeStart, writeEnd: result.writeEnd, tls: connection.tls, httpVersion: .http2)
+    }
+
     /// A refused connection to a resolved *name* is retried over all its addresses.
     static func shouldTryOtherAddresses(_ error: any Error, host: String) -> Bool {
         guard HTTP1ClientHandler.networkError(error) == .connectionRefused else { return false }
@@ -393,7 +480,8 @@ public final class NIOHTTPEngine: HTTPEngine {
     private func startTLS(
         on channel: any Channel, target: HTTPTarget, options: SendOptions, deadline: NIODeadline
     ) async throws -> TLSInfo {
-        let settings = options.tls
+        var settings = options.tls
+        if settings.alpn.isEmpty { settings.alpn = Self.alpnOffer(options.httpVersion) }
         let context: NIOSSLContext
         do {
             context = try await tlsContexts.context(for: settings)
@@ -517,7 +605,7 @@ public final class NIOHTTPEngine: HTTPEngine {
     /// Build the exchange (response hooks, derived fields), record it, and wrap it as a result.
     private func finish(
         _ outgoing: OutgoingRequest, options: SendOptions, wire: WireResponse?, error: GulpNetworkError?,
-        connectionID: UInt64, timing: Timing, tls: TLSInfo? = nil
+        connectionID: UInt64, timing: Timing, tls: TLSInfo? = nil, httpVersion: HTTPVersion = .http1_1
     ) async -> ExchangeResult {
         let isHead = outgoing.request.bytes[outgoing.request.parsed.method].string() == "HEAD"
         var response: RawResponse?
@@ -548,6 +636,7 @@ public final class NIOHTTPEngine: HTTPEngine {
             state: state, timing: timing, clientAddress: options.clientAddress, connectionID: connectionID,
             edited: edited)
         exchange.tls = tls
+        exchange.httpVersion = httpVersion
         if let recorder { exchange.id = await recorder.record(exchange) }
         return ExchangeResult(exchange: exchange, error: error)
     }
