@@ -76,11 +76,30 @@ public final class NIOHTTPEngine: HTTPEngine {
 
     // MARK: HTTPEngine
 
-    /// Send raw HTTP/1 bytes (HTTP-001). Failures are returned as data in the exchange.
+    /// Send raw HTTP/1 bytes (HTTP-001). Failures are returned as data in the exchange. With a
+    /// redirect policy, each hop is its own (recorded) exchange: the result is the last one, and the
+    /// earlier hops are in `redirectChain` (F06 REP-006).
     public func send(
         _ request: RawRequest, to target: HTTPTarget, options: SendOptions
     ) async -> ExchangeResult {
-        await send(request, to: target, options: options, pool: pool)
+        var result = await send(request, to: target, options: options, pool: pool)
+        guard options.followRedirects.mode != .never else { return result }
+        var chain: [Exchange] = []
+        var current = (request: request, target: target)
+        var hopOptions = options
+        hopOptions.originalRequest = nil
+        while chain.count < options.followRedirects.maxHops, result.error == nil, !Task.isCancelled,
+            let response = result.exchange.response,
+            let next = Redirects.next(
+                after: response, request: current.request, target: current.target,
+                policy: options.followRedirects)
+        {
+            chain.append(result.exchange)
+            current = next
+            result = await send(next.request, to: next.target, options: hopOptions, pool: pool)
+        }
+        result.redirectChain = chain
+        return result
     }
 
     /// Raw HTTP/2 from a structured spec (HTTP-025, P1) arrives with the Repeater (M5); ordinary

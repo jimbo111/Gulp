@@ -6,6 +6,7 @@ import Foundation
 import GulpCore
 import GulpHTTP
 import GulpProxy
+import GulpRepeater
 import GulpStore
 import GulpTLS
 
@@ -197,6 +198,9 @@ public actor ProjectSession {
     public nonisolated let intercept: InterceptQueue
     /// Match & Replace for proxy traffic and, per rule, every tool (PRX-020…PRX-022).
     public nonisolated let matchReplace: MatchReplaceHook
+    /// The Repeater's tabs and sends (F06), stored in this project.
+    public nonisolated let repeater: RepeaterService
+    private let currentStore: CurrentStore
 
     private init(
         store: ProjectStore, events: EventBus, settings: LayeredSettings, isTemporary: Bool,
@@ -221,6 +225,9 @@ public actor ProjectSession {
         self.proxy = ProxyServer(
             engine: engine, tls: minter.map { proxySettings.tlsOptions(minter: $0) }, intercept: intercept,
             matchReplace: matchReplace, webSockets: recorder)
+        let currentStore = CurrentStore(store)
+        self.currentStore = currentStore
+        self.repeater = RepeaterService(engine: engine, persistence: StoreRepeaterPersistence(currentStore))
     }
 
     /// Apply the stored intercept settings to the queue (call after opening or changing them).
@@ -287,6 +294,7 @@ public actor ProjectSession {
             store: store, events: events, settings: settings, isTemporary: temporary,
             environment: environment, minter: minter)
         await session.applyInterceptSettings()
+        try? await session.repeater.load()
         return session
     }
 
@@ -303,6 +311,7 @@ public actor ProjectSession {
         // nothing lands in the old file after the copy (and no id is handed out twice).
         // Overwriting a project that is open elsewhere would destroy it: its lock says so.
         try ProjectStore.ensureNotOpen(destination)
+        await repeater.flush()  // pending Repeater drafts go into the copy
         await recorder.pause()
         let newStore: ProjectStore
         do {
@@ -316,6 +325,7 @@ public actor ProjectSession {
         let oldStore = store
         settings.switchStore(newStore)
         store = newStore
+        await currentStore.set(newStore)
         await recorder.resume(with: newStore)
         try await oldStore.close()
         if isTemporary { Self.removeDatabaseFiles(oldStore.url) }
@@ -352,6 +362,7 @@ public actor ProjectSession {
     /// Stop the proxy, flush everything and close the file. A temporary project is deleted unless
     /// `keepTemporary` (PRJ-001: "prompt to save on close (or discard)").
     public func close(keepTemporary: Bool = false) async throws {
+        await repeater.flush()
         await proxy.stopAll()
         await http.shutdown()
         try await store.close()

@@ -2,6 +2,7 @@ import Foundation
 import GulpCore
 import GulpHTTP
 import GulpProxy
+import GulpRepeater
 import GulpStore
 import GulpTLS
 import Testing
@@ -252,5 +253,38 @@ struct HistoryPageCacheTests {
         #expect(r7 == nil)  // partial page dropped for reload
         let reload = cache.beginLoading(1)
         #expect(reload)
+    }
+}
+
+@Suite("GulpWorkspace — Repeater in the project (F06 REP-004, REP-005)", .serialized)
+struct RepeaterProjectTests {
+    @Test("REP-005: tabs, drafts, options and history are stored in the project and come back on reopen")
+    func test_REP005_persistsInProject() async throws {
+        let environment = isolatedEnvironment()
+        let url = projectURL(environment, "repeater")
+        let session = try await ProjectSession.open(at: url, environment: environment)
+        // Port 1 refuses: the send fails fast, but is still recorded and kept in the tab's history.
+        let target = HTTPTarget(scheme: .http, host: "127.0.0.1", port: 1)
+        let request = RawRequest(Bytes("POST /login HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\n\r\nhi"))
+        var options = RepeaterOptions()
+        options.redirects = .onSite
+        let tab = await session.repeater.openTab(
+            request: request, target: target, title: "login", options: options)
+        let result = try #require(await session.repeater.send(tab.id))
+        #expect(result.error != nil && result.exchange.id != 0)
+        await session.repeater.updateDraft(tab.id, bytes: Array("GET /edited HTTP/1.1\r\n\r\n".utf8))
+        try await session.close()  // flushes the pending draft
+
+        let reopened = try await ProjectSession.open(at: url, environment: environment)
+        let tabs = await reopened.repeater.allTabs
+        #expect(tabs.map(\.title) == ["login"])
+        #expect(tabs.first?.target == target)
+        #expect(tabs.first?.options.redirects == .onSite)
+        #expect(tabs.first?.draft == Array("GET /edited HTTP/1.1\r\n\r\n".utf8))
+        let history = await reopened.repeater.history(tabs.first?.id ?? 0)
+        #expect(history == [result.exchange.id])
+        let sent = try await reopened.store.exchange(id: result.exchange.id)
+        #expect(sent?.source == .repeater && sent?.request == request)
+        try await reopened.close()
     }
 }
