@@ -97,9 +97,9 @@ Split from the original M3 after the 2026-11-07 feature review (docs/FEATURE-REV
 - [x] macOS integration: "Install CA in login keychain" helper, uninstall, trust status, CA export (F24 MAC-001, MAC-002); Settings → TLS pane; MAC-004 instructions. (MAC-003 simulator install is P1 and not done.)
 - **DoD:** Browse `https://example.com` and VulnLab's `https://localhost:8443` through Gulp with the CA trusted; the history shows the decrypted traffic.
 
-### M3b — HTTP/2 (client side and upstream)
-- [ ] ALPN mirroring (PRX-008), HTTP/2 between client and proxy with one exchange per stream (PRX-009).
-- [ ] Upstream HTTP/2 in the engine: conversion, multiplexing, GOAWAY/RST/flow control, trailers (F03 HTTP-020…HTTP-024, HTTP-027).
+### M3b — HTTP/2 (client side and upstream) — DONE
+- [x] ALPN mirroring (PRX-008), HTTP/2 between client and proxy with one exchange per stream (PRX-009).
+- [x] Upstream HTTP/2 in the engine: conversion, multiplexing, GOAWAY/RST/flow control, trailers (F03 HTTP-020…HTTP-024, HTTP-027).
 - **DoD:** `curl --http2` through Gulp to an h2 site and to VulnLab's h2 endpoint; the history shows the decrypted traffic with HTTP/2 flagged, and gRPC-style trailers are kept.
 
 ## Phase B — Manual testing core (M4a–M9) → Daily-driver beta

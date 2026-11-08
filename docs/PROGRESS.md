@@ -6,13 +6,15 @@ order; within a milestone, do P0 first.
 
 ## Current status
 
-- **Phase**: **M3a DONE** — CI green on both platforms (run 42424466338, commit `054b24a`); the M3a
-  DoD (`Scripts/m3a-dod.sh`, Linux CI) PASS: curl trusting only the exported Gulp CA fetched
-  `https://localhost:8443/echo` and `https://example.com` through `gulp-cli proxy`, and the reopened
-  project holds the decrypted exchanges. M0, M1, M2 done earlier (their DoD scripts still pass).
-- **Active milestone**: **M3b — HTTP/2** (ALPN mirroring PRX-008, client-side h2 PRX-009, upstream
-  h2 HTTP-020…024, trailers HTTP-027).
-- **Branching**: `main` holds merged milestones (PR jimbo111/Gulp#1 merged M0–M2). Work happens on
+- **Phase**: **M3b DONE** — CI green on both platforms (run 42498773075, commit `11cd7d5`); the M3b
+  DoD (`Scripts/m3b-dod.sh`, Linux CI) PASS: `curl --http2` trusting only the Gulp CA speaks HTTP/2
+  to Gulp, Gulp speaks HTTP/2 to VulnLab `:8443` (its echo shows `GET /echo HTTP/2`), the `/chunked`
+  trailer arrives as an h2 trailer, https://example.com works over h2, and the reopened project
+  flags HTTP/2 and keeps the trailer. M0–M3a DoD scripts still pass in the same run.
+- **Active milestone**: **M4a — Message editor, Intercept, Match & Replace, Send to / Copy as**
+  (UI-010…030, PRX-010…025, UI-040, ETL-008), per the 2026-11-08 re-sequenced roadmap.
+- **Branching**: `main` holds merged milestones (PRs jimbo111/Gulp#1 M0–M2, #2 review fixes,
+  #3 M3a, then M3b + the feature-review adoption). Work happens on
   the session branch and is merged by PR once CI is green.
 - **Build verification**: the authoring container has no Swift toolchain (`download.swift.org` is
   blocked), so CI (`.github/workflows/ci.yml`) is the gate and runs on **every branch push**:
@@ -41,7 +43,13 @@ order; within a milestone, do P0 first.
   import (PEM import works); pass-through tunnels are not yet logged (PRX-007 "tunnel entry" needs
   the Logger, M9); `TLSInfo.cipherSuite` is empty (NIOSSL doesn't expose the negotiated suite);
   PRX-046 `http://gulp/cert.pem` landing page (P1) not yet served.
-- **Next action**: M3b — HTTP/2 on both sides with ALPN mirroring, then its executable DoD; then M4a.
+- **M3b carry-overs**: raw HTTP/2 from an `H2RequestSpec` (HTTP-025, P1) arrives with the Repeater
+  (M5); HTTP-026 (P1) connection events in the Logger (M9); request trailers from h2 clients are
+  ignored; ALPN pre-connect offers upstream `h2, http/1.1` rather than the client's exact list
+  (decision log); a failed pre-connect still completes the client handshake (the request then gets
+  a 502) instead of aborting it with a TLS alert.
+- **Next action**: M4a — the shared MessageEditor (Pretty/Raw/Hex/Render, Inspector), Intercept
+  (queue, forward/drop, rules), Match & Replace, the Send-to menu and Copy-as; executable DoD.
   The plan after M3b follows the 2026-11-08 re-sequencing (milestone checklist below).
 - **Waiting on the owner**: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
   **adopted on 2026-11-08** (product decision #7 in `docs/07-decisions.md`) and applied to the specs:
@@ -136,7 +144,7 @@ for behavior.
 - [x] M1 — Core model + raw HTTP/1 engine — **CI green both platforms + executable DoD PASS (`cd84c2a`)**
 - [x] M2 — Plain-HTTP proxy, storage, history UI — **CI green both platforms + executable DoD PASS (`1acf39c`)**
 - [x] M3a — TLS interception + CA (HTTP/1.1) — **CI green both platforms + executable DoD PASS (`054b24a`)**
-- [ ] M3b — HTTP/2 (client side + upstream, trailers)
+- [x] M3b — HTTP/2 (client side + upstream, trailers) — **CI green both platforms + executable DoD PASS (`11cd7d5`)**
 - [ ] M4a — Message editor, Intercept, Match & Replace, Send to / Copy as
 - [ ] M4b — Streaming responses, WebSockets, Gulp Browser launch
 - [ ] M5 — Repeater + advanced HTTP engine (HTTP/2 raw, group/race sends, streaming, paste-to-request)
@@ -304,6 +312,21 @@ for behavior.
     and `featmap2.py` (also header ↔ roadmap sections and every suffixed `Mxx` ref): both clean. All
     other checks pass (idcheck — 537 IDs as written, 544 with the new `GRP` prefix added — linkcheck,
     secnum, secref, tables).
+
+- 2026-11-08 — **M3b DONE** (CI run 42498773075, `11cd7d5`; DoD `Scripts/m3b-dod.sh`: PASS):
+  - GulpCore `HTTP2Text`: HTTP/1-style text ↔ HTTP/2 parts (HTTP-021/022); trailers stored via the
+    chunked rendering an h2→h1 gateway uses (HTTP-027), re-framing for HTTP/1.1 clients.
+  - GulpHTTP: ALPN derived from the version preference, h2c prior knowledge, `H2Connection` streams
+    over one shared connection per key (`H2Pool`), push disabled, trailers, `negotiatedProtocol`
+    pre-connect.
+  - GulpProxy: ALPN mirroring (client gets h2 only when both sides do; Force-HTTP/1.1 toggles),
+    HTTP/2 server pipeline with one exchange per stream; h2 upstream replies re-framed for h1 clients.
+  - VulnLab `:8443` negotiates h2; History has a Protocol column; `gulp-cli history --show`.
+  - Caught by CI: handlers must be `RemovableChannelHandler` to be swapped; the server's SETTINGS
+    raced the switch to HTTP/2 (TLS: held by the handshake waiter; h2c on Linux: a ReadGate);
+    `tooLarge(limit:)`; a captured `var` in a Sendable closure; the M3a DoD's echo check updated
+    for the new h2 upstream.
+  - Same branch: the feature-review adoption (docs agent; merged after all doc checkers passed).
 
 ## How to pick up work (reminder)
 
