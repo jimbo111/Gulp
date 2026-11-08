@@ -72,7 +72,16 @@ order; within a milestone, do P0 first.
   streamed responses (REP-016), paste-to-request (REP-017), WS sessions (REP-012, PRX-035); raw
   HTTP/2 (HTTP-025); group sends incl. single-packet (HTTP-030…036); pipelining, platform auth and
   the shared throttle (HTTP-011…013); executable DoD.
-- **Waiting on the owner**: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
+- **Waiting on the owner**: **CI cannot start jobs** (2026-11-08, run 42507366371 and its re-run):
+  both jobs fail in ~3 s with no runner, logs or check output — the pattern of GitHub refusing to
+  start jobs, most often the account's Actions minutes / spending limit (macOS minutes are billed at
+  a multiple on private repos). Please check *Settings → Billing and plans* (Actions usage and the
+  spending limit) or *Actions → General*. Until CI runs, commit `3c091d6` (Repeater service +
+  redirect following) is **unverified** — no new milestone work is stacked on it.
+- **M5 progress**: REP-017 paste-to-request done (CI green, `08ad944`); RepeaterService, project
+  persistence and engine redirect following written in `3c091d6` (awaiting CI). Next: single-packet
+  group sends and the rest of F03's M5 engine work, then the Repeater UI and the M5 DoD.
+- Earlier waiting items: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
   **adopted on 2026-11-08** (product decision #7 in `docs/07-decisions.md`) and applied to the specs:
   merges, cuts, deferrals, new requirements (incl. F33) and the re-sequenced roadmap with letter-
   suffixed splits and a daily-driver beta gate after M9.
