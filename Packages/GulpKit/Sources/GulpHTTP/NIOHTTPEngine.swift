@@ -273,18 +273,19 @@ public final class NIOHTTPEngine: HTTPEngine {
             outgoing.request = outgoing.request.forPlainHTTPProxy(
                 target: outgoing.target, proxyAuthorization: route.basicAuthorization)
         }
-        // HIS-007: a streamed response is recorded as pending when its first bytes arrive, then
-        // replaced in place when it completes.
-        let streamRecord = StreamRecord()
+        // HIS-007: a streamed response is recorded as pending when its first bytes arrive, updated
+        // with what arrived so far as it grows, then replaced in place when it completes.
+        let streamRecord = StreamRecord(start: start)
         if let forward = options.onResponseBytes, let recorder {
             var pendingExchange = Exchange(
                 source: options.recordAs, target: outgoing.target, request: outgoing.request,
                 clientAddress: options.clientAddress)
             pendingExchange.state = .pending
+            pendingExchange.timing = timing
             let pendingCopy = pendingExchange
             options.onResponseBytes = { bytes in
                 forward(bytes)
-                streamRecord.startOnce { await recorder.record(pendingCopy) }
+                streamRecord.received(bytes, pending: pendingCopy, recorder: recorder)
             }
         }
         let attempt = await perform(
@@ -297,10 +298,12 @@ public final class NIOHTTPEngine: HTTPEngine {
             }
         }
         timing.totalMs = milliseconds(from: start, to: .now())
+        let streamed = await streamRecord.finish()
+        if !streamed.marks.isEmpty { timing.streamMarks = streamed.marks }
         return await finish(
             outgoing, options: options, wire: attempt.wire, error: attempt.error,
             connectionID: attempt.connectionID, timing: timing, tls: attempt.tls,
-            httpVersion: attempt.httpVersion, streamedAs: await streamRecord.id())
+            httpVersion: attempt.httpVersion, streamedAs: streamed.id)
     }
 
     /// The upstream proxy for `target` (HTTP-006): the per-send override, else the first matching
@@ -905,20 +908,68 @@ final class ReadGate: ChannelInboundHandler {
     }
 }
 
-/// The id of the pending row recorded for a streaming response (HIS-007), assigned once.
+/// The pending row of a streaming response (HIS-007): recorded when the first bytes arrive, then
+/// updated with the bytes so far at most every 250 ms (up to 4 MB, beyond which only completion
+/// updates it). Updates run in order, and `finish` waits for them, so the final write wins.
 final class StreamRecord: Sendable {
-    private let task = NIOLockedValueBox<Task<ExchangeID, Never>?>(nil)
+    static let updateInterval = TimeAmount.milliseconds(250)
+    static let liveLimit = 4 * 1_024 * 1_024
 
-    /// Start `record` the first time this is called; later calls do nothing.
-    func startOnce(_ record: @escaping @Sendable () async -> ExchangeID) {
-        task.withLockedValue { current in
-            if current == nil { current = Task { await record() } }
+    private struct State {
+        var record: Task<ExchangeID, Never>?
+        var chain: Task<Void, Never>?
+        var received: [UInt8] = []
+        var marks: [StreamMark] = []
+        var lastUpdate = NIODeadline.uptimeNanoseconds(0)
+        var finished = false
+    }
+
+    private let start: NIODeadline
+    private let state = NIOLockedValueBox(State())
+
+    init(start: NIODeadline) {
+        self.start = start
+    }
+
+    /// Response bytes arrived (on the connection's event loop, in order).
+    func received(_ bytes: [UInt8], pending: Exchange, recorder: any ExchangeRecorder) {
+        let now = NIODeadline.now()
+        let ms = Double((now - start).nanoseconds) / 1_000_000
+        state.withLockedValue { state in
+            guard !state.finished else { return }
+            state.received += bytes
+            state.marks.append(StreamMark(offset: state.received.count, ms: ms))
+            guard let record = state.record else {
+                state.record = Task { await recorder.record(pending) }
+                state.lastUpdate = now
+                return
+            }
+            guard now - state.lastUpdate >= Self.updateInterval, state.received.count <= Self.liveLimit else {
+                return
+            }
+            state.lastUpdate = now
+            var partial = pending
+            partial.response = RawResponse(Bytes(state.received))
+            partial.timing.streamMarks = state.marks
+            let snapshot = partial
+            let previous = state.chain
+            state.chain = Task {
+                await previous?.value
+                var update = snapshot
+                update.id = await record.value
+                await recorder.update(update)
+            }
         }
     }
 
-    /// The recorded id, waiting for the pending write if it is still in flight; nil if nothing streamed.
-    func id() async -> ExchangeID? {
-        guard let pending = task.withLockedValue({ $0 }) else { return nil }
-        return await pending.value
+    /// Stop updating; returns the pending row's id (nil if nothing streamed) and the marks, once
+    /// every update already started has been written.
+    func finish() async -> (id: ExchangeID?, marks: [StreamMark]) {
+        let (record, chain, marks) = state.withLockedValue { state in
+            state.finished = true
+            return (state.record, state.chain, state.marks)
+        }
+        await chain?.value
+        return (await record?.value, marks)
     }
 }

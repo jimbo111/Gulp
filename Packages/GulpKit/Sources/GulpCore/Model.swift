@@ -105,10 +105,27 @@ public struct Timing: Sendable, Codable, Equatable {
     public var downloadMs: Double?
     /// End-to-end time.
     public var totalMs: Double?
+    /// For a streamed response (HIS-007): when each piece arrived — cumulative bytes received and
+    /// milliseconds since the send started.
+    public var streamMarks: [StreamMark]?
 
     /// Create a timing record that starts at `start`.
     public init(start: Date = Date()) {
         self.start = start
+    }
+}
+
+/// One piece of a streamed response (HIS-007 chunk timeline and SSE event times).
+public struct StreamMark: Sendable, Codable, Equatable {
+    /// Bytes received so far, this piece included.
+    public var offset: Int
+    /// Milliseconds since the send started.
+    public var ms: Double
+
+    /// A mark.
+    public init(offset: Int, ms: Double) {
+        self.offset = offset
+        self.ms = ms
     }
 }
 

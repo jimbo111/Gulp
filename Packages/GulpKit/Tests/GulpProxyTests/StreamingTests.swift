@@ -118,6 +118,10 @@ struct StreamingTests {
         #expect(done.count == 1)
         #expect(done.first?.state == .complete)
         #expect(done.first?.response?.bytes.string().hasSuffix("data: 2\r\n0\r\n\r\n") == true)
+        // HIS-007: when each piece arrived (two writes, ≈800 ms apart).
+        let marks = done.first?.timing.streamMarks ?? []
+        #expect(marks.count >= 2)
+        #expect((marks.last?.ms ?? 0) - (marks.first?.ms ?? 0) > 500)
         try? await client.close()
         await proxy.stopAll()
         await origin.stop()

@@ -31,7 +31,7 @@ struct UpstreamTLSEngineTests {
 
     @Test("HTTPS works with validation off; the chain and 'untrusted' are recorded")
     func test_TLS008_validationOff() async throws {
-        let (server, _) = try await Self.tlsServer()
+        let (server, authority) = try await Self.tlsServer()
         let engine = NIOHTTPEngine()
         let target = HTTPTarget(scheme: .https, host: "localhost", port: server.port)
         let request = RawRequest(Bytes("GET /x HTTP/1.1\r\nHost: localhost\r\n\r\n"))
@@ -40,7 +40,9 @@ struct UpstreamTLSEngineTests {
         #expect(result.exchange.response?.bytes.string().hasSuffix("secret") == true)
         let tls = try #require(result.exchange.tls)
         #expect(tls.version.hasPrefix("TLSv1."))
-        #expect(tls.serverChainSHA256.count == 1)
+        // A Gulp-minted server sends its CA after the leaf (BRW-002 pins match the chain).
+        #expect(tls.serverChainSHA256.count == 2)
+        #expect(tls.serverChainSHA256.last == (try authority.sha256Fingerprint()))
         #expect(tls.serverChainSHA256.first?.count == 64)
         #expect(tls.validation == .failed("untrusted"))
         #expect(result.exchange.timing.tlsMs != nil)
