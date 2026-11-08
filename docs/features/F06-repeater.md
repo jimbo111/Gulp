@@ -26,6 +26,8 @@ A tester lives here, iterating on a single request to understand and exploit beh
 | REP-013 | P2 | "Send sequence": chain tabs so the output (variables) of one feeds the next; a lightweight multi-step runner (a precursor to macros, F15). |
 | REP-014 | P2 | Auto-resend on edit (debounced) mode for fast iteration; and a "resend every N seconds" option (polling), with a clear stop. |
 | REP-015 | P2 | Response rendering niceties: pin a search term (UI-015), word-wrap toggle, show non-printables, and a "render" tab for HTML (sandboxed, doc 01 §7). |
+| REP-016 | P0 | **Streaming responses** in Repeater: show a streamed response (SSE, chunked, streamed `fetch`) incrementally as it arrives, with the Events tab (F05 HIS-007) and a Stop button that cancels the request; the tab history keeps what was received. *(Added by the 2026-11-08 feature review, A1; M5 — the proxy/history part is M4b.)* |
+| REP-017 | P1 | **Paste to request**: paste a cURL command line, a browser "Copy as fetch"/Node `fetch(...)` call, or a raw HTTP request into a new tab (⌘⇧V or a "New tab from clipboard" action); Gulp parses it into raw request bytes + target (method, URL, headers, cookies, body, `--http2`/`-k` flags) and shows anything it couldn't map. Lowers the cost of switching from other tools. *(Added by the 2026-11-08 feature review, A5; M5.)* |
 | ETL-009 | P2 | **Manual request builder**: start a Repeater request from scratch (method/URL/headers templates). *(Moved from F17, 2026-11-08; complements paste-to-request, REP-017.)* |
 | ETL-011 | P2 | **Simulate a browser request**: build a realistic request (headers, order, UA) for a given URL to compare against what the app expects. *(Moved from F17, 2026-11-08.)* |
 
@@ -72,3 +74,8 @@ A tester lives here, iterating on a single request to understand and exploit beh
 5. Tabs, groups and colors survive closing and reopening the project.
 6. WS Repeater (REP-012): against VulnLab `/ws/chat`, resending an edited frame shows the mutated
    echo (from F26 test 1, which restated REP-012).
+7. Streaming (REP-016): a send to VulnLab `/sse` shows events as they arrive; Stop cancels it and
+   the tab history keeps the partial response.
+8. Paste to request (REP-017): pasting `curl -X POST -H 'X-A: 1' --data 'q=1' http://127.0.0.1:8088/echo`
+   (and the equivalent browser `fetch(...)` snippet) creates a tab whose send reproduces the same
+   echo as the original command.

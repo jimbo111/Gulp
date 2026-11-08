@@ -26,6 +26,7 @@ call abuse, and data exfiltration.
 | LLM-006 | P1 | Test system-prompt / context leakage with extraction prompts and score how much hidden instruction/context is revealed. |
 | LLM-007 | P1 | Raise issues (F08) with the payload, a redacted model-response excerpt, and the category (injection/leak/exfil/output-handling); all active sends scope-gated and drawing from the shared limiter (F03 §3.4). |
 | LLM-008 | P2 | Probe tool/function-calling abuse where the app exposes agent actions (attempt to invoke unintended tools) with strong warnings and no auto-destructive calls. |
+| LLM-009 | P1 | **AI-agent endpoints**: test the target's remote **MCP servers** and agent tool interfaces — enumerate exposed tools/resources/prompts over the MCP HTTP transport, check authentication and per-tool authorization, and detect **tool poisoning** (instructions hidden in tool descriptions or results that steer a connected agent) and cross-tool data exfiltration, with OAST correlation (F10). All calls scope-gated and rate-limited; no destructive tool is invoked automatically. *(Added by the 2026-11-08 feature review, A8; post-1.0, M26.)* |
 
 ## 3. UI
 

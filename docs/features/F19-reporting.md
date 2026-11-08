@@ -18,14 +18,14 @@ machine-readable formats for CI and ticketing.
 | RPT-002 | P0 | **HTML report** (self-contained, offline): title/metadata, executive summary with counts and a severity chart, scope statement, a findings list and per-finding detail (description, severity/confidence, affected location(s), evidence with the request/response and highlighted markers, reproduction, remediation, references). Clean print/PDF styling. |
 | RPT-003 | P0 | **Markdown** and **JSON** exports of the same content; **SARIF 2.1.0** export for CI/code-scanning integration. |
 | RPT-004 | P0 | Evidence rendering: include the relevant request/response excerpts with marker highlights; options to truncate large bodies and to redact (RPT-010). |
-| RPT-005 | P1 | Templates/branding: logo, title, author/company, an editable executive-summary and per-issue-type boilerplate; a couple of built-in themes (light/print). Save template presets. |
+| RPT-005 | P2 | Templates/branding: logo, title, author/company, an editable executive-summary and per-issue-type boilerplate; a couple of built-in themes (light/print). Save template presets. *(P1 → P2 by the 2026-11-08 feature review.)* |
 | RPT-006 | P1 | Severity model configurable (names/colors/order) and an optional CVSS 3.1/4.0 vector + score per issue (a small calculator UI). |
 | RPT-007 | P1 | Remediation/background text pulled from the issue-definition catalog (F08 SCN-006), editable per report. |
 | RPT-008 | P1 | Group findings by severity, by host, or by issue type; a table of contents and stable anchors. |
-| RPT-009 | P1 | PDF output producing a tidy multi-page PDF. **Module split**: `GulpReport` builds the cross-platform formats (HTML/MD/JSON/SARIF) and must compile on Linux (doc 01 §4), so the PDF step — which uses `WKWebView` paginated printing (macOS-only) — lives in `GulpFeatures/Reports`, consuming `GulpReport`'s self-contained HTML. On Linux/CLI, PDF is unavailable (emit HTML and note it); everything else works headless. |
+| RPT-009 | P2 | PDF output producing a tidy multi-page PDF. **Module split**: `GulpReport` builds the cross-platform formats (HTML/MD/JSON/SARIF) and must compile on Linux (doc 01 §4), so the PDF step — which uses `WKWebView` paginated printing (macOS-only) — lives in `GulpFeatures/Reports`, consuming `GulpReport`'s self-contained HTML. On Linux/CLI, PDF is unavailable (emit HTML and note it); everything else works headless. *(P1 → P2 by the 2026-11-08 feature review; the HTML report's print styling covers most needs.)* |
 | RPT-010 | P1 | **Redaction**: strip or mask sensitive values (session tokens, credentials, PII) from included evidence via patterns, before export. Show what was redacted. |
 | RPT-011 | P2 | Diff/"delta" report vs. a previous report (new/fixed/still-open issues) for retests. |
-| RPT-012 | P2 | Ticketing export helpers (e.g. a per-issue Markdown block sized for Jira/GitHub issues) and a CSV. |
+| RPT-012 | P1 | **Bug-bounty / ticket Markdown**: export one finding as a self-contained Markdown report ready to paste into a bug-bounty platform or an issue tracker — title, severity, summary, steps to reproduce (the exact request(s) as code blocks, plus a cURL line), impact, the evidence excerpt with markers called out, and remediation; plus a CSV of selected issues. *(P2 → P1, promoted by the 2026-11-08 feature review.)* |
 | RPT-013 | P2 | AI-assisted drafting of the executive summary and per-issue narratives (F22), clearly marked and user-edited before use. |
 
 ### 2.2 CSRF PoC generator (moved from F17, 2026-11-08)
@@ -81,6 +81,8 @@ preview of masked evidence.
    stable across two scans of the same target.
 3. Redaction masks a session cookie in included evidence; the project's stored exchange is
    unchanged.
-4. PDF output is multi-page, with a TOC and no broken evidence blocks.
+4. *(P2)* PDF output is multi-page, with a TOC and no broken evidence blocks.
 5. "Generate CSRF PoC" for a VulnLab state-changing form produces an auto-submitting HTML PoC that,
    when loaded through the Gulp Browser, reproduces the request (moved from F17).
+6. Bug-bounty Markdown (RPT-012): exporting a VulnLab reflected-XSS finding produces Markdown whose
+   cURL line reproduces the issue against VulnLab and whose evidence block contains the marker.

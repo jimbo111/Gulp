@@ -112,20 +112,35 @@ Each entry = one or more issue definitions. Mark the P0 set that the VulnLab acc
 - **Server-side request parameter pollution / HPP**.
 - **Open/insecure deserialization** signposting (OAST where possible).
 - **LDAP / NoSQL / XPath injection** (error- and boolean-based).
-- **Clickjacking** (missing framing protection — confirmed with Frame Kit, F16).
+- **Clickjacking** (missing framing protection — reported from the response headers; the Frame Kit
+  PoC recorder, F16, was cut on 2026-11-08).
 - **Vulnerable JS libraries**: fingerprint versions of common libraries and flag known-vulnerable
   ones from a bundled, updatable dataset (no network calls required at scan time). *(Passive
   fingerprint — no probing; runs in the passive engine §4 even though listed here with its family.)*
 - **Secrets in responses**: API keys/tokens via a regex ruleset (overlaps F23 secret scanner).
   *(Passive regex/entropy — no probing; runs passively like the F23 secret scanner.)*
 
-### 3.3 Check Recipes (custom checks, M11)
+Added by the 2026-11-08 feature review (A6) — P1, in **M11c**, each with a VulnLab fixture and safe
+twin (doc 06 §3):
 
 | ID | Pri | Requirement |
 |---|---|---|
-| SCN-060 | P0 | **Check Recipes**: user-authored checks in YAML (inspired by BChecks/Nuclei) for passive and active detection without writing code. |
-| SCN-061 | P0 | Schema: `metadata` (id, name, severity, confidence), `when` (GulpQL condition / insertion-point selector), `requests` (templated probes with Transform Tags and payload placeholders), `matchers` (status/word/regex/binary/time/OAST, with `and`/`or`), `extractors`, and `issue` (templated detail/remediation referencing captured groups). |
-| SCN-062 | P0 | A recipe editor with validation, a dry-run against a selected request, and a library folder (`~/.../recipes/`). |
+| SCN-070 | P1 | **Server-side prototype pollution** (Node.js): inject `__proto__`/`constructor.prototype` properties via JSON bodies and query params and confirm with non-destructive gadgets (e.g. a polluted `json spaces` or status-code property changing later responses), never with properties that could break the app for other users. |
+| SCN-071 | P1 | **Client-side path traversal (CSPT)**: find client-side code that builds API paths from user-controlled input (route params, query, hash) and confirm that `../` sequences redirect the browser's authenticated request to another endpoint (passive source-to-fetch detection, confirmed in the browser-backed crawler when available). |
+| SCN-072 | P1 | **Mass assignment**: for JSON/form create/update endpoints, add privileged-looking properties (`role`, `isAdmin`, `owner_id`, properties seen in responses but not requests) and confirm they were accepted by re-reading the object. Unsafe-gated (it modifies data). |
+| SCN-073 | P1 | **File-upload bypasses**: for multipart upload endpoints, try content-type/extension mismatches, double extensions, case and trailing-dot tricks, polyglot images and SVG with script, and confirm whether the file is stored and served with an executable/HTML content type from the same origin. Unsafe-gated. |
+| SCN-074 | P1 | **JWT checks**: for requests carrying a JWT, test `alg:none`, RS→HS key confusion, an empty/weak HMAC secret (small built-in list) and `kid` injection (path traversal / SQL in `kid`), reusing the JWT Workbench operations (F12 §2.3); report acceptance by comparing to the original token's response. |
+
+### 3.3 Check Recipes (custom checks, M15)
+
+Moved out of M11 by the 2026-11-08 feature review (SCN-060…062 P0 → P1); they ship with the
+extension work in M15.
+
+| ID | Pri | Requirement |
+|---|---|---|
+| SCN-060 | P1 | **Check Recipes**: user-authored checks in YAML (inspired by BChecks/Nuclei) for passive and active detection without writing code. *(P0 → P1 by the 2026-11-08 feature review.)* |
+| SCN-061 | P1 | Schema: `metadata` (id, name, severity, confidence), `when` (GulpQL condition / insertion-point selector), `requests` (templated probes with Transform Tags and payload placeholders), `matchers` (status/word/regex/binary/time/OAST, with `and`/`or`), `extractors`, and `issue` (templated detail/remediation referencing captured groups). *(P0 → P1 by the 2026-11-08 feature review.)* |
+| SCN-062 | P1 | A recipe editor with validation, a dry-run against a selected request, and a library folder (`~/.../recipes/`). *(P0 → P1 by the 2026-11-08 feature review.)* |
 | SCN-063 | P1 | Import/convert common Nuclei/BCheck templates where feasible (document unsupported features). |
 | SCN-064 | P1 | Recipes participate in scan configs like built-in checks (enable/disable, intensity). |
 | SCN-065 | P2 | Share/export recipes; a signed-recipe notion for trust. |
@@ -236,8 +251,11 @@ proves it.
   `/safe/*` twins produce no ≥Low issues (the scanner-accuracy test asserts recall and precision).
 - OAST: the command-injection and SSRF checks register tokens and correlate interactions from the
   dev Beacon; the scan waits for the OAST grace period before finishing.
-- A YAML Check Recipe for a custom header-leak detects it on a crafted VulnLab route and renders the
-  templated issue with the captured value.
+- *(M15)* A YAML Check Recipe for a custom header-leak detects it on a crafted VulnLab route and
+  renders the templated issue with the captured value.
+- *(M11c)* The A6 checks (SCN-070…074) each find their VulnLab endpoint (`/pp/merge`, `/cspt/`,
+  `/api/users/me`, `/upload`, `/api/me` with weak JWT handling) and stay silent on the `/safe/*`
+  twins.
 - *(post-1.0, M25)* Retest: a VulnLab issue's proof re-run after the endpoint is patched returns
   "Fixed" with the new (now-safe) evidence; before patching it returns "Still-Vulnerable" (moved
   from F30).

@@ -47,7 +47,8 @@ entry points (History, Project menu, Target, API import, CLI) that call it.
 
 | ID | Pri | Requirement |
 |---|---|---|
-| PRJ-012 | P1 | **Import/export service** (`ImportExportService` in `GulpWorkspace`, UI-free so the CLI/MCP use it too): **import** HAR, Postman collections (v2.1), OpenAPI/Swagger documents (handed to ADV-050 for request building), `sitemap.xml`/URL lists, and another `.gulp` (exchanges, issues, Notebook items); **export** selected/filtered exchanges as HAR, CSV or `.gulp` items. Imports never send traffic; they are dedup-aware, tag imported exchanges `imported` (`exchange_tags`, doc 04 §4) with the source the file states (default `.proxy`), feed the site map, and report what was skipped and why. Every import entry point (HIS-044, PRJ-008, TGT-009, ADV-051, AUT-004) calls this one service. |
+| PRJ-012 | P1 | **Import/export service** (`ImportExportService` in `GulpWorkspace`, UI-free so the CLI/MCP use it too): **import** HAR, Postman collections (v2.1), OpenAPI/Swagger documents (handed to ADV-050 for request building), `sitemap.xml`/URL lists, and another `.gulp` (exchanges, issues, Notebook items); **export** selected/filtered exchanges as HAR, CSV or `.gulp` items. Imports never send traffic; they are dedup-aware, tag imported exchanges `imported` (`exchange_tags`, doc 04 §4) with the source the file states (default `.proxy`), feed the site map, and report what was skipped and why. Every import entry point (HIS-044, PRJ-008, TGT-009, ADV-051, AUT-004) calls this one service. *(Consolidated by the 2026-11-08 feature review; M6b.)* |
+| PRJ-013 | P1 | **Import history from other proxies** (lowers switching cost): through PRJ-012, import the reference suite's XML proxy-history export (base64 request/response items) and Caido's exported requests (JSON/HAR), plus mitmproxy HAR exports, preserving raw bytes, timestamps and comments/highlights where the format has them. The UI must not name the reference suite (CLAUDE.md §4): label the format "XML proxy-history export" and auto-detect it. *(Added by the 2026-11-08 feature review, A5; M6b.)* |
 
 ### 2.4 Resource control (moved from F29 Governor, 2026-11-08)
 
@@ -99,3 +100,6 @@ The shared limiter itself is F03 §3.4 (GOV-002/003/007); these are its workspac
 6. Import/export round trip (PRJ-012): exporting 1,000 history rows as HAR and importing the file
    into a new project reproduces the same requests and responses byte-for-byte; importing the same
    HAR twice adds nothing the second time (dedup).
+7. Other-proxy import (PRJ-013): the fixtures in `Tests/Fixtures/import/` (an XML proxy-history
+   export, a Caido export and a mitmproxy HAR, each captured against VulnLab) import with every
+   request's bytes intact and their comments/highlights carried over.
