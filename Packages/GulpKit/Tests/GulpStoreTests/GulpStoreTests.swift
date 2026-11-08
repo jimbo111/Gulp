@@ -96,7 +96,8 @@ struct StoreTests {
         let bus = EventBus()
         let events = await bus.subscribe()
         let store = try ProjectStore.open(at: temporaryProject(), eventBus: bus)
-        let id = try await store.openWebSocket(upgradeExchangeID: 7, url: "ws://h/chat")
+        let upgrade = await store.writer.record(sampleExchange(path: "/chat"))  // not flushed yet
+        let id = try await store.openWebSocket(upgradeExchangeID: upgrade, url: "ws://h/chat")
         let frames = [
             WSFrameInfo(fin: false, opcode: 1, rsv: 0, length: 3, masked: true),
             WSFrameInfo(fin: true, opcode: 0, rsv: 0, length: 2, masked: true),
@@ -107,7 +108,7 @@ struct StoreTests {
             connection: id, direction: 1, opcode: 2, payload: [0, 1, 2], frames: [])
         var connections = try await store.webSocketConnections()
         #expect(connections.count == 1)
-        #expect(connections.first?.url == "ws://h/chat" && connections.first?.upgradeExchangeID == 7)
+        #expect(connections.first?.url == "ws://h/chat" && connections.first?.upgradeExchangeID == upgrade)
         #expect(connections.first?.messageCount == 2 && connections.first?.closedAt == nil)
         try await store.closeWebSocket(id, code: 1000)
         connections = try await store.webSocketConnections()
@@ -119,7 +120,9 @@ struct StoreTests {
         #expect(messages.last?.payload == [0, 1, 2] && messages.last?.opcode == 2)
         var seen: [GulpEvent] = []
         for await delivery in events {
-            if let event = delivery.event { seen.append(event) }
+            guard let event = delivery.event else { continue }
+            if case .exchangeRecorded = event { continue }
+            seen.append(event)
             if seen.count == 4 { break }
         }
         #expect(seen.first == .wsConnectionChanged(id))

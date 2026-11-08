@@ -43,6 +43,9 @@ public struct WebSocketMessageRecord: Sendable, Hashable, Identifiable {
 extension ProjectStore {
     /// Record a newly opened connection; returns its id.
     public func openWebSocket(upgradeExchangeID: ExchangeID?, url: String) async throws -> Int64 {
+        // The upgrade's id is handed out before its row is written (writes are coalesced): flush so
+        // the foreign key finds it.
+        if upgradeExchangeID != nil { await writer.flush() }
         let id = try await pool.write { db in
             try db.execute(
                 sql: "INSERT INTO ws_connections (upgrade_exchange_id, url, opened_at) VALUES (?, ?, ?)",
