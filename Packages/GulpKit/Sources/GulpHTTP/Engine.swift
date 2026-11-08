@@ -202,6 +202,8 @@ public struct SendOptions: Sendable {
     public var recordAs: ToolSource
     /// The client the request came from (proxy traffic, PRX-004); recorded with the exchange.
     public var clientAddress: String?
+    /// The request before someone edited it (intercept, PRX-012); recorded as the original.
+    public var originalRequest: RawRequest?
 
     /// Options with defaults, recorded as `recordAs`.
     public init(recordAs: ToolSource) {
