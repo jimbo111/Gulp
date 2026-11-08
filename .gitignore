@@ -15,3 +15,6 @@ Package.resolved.user
 # Secrets / local
 *.p12
 Secrets.local*
+
+# Agent worktrees (local only)
+.claude/worktrees/
