@@ -163,7 +163,7 @@ let package = Package(
 
         // ---- Tests (one per module + integration) ----
         .testTarget(name: "GulpCoreTests", dependencies: ["GulpCore"], resources: [.copy("Fixtures")]),
-        .testTarget(name: "GulpCodecTests", dependencies: ["GulpCodec"]),
+        .testTarget(name: "GulpCodecTests", dependencies: ["GulpCodec", "GulpCore"]),
         .testTarget(name: "GulpQueryTests", dependencies: ["GulpQuery"]),
         .testTarget(name: "GulpDiffTests", dependencies: ["GulpDiff"]),
         .testTarget(name: "GulpStoreTests", dependencies: ["GulpStore"]),
