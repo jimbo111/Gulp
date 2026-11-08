@@ -5,6 +5,7 @@
 // per held item), so a held request blocks only its own exchange; other connections and other
 // HTTP/2 streams keep flowing (PRX-017).
 
+import Foundation
 import GulpCore
 import GulpHTTP
 

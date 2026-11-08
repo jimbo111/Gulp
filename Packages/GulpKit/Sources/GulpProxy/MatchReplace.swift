@@ -7,6 +7,7 @@
 // the bytes it didn't touch. Patterns and replacements the user types are UTF-8; they are converted
 // to the same view, so `é` in a rule matches the UTF-8 bytes C3 A9.
 
+import Foundation
 import GulpCore
 import GulpHTTP
 import NIOConcurrencyHelpers
