@@ -97,7 +97,7 @@ struct InterceptProxyTests {
         let received = String(decoding: origin.received(), as: UTF8.self)
         #expect(received.hasSuffix("Content-Length: 18\r\n\r\nuser=administrator"))  // PRX-018
         try await Task.sleep(for: .milliseconds(50))
-        let proxied = await recorded.exchanges
+        let proxied = await recorded.settled(1)
         #expect(proxied.first?.edited?.originalRequest?.bytes.string().hasSuffix("user=alice") == true)
         #expect(proxied.first?.request.bytes.string().hasSuffix("user=administrator") == true)
         await client.shutdown()

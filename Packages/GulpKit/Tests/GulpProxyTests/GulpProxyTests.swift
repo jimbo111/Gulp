@@ -94,6 +94,16 @@ actor Recorded: ExchangeRecorder {
     func update(_ exchange: Exchange) {
         if let index = exchanges.firstIndex(where: { $0.id == exchange.id }) { exchanges[index] = exchange }
     }
+
+    /// The exchanges once `count` of them are finished (streamed responses are recorded as pending
+    /// first and completed a moment after the client has the bytes, PRX-050).
+    func settled(_ count: Int) async -> [Exchange] {
+        for _ in 0..<200 {
+            if exchanges.filter({ $0.state != .pending }).count >= count { break }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return exchanges
+    }
 }
 
 /// A proxy (with its own recording engine) on an ephemeral port.
@@ -159,7 +169,7 @@ struct ProxyTests {
         let client = NIOHTTPEngine()
         let request = RawRequest(Bytes("GET http://127.0.0.1:\(origin.port)/rec HTTP/1.1\r\nHost: x\r\n\r\n"))
         _ = await client.send(request, to: proxyTarget, options: clientOptions())
-        let recorded = await recorder.exchanges
+        let recorded = await recorder.settled(1)
         #expect(recorded.count == 1)
         #expect(recorded.first?.source == .proxy)
         #expect(recorded.first?.clientAddress?.hasPrefix("127.0.0.1:") == true)
@@ -340,7 +350,7 @@ struct TunnelTests {
         #expect(origin.received() == Array("GET /secret HTTP/1.1\r\nHost: localhost\r\n\r\n".utf8))
         // The proxy recorded the decrypted exchange, with the origin's own chain.
         try await Task.sleep(for: .milliseconds(100))
-        let exchanges = await recorded.exchanges
+        let exchanges = await recorded.settled(1)
         let proxied = try #require(exchanges.first)
         #expect(proxied.source == .proxy)
         #expect(proxied.target.scheme == .https && proxied.target.port == origin.port)
@@ -385,7 +395,7 @@ struct TunnelTests {
         #expect(result.exchange.response?.parsed.statusCode == 200)
         #expect(origin.received() == Array("GET /plain HTTP/1.1\r\nHost: x\r\n\r\n".utf8))
         try await Task.sleep(for: .milliseconds(100))
-        let exchanges = await recorded.exchanges
+        let exchanges = await recorded.settled(1)
         #expect(exchanges.first?.target.port == origin.port)
         await client.shutdown()
         await proxy.stopAll()
@@ -485,7 +495,7 @@ struct ProxyHTTP2Tests {
         #expect(parts.body == Array("GET /trailers".utf8))
         #expect(parts.trailers == [H2Header("grpc-status", "0")])
         try await Task.sleep(for: .milliseconds(100))
-        let proxied = await recorded.exchanges
+        let proxied = await recorded.settled(1)
         #expect(proxied.first?.httpVersion == .http2)
         await client.shutdown()
         await proxy.stopAll()
