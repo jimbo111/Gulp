@@ -10,8 +10,11 @@ import NIOCore
 public protocol WebSocketRecorder: Sendable {
     /// A connection opened by the upgrade recorded as `upgradeExchangeID`; returns its id.
     func webSocketOpened(upgradeExchangeID: ExchangeID?, url: String) async -> Int64?
-    /// One message (control frames included).
-    func webSocketMessage(_ connection: Int64, direction: WSDirection, message: WSMessage) async
+    /// One message (control frames included), as forwarded. `original` is the payload before an
+    /// edit (Match & Replace or Intercept, PRX-033); `dropped` marks a message that was not sent.
+    func webSocketMessage(
+        _ connection: Int64, direction: WSDirection, message: WSMessage, original: [UInt8]?, dropped: Bool
+    ) async
     /// The connection closed (with the close code if a close frame was seen).
     func webSocketClosed(_ connection: Int64, code: Int?) async
 }

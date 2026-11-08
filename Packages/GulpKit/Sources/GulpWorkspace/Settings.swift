@@ -138,9 +138,32 @@ public struct InterceptSettings: SettingsGroup, Hashable {
     public var requestRules = InterceptCondition.defaultRequestRules
     /// Response rule conditions.
     public var responseRules: [InterceptCondition] = []
+    /// Hold WebSocket messages (PRX-033, its own toggle).
+    public var interceptWebSockets = false
+    /// Conditions on the upgrade request choosing which connections' messages are held.
+    public var webSocketRules: [InterceptCondition] = []
 
     /// Default settings.
     public init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case interceptRequests, interceptResponses, requestRules, responseRules, interceptWebSockets
+        case webSocketRules
+    }
+
+    /// Decode, defaulting fields that older projects don't have.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        interceptRequests = try container.decodeIfPresent(Bool.self, forKey: .interceptRequests) ?? false
+        interceptResponses = try container.decodeIfPresent(Bool.self, forKey: .interceptResponses) ?? false
+        requestRules =
+            try container.decodeIfPresent([InterceptCondition].self, forKey: .requestRules)
+            ?? InterceptCondition.defaultRequestRules
+        responseRules = try container.decodeIfPresent([InterceptCondition].self, forKey: .responseRules) ?? []
+        interceptWebSockets = try container.decodeIfPresent(Bool.self, forKey: .interceptWebSockets) ?? false
+        webSocketRules =
+            try container.decodeIfPresent([InterceptCondition].self, forKey: .webSocketRules) ?? []
+    }
 }
 
 /// Proxy settings (PRX-001): the listeners to run.

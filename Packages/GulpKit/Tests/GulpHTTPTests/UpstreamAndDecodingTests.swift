@@ -176,3 +176,18 @@ struct DecompressionTests {
         }
     }
 }
+
+@Suite("GulpHTTP — permessage-deflate for display (PRX-034)")
+struct WebSocketInflaterTests {
+    @Test("RFC 7692 §7.2.3: 'Hello' compressed, then again using the shared window")
+    func test_PRX034_inflate() throws {
+        let inflater = WebSocketInflater()
+        // §7.2.3.1 and §7.2.3.2: the second message refers back to the first (context takeover).
+        #expect(try inflater.inflate([0xF2, 0x48, 0xCD, 0xC9, 0xC9, 0x07, 0x00]) == Array("Hello".utf8))
+        #expect(try inflater.inflate([0xF2, 0x00, 0x11, 0x00, 0x00]) == Array("Hello".utf8))
+        let response = RawResponse(
+            Bytes("HTTP/1.1 101 Switching Protocols\r\nSec-WebSocket-Extensions: permessage-deflate\r\n\r\n"))
+        #expect(WebSocketInflater.negotiated(in: response))
+        #expect(!WebSocketInflater.negotiated(in: RawResponse(Bytes("HTTP/1.1 101 OK\r\n\r\n"))))
+    }
+}

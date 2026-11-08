@@ -62,6 +62,8 @@ public struct InterceptItem: Sendable, Identifiable, Equatable {
     public enum Kind: Sendable, Equatable {
         case request
         case response
+        /// A WebSocket message going this way (PRX-033); `request` is the upgrade request.
+        case webSocket(WSDirection)
     }
 
     /// Queue id.
@@ -76,6 +78,16 @@ public struct InterceptItem: Sendable, Identifiable, Equatable {
     public let response: RawResponse?
     /// When it was queued (the UI shows time waiting).
     public let queuedAt: ContinuousClock.Instant
+    /// The held WebSocket message's payload and opcode, for `.webSocket` items.
+    public var webSocketPayload: [UInt8]? = nil
+    /// Opcode of the held WebSocket message (1 text, 2 binary).
+    public var webSocketOpcode: UInt8? = nil
+
+    /// Whether this is a WebSocket message.
+    public var isWebSocket: Bool {
+        if case .webSocket = kind { return true }
+        return false
+    }
 }
 
 /// The user's decision for a held item.
@@ -96,6 +108,10 @@ public actor InterceptQueue {
     public private(set) var requestRules = InterceptCondition.defaultRequestRules
     /// Response rule conditions (PRX-014).
     public private(set) var responseRules: [InterceptCondition] = []
+    /// Whether WebSocket messages are held (PRX-033, a separate toggle).
+    public private(set) var interceptWebSockets = false
+    /// Conditions on the upgrade request that pick which connections' messages are held.
+    public private(set) var webSocketRules: [InterceptCondition] = []
 
     private struct Waiter {
         let item: InterceptItem
@@ -127,10 +143,41 @@ public actor InterceptQueue {
         }
     }
 
+    /// Turn WebSocket message interception on or off (off forwards held messages unchanged).
+    public func setInterceptingWebSockets(_ on: Bool) {
+        interceptWebSockets = on
+        if !on {
+            for id in order where held[id]?.item.isWebSocket == true { decide(id, .forward(nil)) }
+        }
+    }
+
     /// Replace the rule sets.
-    public func setRules(requests: [InterceptCondition]? = nil, responses: [InterceptCondition]? = nil) {
+    public func setRules(
+        requests: [InterceptCondition]? = nil, responses: [InterceptCondition]? = nil,
+        webSockets: [InterceptCondition]? = nil
+    ) {
         if let requests { requestRules = requests }
         if let responses { responseRules = responses }
+        if let webSockets { webSocketRules = webSockets }
+    }
+
+    /// Whether messages of the connection opened by `upgrade` are currently held.
+    public func interceptsWebSockets(upgrade: RawRequest, target: HTTPTarget) -> Bool {
+        interceptWebSockets && InterceptRules.matches(webSocketRules, request: upgrade, target: target)
+    }
+
+    /// Hold a WebSocket data message if WebSocket interception is on and the connection matches;
+    /// an edited payload comes back in `.forward(bytes)`.
+    public func holdWebSocketMessage(
+        _ payload: [UInt8], opcode: UInt8, direction: WSDirection, upgrade: RawRequest, target: HTTPTarget
+    ) async -> (InterceptDecision, held: Bool) {
+        guard interceptsWebSockets(upgrade: upgrade, target: target) else { return (.forward(nil), false) }
+        var item = InterceptItem(
+            id: nextID, kind: .webSocket(direction), target: target, request: upgrade, response: nil,
+            queuedAt: .now)
+        item.webSocketPayload = payload
+        item.webSocketOpcode = opcode
+        return (await hold(item), true)
     }
 
     /// Decide a held item (Forward / Drop, PRX-011).
@@ -173,10 +220,14 @@ public actor InterceptQueue {
     private func hold(
         _ kind: InterceptItem.Kind, request: RawRequest, response: RawResponse?, target: HTTPTarget
     ) async -> InterceptDecision {
-        let id = nextID
-        nextID += 1
         let item = InterceptItem(
-            id: id, kind: kind, target: target, request: request, response: response, queuedAt: .now)
+            id: nextID, kind: kind, target: target, request: request, response: response, queuedAt: .now)
+        return await hold(item)
+    }
+
+    private func hold(_ item: InterceptItem) async -> InterceptDecision {
+        let id = item.id
+        nextID += 1
         return await withCheckedContinuation { continuation in
             held[id] = Waiter(item: item, decide: continuation)
             order.append(id)

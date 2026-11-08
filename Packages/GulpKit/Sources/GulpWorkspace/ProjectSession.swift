@@ -148,10 +148,13 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
         try? await currentStore().openWebSocket(upgradeExchangeID: upgradeExchangeID, url: url)
     }
 
-    func webSocketMessage(_ connection: Int64, direction: WSDirection, message: WSMessage) async {
+    func webSocketMessage(
+        _ connection: Int64, direction: WSDirection, message: WSMessage, original: [UInt8]?, dropped: Bool
+    ) async {
         _ = try? await currentStore().recordWebSocketMessage(
             connection: connection, direction: direction.rawValue, opcode: Int(message.opcode),
-            payload: message.payload, frames: message.frames)
+            payload: message.payload, frames: message.frames, originalPayload: original,
+            comment: dropped ? "Dropped in Intercept" : nil)
     }
 
     func webSocketClosed(_ connection: Int64, code: Int?) async {
@@ -215,9 +218,11 @@ public actor ProjectSession {
     /// Apply the stored intercept settings to the queue (call after opening or changing them).
     public func applyInterceptSettings() async {
         let stored = settings.get(InterceptSettings.self)
-        await intercept.setRules(requests: stored.requestRules, responses: stored.responseRules)
+        await intercept.setRules(
+            requests: stored.requestRules, responses: stored.responseRules, webSockets: stored.webSocketRules)
         await intercept.setIntercepting(
             requests: stored.interceptRequests, responses: stored.interceptResponses)
+        await intercept.setInterceptingWebSockets(stored.interceptWebSockets)
     }
 
     /// Store and apply Match & Replace rules (PRX-020).

@@ -38,6 +38,10 @@ public struct WebSocketMessageRecord: Sendable, Hashable, Identifiable {
     public var payload: [UInt8]
     /// Frame boundaries.
     public var frames: [WSFrameInfo]
+    /// The payload before it was edited (Match & Replace or Intercept, PRX-033), if it was.
+    public var originalPayload: [UInt8]? = nil
+    /// A note, e.g. that the message was dropped in Intercept.
+    public var comment: String? = nil
 }
 
 extension ProjectStore {
@@ -56,22 +60,24 @@ extension ProjectStore {
         return id
     }
 
-    /// Record one message; returns its id.
+    /// Record one message; returns its id. `originalPayload` is the payload before an edit.
     @discardableResult
     public func recordWebSocketMessage(
-        connection: Int64, direction: Int, opcode: Int, payload: [UInt8], frames: [WSFrameInfo]
+        connection: Int64, direction: Int, opcode: Int, payload: [UInt8], frames: [WSFrameInfo],
+        originalPayload: [UInt8]? = nil, comment: String? = nil
     ) async throws -> Int64 {
         let framesJSON = String(decoding: try JSONEncoder().encode(frames), as: UTF8.self)
         let id = try await pool.write { db in
             let blob = try BlobStore.store(payload, in: db)
+            let original = try originalPayload.map { try BlobStore.store($0, in: db) }
             try db.execute(
                 sql: """
                     INSERT INTO ws_messages (connection_id, direction, opcode, created_at, payload_blob, \
-                    length, frames_json) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    original_payload_blob, length, frames_json, comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                 arguments: [
-                    connection, direction, opcode, Date().timeIntervalSince1970, blob, payload.count,
-                    framesJSON,
+                    connection, direction, opcode, Date().timeIntervalSince1970, blob, original,
+                    payload.count, framesJSON, comment,
                 ])
             return db.lastInsertedRowID
         }
@@ -116,12 +122,14 @@ extension ProjectStore {
             return try rows.map { row in
                 let blob: Int64? = row["payload_blob"]
                 let payload = try blob.flatMap { try BlobStore.load($0, from: db) } ?? []
+                let originalBlob: Int64? = row["original_payload_blob"]
+                let original = try originalBlob.flatMap { try BlobStore.load($0, from: db) }
                 let json: String = row["frames_json"] ?? "[]"
                 let frames = (try? JSONDecoder().decode([WSFrameInfo].self, from: Data(json.utf8))) ?? []
                 return WebSocketMessageRecord(
                     id: row["id"], direction: row["direction"], opcode: row["opcode"],
                     createdAt: Date(timeIntervalSince1970: row["created_at"]), payload: payload,
-                    frames: frames)
+                    frames: frames, originalPayload: original, comment: row["comment"])
             }
         }
     }

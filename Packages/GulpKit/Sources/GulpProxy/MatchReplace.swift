@@ -12,7 +12,7 @@ import GulpCore
 import GulpHTTP
 import NIOConcurrencyHelpers
 
-/// What a rule rewrites (PRX-020). The WebSocket kinds apply once WebSockets land (M4b).
+/// What a rule rewrites (PRX-020). The WebSocket kinds rewrite whole message payloads (M4b).
 public enum MatchReplaceKind: String, Sendable, Codable, CaseIterable {
     case requestHeader, requestBody, requestFirstLine, requestParamName, requestParamValue
     case responseHeader, responseBody, responseFirstLine
@@ -88,6 +88,10 @@ public struct MatchReplaceRule: Sendable, Codable, Hashable, Identifiable {
         MatchReplaceRule(
             enabled: false, kind: .responseHeader, match: "(?i)^Strict-Transport-Security:.*$",
             replace: "", isRegex: true, comment: "Hide HSTS"),
+        MatchReplaceRule(
+            enabled: false, kind: .requestHeader, match: "(?i)^Sec-WebSocket-Extensions:.*$",
+            replace: "", isRegex: true,
+            comment: "Turn off WebSocket compression (so messages can be intercepted and edited)"),
     ]
 }
 
@@ -115,6 +119,16 @@ public enum MatchReplace {
         }
         guard bytes != response.bytes.rawBytes else { return response }
         return RawResponse(Bytes(bytes), interim: response.interim, headRequest: response.isHeadResponse)
+    }
+
+    /// A WebSocket message payload with every enabled rule for `direction` applied, in order.
+    public static func apply(
+        _ rules: [MatchReplaceRule], toWebSocket payload: [UInt8], direction: WSDirection
+    ) -> [UInt8] {
+        let kind: MatchReplaceKind = direction == .toServer ? .webSocketToServer : .webSocketToClient
+        var bytes = payload
+        for rule in rules where rule.enabled && rule.kind == kind { bytes = rewrite(bytes, rule) }
+        return bytes
     }
 
     static func applyOne(_ rule: MatchReplaceRule, to message: [UInt8], isRequest: Bool) -> [UInt8] {
@@ -331,6 +345,17 @@ public final class MatchReplaceHook: RequestHook, ResponseHook, Sendable {
     /// to the client as it arrives, F01 §4.3).
     public func rewritesResponses(for source: ToolSource) -> Bool {
         active(for: source).contains { !$0.kind.isRequest }
+    }
+
+    /// Whether any enabled rule rewrites WebSocket messages going `direction` (proxy traffic).
+    public func rewritesWebSockets(_ direction: WSDirection) -> Bool {
+        let kind: MatchReplaceKind = direction == .toServer ? .webSocketToServer : .webSocketToClient
+        return active(for: .proxy).contains { $0.kind == kind }
+    }
+
+    /// Rewrite a WebSocket message payload going `direction`.
+    public func rewriteWebSocket(_ payload: [UInt8], direction: WSDirection) -> [UInt8] {
+        MatchReplace.apply(active(for: .proxy), toWebSocket: payload, direction: direction)
     }
 
     func active(for source: ToolSource) -> [MatchReplaceRule] {

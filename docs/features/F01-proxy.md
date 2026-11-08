@@ -70,7 +70,7 @@ editing (intercept), rewrite them automatically (match & replace), and feeds the
 | PRX-032 | P0 | WebSockets history view: connection list + message table + editor; filter by direction/opcode/text. |
 | PRX-033 | P1 | Intercept WebSocket messages (separate toggle and rules); edit and forward/drop. |
 | PRX-034 | P1 | Decompress `permessage-deflate` for display and editing; re-compress on forward (or negotiate it away via a match-replace preset removing `Sec-WebSocket-Extensions`). |
-| PRX-035 | P1 | Send a WS message to Repeater: Repeater opens a WS session (F06 REP-012) on a new connection with the same upgrade request. |
+| PRX-035 | P1 | Send a WS message to Repeater: Repeater opens a WS session (F06 REP-012) on a new connection with the same upgrade request. *(later: M5, with REP-012.)* |
 | PRX-036 | P2 | Socket.IO / STOMP / GraphQL-WS / JSON-RPC message pretty-printing. |
 | WSX-006 | P1 | Extends PRX-036: decode common WS sub-protocols/envelopes (JSON, STOMP, SignalR, socket.io, GraphQL-WS `connection_init`/`subscribe`) into an editable structured view and re-encode on send; shared by WS history, the WS Repeater (F06 REP-012) and the WS Fuzzer (F07 §2.6). Same registry idea as the F12 transforms; unknown protocols fall back to raw text/hex. *(Moved from F26, 2026-11-08; later: M22 — post-1.0.)* |
 

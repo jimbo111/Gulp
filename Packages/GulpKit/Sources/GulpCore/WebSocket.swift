@@ -184,11 +184,12 @@ public struct WSMessageAssembler: Sendable {
 
 /// Frame encoding and the opening handshake's accept value.
 public enum WebSocketWire {
-    /// One frame. A client must pass a `mask` key (4 bytes); a server must not.
+    /// One frame. A client must pass a `mask` key (4 bytes); a server must not. `rsv` is RSV1…RSV3
+    /// as a 3-bit value (RSV1 = 4 marks a permessage-deflate message).
     public static func frame(
-        opcode: WSOpcode, payload: [UInt8], fin: Bool = true, mask: [UInt8]? = nil
+        opcode: WSOpcode, payload: [UInt8], fin: Bool = true, mask: [UInt8]? = nil, rsv: UInt8 = 0
     ) -> [UInt8] {
-        var out: [UInt8] = [(fin ? 0x80 : 0) | opcode.rawValue]
+        var out: [UInt8] = [(fin ? 0x80 : 0) | (rsv & 0x07) << 4 | opcode.rawValue]
         let maskBit: UInt8 = mask == nil ? 0 : 0x80
         switch payload.count {
         case ..<126:

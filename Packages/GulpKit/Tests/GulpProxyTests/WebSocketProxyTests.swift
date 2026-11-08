@@ -97,6 +97,7 @@ final class WSEchoHandler: ChannelInboundHandler {
 actor WSRecorded: WebSocketRecorder {
     var opened: [(upgrade: ExchangeID?, url: String)] = []
     var messages: [(WSDirection, WSMessage)] = []
+    var edits: [(original: [UInt8]?, dropped: Bool)] = []
     var closed: [Int?] = []
 
     func webSocketOpened(upgradeExchangeID: ExchangeID?, url: String) -> Int64? {
@@ -104,8 +105,11 @@ actor WSRecorded: WebSocketRecorder {
         return Int64(opened.count)
     }
 
-    func webSocketMessage(_ connection: Int64, direction: WSDirection, message: WSMessage) {
+    func webSocketMessage(
+        _ connection: Int64, direction: WSDirection, message: WSMessage, original: [UInt8]?, dropped: Bool
+    ) {
         messages.append((direction, message))
+        edits.append((original, dropped))
     }
 
     func webSocketClosed(_ connection: Int64, code: Int?) {
@@ -208,6 +212,98 @@ struct WebSocketProxyTests {
         }
         #expect(sink.text.components(separatedBy: "403 Forbidden").count == 3)
         try? await client.close()
+        await proxy.stopAll()
+        await origin.stop()
+    }
+
+    /// Open a WebSocket to `origin` through `proxy` (the upgrade only).
+    func open(_ origin: WSEchoOrigin, via port: Int, sink: ByteSink) async throws -> any Channel {
+        let client = try await connect(to: port, sink: sink)
+        let upgrade =
+            "GET http://127.0.0.1:\(origin.port)/chat HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\n"
+            + "Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
+        try await client.writeAndFlush(client.allocator.buffer(string: upgrade))
+        try await sink.wait(for: "\r\n\r\n")
+        return client
+    }
+
+    func send(_ text: String, on client: any Channel) async throws {
+        let frame = WebSocketWire.frame(opcode: .text, payload: Array(text.utf8), mask: [9, 8, 7, 6])
+        try await client.writeAndFlush(client.allocator.buffer(bytes: frame))
+    }
+
+    @Test("PRX-020/031: a WebSocket Match & Replace rule rewrites messages; the original is recorded")
+    func test_PRX020_webSocketRule() async throws {
+        let origin = try await WSEchoOrigin.start()
+        let sockets = WSRecorded()
+        let rule = MatchReplaceRule(
+            kind: .webSocketToServer, match: "token=\\w+", replace: "token=X", isRegex: true)
+        let proxy = ProxyServer(
+            engine: NIOHTTPEngine(recorder: Recorded()), matchReplace: MatchReplaceHook(rules: [rule]),
+            webSockets: sockets)
+        let port = try await proxy.start(ProxyListenerConfig(port: 0))
+        let sink = ByteSink()
+        let client = try await open(origin, via: port, sink: sink)
+        try await send("token=abc&x=1", on: client)
+        try await sink.wait(for: "echo: token=X&x=1")
+        #expect(sink.text.contains("echo: token=X&x=1"))
+        try await send("untouched", on: client)
+        try await sink.wait(for: "echo: untouched")
+        try? await client.close()
+        for _ in 0..<200 where await sockets.closed.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        let messages = await sockets.messages
+        let edits = await sockets.edits
+        let sent = messages.indices.filter { messages[$0].0 == .toServer }
+        #expect(sent.count == 2)
+        #expect(sent.first.map { messages[$0].1.payload } == Array("token=X&x=1".utf8))
+        #expect(sent.first.map { edits[$0].original } == Array("token=abc&x=1".utf8))
+        #expect(sent.last.map { edits[$0].original == nil } == true)
+        await proxy.stopAll()
+        await origin.stop()
+    }
+
+    @Test("PRX-033: held WebSocket messages are edited or dropped; a dropped one never arrives")
+    func test_PRX033_interceptWebSocket() async throws {
+        let origin = try await WSEchoOrigin.start()
+        let sockets = WSRecorded()
+        let queue = InterceptQueue()
+        await queue.setInterceptingWebSockets(true)
+        let proxy = ProxyServer(
+            engine: NIOHTTPEngine(recorder: Recorded()), intercept: queue, webSockets: sockets)
+        let port = try await proxy.start(ProxyListenerConfig(port: 0))
+        let sink = ByteSink()
+        let client = try await open(origin, via: port, sink: sink)
+        // Decide held items as they show up: server messages go on unchanged, ours are edited/dropped.
+        let decider = Task {
+            for _ in 0..<500 {
+                for item in await queue.items {
+                    let text = String(decoding: item.webSocketPayload ?? [], as: UTF8.self)
+                    switch (item.kind, text) {
+                    case (.webSocket(.toServer), "secret"):
+                        await queue.decide(item.id, .forward(Bytes("changed")))
+                    case (.webSocket(.toServer), "drop me"): await queue.decide(item.id, .drop)
+                    default: await queue.decide(item.id, .forward(nil))
+                    }
+                }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        try await sink.wait(for: "welcome")
+        #expect(sink.text.contains("welcome"))
+        try await send("drop me", on: client)
+        try await send("secret", on: client)
+        try await sink.wait(for: "echo: changed")
+        #expect(sink.text.contains("echo: changed"))
+        #expect(!sink.text.contains("drop me") && !sink.text.contains("secret"))
+        decider.cancel()
+        try? await client.close()
+        for _ in 0..<200 where await sockets.closed.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        let messages = await sockets.messages
+        let edits = await sockets.edits
+        let toServer = messages.indices.filter { messages[$0].0 == .toServer }
+        #expect(toServer.map { edits[$0].dropped } == [true, false])
+        #expect(toServer.last.map { edits[$0].original } == Array("secret".utf8))
+        #expect(toServer.last.map { messages[$0].1.payload } == Array("changed".utf8))
         await proxy.stopAll()
         await origin.stop()
     }
