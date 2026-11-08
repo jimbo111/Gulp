@@ -4,8 +4,8 @@
 
 import Foundation
 import GulpProxy
-import GulpTLS
 import GulpStore
+import GulpTLS
 
 /// A versionable group of settings stored under one key.
 public protocol SettingsGroup: Codable, Sendable {

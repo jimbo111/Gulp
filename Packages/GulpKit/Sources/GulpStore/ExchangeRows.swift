@@ -46,6 +46,8 @@ public struct ExchangeSummary: Sendable, Hashable, Identifiable {
     public var error: String?
     /// End-to-end time in milliseconds.
     public var totalMs: Double?
+    /// Protocol of the exchange (HTTP/2 is flagged in the History, M3b).
+    public var httpVersion: HTTPVersion
 
     /// Create a row (the store builds these from the `exchanges` table; tests and previews build
     /// them directly).
@@ -54,7 +56,7 @@ public struct ExchangeSummary: Sendable, Hashable, Identifiable {
         method: String? = nil, path: String? = nil, query: String? = nil, status: Int? = nil,
         responseLength: Int? = nil, mime: String? = nil, title: String? = nil, ext: String? = nil,
         paramCount: Int = 0, highlight: Highlight? = nil, comment: String? = nil, state: String,
-        error: String? = nil, totalMs: Double? = nil
+        error: String? = nil, totalMs: Double? = nil, httpVersion: HTTPVersion = .http1_1
     ) {
         self.id = id
         self.source = source
@@ -76,6 +78,7 @@ public struct ExchangeSummary: Sendable, Hashable, Identifiable {
         self.state = state
         self.error = error
         self.totalMs = totalMs
+        self.httpVersion = httpVersion
     }
 
     /// The URL shown in the History table.
@@ -90,7 +93,7 @@ public struct ExchangeSummary: Sendable, Hashable, Identifiable {
 enum ExchangeRows {
     static let summaryColumns = """
         id, source, created_at, scheme, host, port, method, path, query, status, response_length, mime, \
-        title, extension, param_count, highlight, comment, state, error, timing_json
+        title, extension, param_count, highlight, comment, state, error, timing_json, http_version
         """
 
     /// Insert `exchange` (whose `id` is already assigned) with its blobs, tags and search text.
@@ -233,6 +236,7 @@ enum ExchangeRows {
             responseLength: row["response_length"], mime: row["mime"], title: row["title"],
             ext: row["extension"],
             paramCount: row["param_count"] ?? 0, highlight: highlight.flatMap(Highlight.init),
-            comment: row["comment"], state: row["state"], error: row["error"], totalMs: timing?.totalMs)
+            comment: row["comment"], state: row["state"], error: row["error"], totalMs: timing?.totalMs,
+            httpVersion: HTTPVersion(rawValue: row["http_version"] ?? "") ?? .http1_1)
     }
 }
