@@ -1,6 +1,6 @@
 # F09 — Crawler
 
-> Milestones: M11 (static), M13 (browser-backed) · Modules: `GulpCrawler`, `GulpBrowser` (optional),
+> Milestones: M11a (static), M13a (browser-backed) · Modules: `GulpCrawler`, `GulpBrowser` (optional),
 > `GulpFeatures/Scanner` · Depends on: F03, F04, F15, F16
 
 ## 1. Purpose
@@ -18,13 +18,13 @@ output fills the site map and feeds the active Scanner ("crawl and audit").
 | CRL-003 | P0 | A crawl **frontier**: a queue with dedup by normalized URL, depth limit, page budget, and per-host concurrency. Normalization handles default ports, trailing slashes, fragment removal, and (configurable) ignoring volatile query params. |
 | CRL-004 | P0 | Form handling: discover forms, fill inputs with safe plausible values (configurable field→value heuristics), and submit GET forms by default; POST forms only in "submit forms" mode with a confirmation and a "never submit matching" exclude list (e.g. logout, delete). |
 | CRL-005 | P0 | Robots/sitemap: read `/robots.txt` and `/sitemap.xml` for additional URLs (as hints; obeying `Disallow` is a setting, default off for authorized testing but clearly labeled). |
-| CRL-006 | P0 | Session awareness: run session rules/macros (F15) so the crawl stays logged in; detect logout (by a configurable signal) and re-authenticate. *(Build the re-auth hook point in M11; the session-rule/macro wiring is completed in M12 when F15 lands. The M11 crawler runs unauthenticated.)* |
+| CRL-006 | P0 | Session awareness: run session rules/macros (F15) so the crawl stays logged in; detect logout (by a configurable signal) and re-authenticate. *(Build the re-auth hook point in M11a; the session-rule/macro wiring is completed in M12a when F15 lands — later: M12a. The M11a crawler runs unauthenticated.)* |
 | CRL-007 | P1 | Duplicate-content detection: collapse near-identical pages (hash of structure) to avoid crawling pagination/calendars forever; a "crawl similar pages up to N" cap. |
 | CRL-008 | P1 | Coverage controls: max depth, max pages, max per-directory, max duration, and request throttling (shared pool). |
 | CRL-009 | P1 | Parameter discovery during crawl: record every param name/value seen to inform the site map's analysis (F04 TGT-008) and the Scanner. |
 | CRL-010 | P1 | Crawl report: pages discovered, forms found, parameters, errors, and auth events. |
 
-### Browser-backed mode (M13)
+### Browser-backed mode (M13a)
 
 | ID | Pri | Requirement |
 |---|---|---|

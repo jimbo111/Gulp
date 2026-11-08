@@ -317,4 +317,15 @@ public protocol HTTPEngine: Sendable {
     func openWebSocket(
         _ upgrade: RawRequest, to target: HTTPTarget, options: SendOptions
     ) async throws -> WebSocketSession
+    /// Connect to an HTTPS `target` ahead of the first request and return the ALPN protocol the
+    /// server chose (`h2`, `http/1.1`), leaving the connection pooled for the sends that follow with
+    /// the same options. The proxy uses it to mirror ALPN to its client (F01 PRX-008).
+    func negotiatedProtocol(for target: HTTPTarget, options: SendOptions) async -> String?
+}
+
+extension HTTPEngine {
+    /// Engines that can't pre-connect report no protocol (the proxy then offers HTTP/1.1).
+    public func negotiatedProtocol(for target: HTTPTarget, options: SendOptions) async -> String? {
+        nil
+    }
 }

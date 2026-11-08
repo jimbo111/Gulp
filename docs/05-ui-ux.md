@@ -52,6 +52,9 @@ support keyboard navigation everywhere.
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+- Since the 2026-11-08 feature review the **Sequencer** entry is hidden in v1 builds (F11 is
+  post-1.0); the other tools appear as their milestones land. GraphQL ships in M13b, Authz Matrix in
+  M12b, and the JWT Workbench with the Decoder in M7.
 - Sidebar: `NavigationSplitView` with sections. Badges show counts: Repeater tabs, new issues,
   intercepted items waiting, new Beacon interactions. The user can hide or reorder tools
   (Settings → Appearance).
@@ -71,9 +74,9 @@ support keyboard navigation everywhere.
 
 ## 4. Shared components (GulpUI)
 
-These are used everywhere. Build them once, in M2/M4, and reuse them. **Priority:** every `UI-xxx`
+These are used everywhere. Build them once, in M2/M4a, and reuse them. **Priority:** every `UI-xxx`
 component is **P0 for the milestone that first needs it** (the roadmap lists which — e.g. the
-`MessageEditor` in M4); they have no `Pri` column because they are shared infrastructure, not
+`MessageEditor` in M4a); they have no `Pri` column because they are shared infrastructure, not
 optional features. The same holds for the §5 shortcuts (they ship with the actions they trigger).
 
 | ID | Component | Description |
@@ -89,7 +92,8 @@ optional features. The same holds for the §5 shortcuts (they ship with the acti
 | UI-020 | `InspectorPanel` | Right sidebar next to any message: request attributes (method, path, protocol), query params, body params, cookies, headers, HTTP/2 pseudo-headers, response headers, **selected text** decoded live (URL, HTML, Base64, hex, JWT…). Each item is editable and writes back to the raw message |
 | UI-021 | `DecoderPopover` | Select text in any editor → ⌥⌘D shows a popover with the decoded value and "Replace selection with encoded…" actions |
 | UI-030 | `DiffView` | Side-by-side or unified diff with word/byte modes (F13); reused in Repeater ("compare with previous response") |
-| UI-040 | `SendToMenu` | One context-menu builder used by every table and editor: Send to Repeater (⌘R), Fuzzer (⌘I), Scanner (Active/Passive), Comparer (request/response), Decoder, Sequencer, Notebook (⌘⇧N), Authz Matrix, Copy as cURL/Python/JS/Go, Copy URL, Save item, Engagement tools ▸, Extensions ▸, Assistant ▸ Explain |
+| UI-040 | `SendToMenu` | One context-menu builder used by every table and editor: Send to Repeater (⌘R), Fuzzer (⌘I), Scanner (Active/Passive), Comparer (request/response), Decoder, Notebook (⌘⇧N), Authz Matrix, Copy as (ETL-008), Copy URL, Save item, Generate CSRF PoC (F19 ETL-007), Extensions ▸, Assistant ▸ Explain. Each entry appears once its tool exists (e.g. Authz Matrix from M12b); Sequencer is post-1.0 (F11) |
+| ETL-008 | Copy as (moved from F17, 2026-11-08; P1, M4a) | **Copy as**: cURL, PowerShell, fetch (JS), Python requests, Go — from any request. One `RequestExport` serializer helper used by every UI-040 menu, so all tools copy identically |
 | UI-041 | `HighlightMenu` | Set a highlight color (⌘1…⌘9 when the table has focus), add a comment (⌘/) |
 | UI-050 | `SplitLayoutControl` | Toggle request/response layout: side-by-side, top/bottom, or tabs. Remembered per tool |
 | UI-060 | `TreeView` | NSOutlineView for the site map and the issue tree |

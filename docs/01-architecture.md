@@ -16,7 +16,7 @@
 | Scripting | **JavaScriptCore** (macOS) for Snippets and in-process extensions | Built into macOS, sandboxable |
 | Out-of-process extensions | JSON-RPC 2.0 over stdio | Any language (a Python SDK is provided) |
 | Browser automation | Chrome DevTools Protocol (CDP) over WebSocket to a managed Chromium | Crawling, DOM Probe, login recording |
-| Charts | Swift Charts | Sequencer, dashboard |
+| Charts | Swift Charts | Dashboard, Fuzzer charts (and the post-1.0 Sequencer) |
 | Updates | Sparkle 2 | De facto standard for apps distributed outside the App Store |
 | Project generation | XcodeGen (`project.yml`) | A text project file that Claude can edit; `.xcodeproj` is git-ignored |
 
@@ -57,7 +57,7 @@ Gulp/
 │       │   ├── GulpScanner/         # passive/active checks, insertion points, issue model, recipes
 │       │   ├── GulpCrawler/         # HTML/JS link extraction, crawl frontier, (CDP-backed mode)
 │       │   ├── GulpOAST/            # Beacon client + interactsh client
-│       │   ├── GulpSequencer/       # token capture + statistical tests
+│       │   ├── GulpSequencer/       # token capture + statistical tests (F11, post-1.0: placeholder in v1)
 │       │   ├── GulpDiff/            # Myers diff, similarity scoring
 │       │   ├── GulpBrowser/         # Chromium discovery/launch, CDP client  (macOS only)
 │       │   ├── GulpScript/          # JavaScriptCore runtime, Snippets, JS extension host (macOS only)
@@ -71,7 +71,7 @@ Gulp/
 │       │   ├── gulp-cli/            # headless executable
 │       │   └── gulp-vulnlab/        # intentionally vulnerable test server (executable)
 │       └── Tests/  (one test target per module, + IntegrationTests)
-├── Beacon/                          # OAST server: separate SwiftPM package, deployable on Linux/Docker
+├── Beacon/                          # OAST server: separate SwiftPM package (v1: dev mode for tests; deployable server post-1.0)
 │   ├── Package.swift
 │   ├── Sources/gulp-beacon/
 │   └── Dockerfile
@@ -163,7 +163,9 @@ This lets most of the engine be built and tested in Linux CI or cloud containers
 - **Managed Chromium**: a child process launched by `GulpBrowser`, with its own profile, proxy and
   CDP port.
 - **Out-of-process extensions**: child processes that talk JSON-RPC over stdio.
-- **gulp-beacon** (optional): the user's own OAST server, deployed on a VPS (see F10).
+- **gulp-beacon** (optional): the user's own OAST server, deployed on a VPS (see F10). In v1 only
+  its local dev mode (`make beacon`, BCN-024) is built, for tests; the deployable server is post-1.0
+  (2026-11-08 feature review), and v1 users use an interactsh server (BCN-005).
 
 ### 5.2 ProjectSession (GulpWorkspace)
 
@@ -286,7 +288,7 @@ Tool builds RawRequest
 ScopeGuard.check (active tools) ── refuse/confirm
    ▼
 HTTPEngine.send(request, target, options)
-   ├─ RequestHooks (ordered): SessionRules (F15) → TransformTags (F12) → Extensions → ContentLengthFixer (if enabled)
+   ├─ RequestHooks (ordered): SessionRules (F15) → TransformTags (F12) → Extensions → ContentLengthFixer (if enabled) → RequestSigning (F15 SES-016…018, if configured)
    ├─ Connection: pool lookup or new (TCP → optional upstream proxy CONNECT → TLS with SNI → ALPN)
    └─ ResponseHooks: Extensions → SessionRules (cookie jar update)
    ▼

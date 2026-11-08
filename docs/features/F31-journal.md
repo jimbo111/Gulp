@@ -1,62 +1,50 @@
-# F31 — Journal (engagement timeline, coverage map & "where was I")
+# F31 — Journal (engagement timeline, coverage map & "where was I") (merged)
 
-> Milestones: M9 (coverage index) and M16 (full coverage/timeline/map tool) · Modules: `GulpFeatures/Journal` ·
-> Depends on: F04, F05, F08, F14
+> Milestone: none — merged into F04 and F14 on 2026-11-08 · Modules: none of its own (was
+> `GulpFeatures/Journal`) · Was scheduled: coverage index in M9, full tool in M16 · Depends on: F04, F05, F08, F14
 
 ## 1. Purpose
 
-A chronological, per-engagement record of what the tester actually did (sent to Repeater, fuzzed,
-scanned, noted, flagged) joined to a **coverage view** of the attack surface: which
-hosts/endpoints/params have been touched by which tool, and which are untested. The Dashboard shows
-*live* tasks/issues/events; the Journal is the *historical + coverage + planning* layer a consultant
-uses to plan, track progress, and avoid missing endpoints.
+**Merged (2026-11-08 feature review, `docs/FEATURE-REVIEW.md` §3.3; product decision #7 in
+`docs/07-decisions.md`).** Coverage is a property of the site map, so the coverage index and view
+moved to the Target spec (**F04 §2.3**). The activity timeline, the "resume" card and timeline markers
+are the tester's working memory, so they moved to the Notebook (**F14 §2**). The treemap, the
+per-endpoint methodology checklists and the effort rollup were cut. The requirement IDs are
+unchanged, so existing references keep working.
 
 ## 2. Requirements
 
+### 2.1 Where each requirement went
+
+| New home | Requirements (original IDs kept) | Milestone now |
+|---|---|---|
+| F04 Target §2.3 (coverage index) | JRN-001 | M9 |
+| F04 Target §2.3 (coverage view and "untested" filters) | JRN-002 | M16b |
+| F14 Notebook §2 (activity timeline, resume card, markers, report appendix) | JRN-003, JRN-005, JRN-008, JRN-009 | M16b |
+
+### 2.2 Cut requirements
+
 | ID | Pri | Requirement |
 |---|---|---|
-| JRN-001 | P0 | **Coverage index**: per endpoint (from the F04 site map), record which tools have exercised it and last-tested time, derived from the `ToolSource` on exchanges. At its M9 landing the available sources are Repeater/Fuzzer/Notebook; the Scanner (active/passive) columns populate once F08 ships (M10/M11). The index is source-agnostic, so it extends automatically as tools come online. |
-| JRN-002 | P0 | **Coverage view**: the Target tree (UI-060) annotated with coverage badges, plus filters "show untested in-scope endpoints" and "show params never fuzzed". |
-| JRN-003 | P0 | **Activity timeline**: a reverse-chronological feed of meaningful actions (sends, issues found, notes, scope changes, baselines) grouped by day/host, searchable with GulpQL-style filters. |
-| JRN-004 | P1 | **Attack-surface treemap/heatmap** (Swift Charts): hosts → endpoints sized by traffic, colored by coverage or highest issue severity, click-through to the node. |
-| JRN-005 | P1 | **"Resume where I left off"**: on project open, a card summarizing the last session (last endpoints touched, open Notebook "Investigating" items, untested in-scope count) with one-click jumps. |
-| JRN-006 | P1 | **Coverage goals/checklist per host**: mark required test categories per endpoint (authz, injection, etc.) and track completion — a lightweight methodology tracker (ties to Notebook checklists NB-008 without duplicating the note model). |
-| JRN-007 | P1 | **Time/effort rollup**: approximate active-testing time per host/day (from activity gaps) for engagement status, exportable to CSV. |
-| JRN-008 | P2 | Pin **milestone markers** on the timeline ("got auth bypass", "client rotated creds") for the report narrative. |
-| JRN-009 | P2 | Feed coverage + timeline into reports (F19) as an appendix ("endpoints tested, methodology completeness"). |
+| JRN-004 | P1 | **Cut (2026-11-08 feature review).** Was: an attack-surface treemap/heatmap (hosts → endpoints sized by traffic, colored by coverage or severity). |
+| JRN-006 | P1 | **Cut (2026-11-08 feature review).** Was: per-endpoint coverage goals/methodology checklists. (Notebook checklists, F14 NB-008, remain the lightweight option.) |
+| JRN-007 | P1 | **Cut (2026-11-08 feature review).** Was: an approximate time/effort rollup per host/day from activity gaps, exportable to CSV. |
 
 ## 3. UI
 
-A Journal tool with three views: **Coverage** (the annotated Target tree + untested filters),
-**Timeline** (grouped activity feed with filters and pinned markers), and **Map** (the treemap).
-A "resume" card appears on project open.
+None of its own: coverage badges and filters are in the Target tool; the timeline and the resume
+card are in the Notebook tool.
 
 ## 4. Implementation notes
 
-- The coverage index is an aggregation over `exchanges.source` + endpoint identity (the audit dedup
-  key from F09 works here too); it's derived and rebuildable from the store, so it needs no table.
-  The two things that *do* need persistence — per-endpoint checklists (JRN-006) and timeline markers
-  (JRN-008) — use `journal_checklists` and `journal_markers` (doc 04 §4 Post-1.0 tables).
-- The timeline reads a curated subset of `GulpEvent`/stored actions; keep it cheap by querying the
-  store with the existing indexes, not by holding everything in memory. Events that aren't otherwise
-  persisted as rows — notably **scope changes** (`GulpEvent.scopeChanged`, since `scope_rules` holds
-  only the current rules, not history) — are captured as `log`/`LogEntry` records so the timeline can
-  show them; everything else (sends, issues, notes, baselines) is reconstructable from timestamped
-  rows.
-- Reuse Swift Charts (already used by the Dashboard/Sequencer) for the treemap.
-- Pure read/aggregation over data Gulp already stores — no network sends.
+See F04 §4 (coverage index: derived, no table) and F14 §4 (timeline; markers use `journal_markers`).
+The `journal_checklists` table (JRN-006) is cut and is not created (doc 04 §4).
 
 ## 5. Edge cases
 
-- Huge site maps (100k endpoints) → virtualize the coverage tree; compute coverage incrementally.
-- "Touched" vs "meaningfully tested" — a single passive view isn't an active test; categorize by
-  tool so coverage isn't overstated.
-- Effort rollup is an estimate from activity gaps; label it as such.
+See F04 (huge site maps; "touched" vs "tested") and F14.
 
 ## 6. Acceptance tests
 
-1. Sending an endpoint to Repeater then actively scanning it marks both tools covered with correct
-   timestamps in the coverage index.
-2. The "untested in-scope" filter lists only endpoints with no recorded tool activity.
-3. The resume card's "untested in-scope" count matches the coverage index after a fixture crawl.
-4. A host with one High issue renders at the High color in the treemap.
+Tests 1 and 2 → F04 §6 (test 5); test 3 (resume card) → F14 §6 (test 4); test 4 (treemap color)
+exercised the cut treemap and is dropped.

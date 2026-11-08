@@ -10,7 +10,7 @@ import SwiftUI
 
 /// One History column (HIS-001).
 enum HistoryColumn: String, CaseIterable {
-    case number, host, method, url, params, status, length, mime, title, tls, time, source, comment
+    case number, host, method, url, params, status, length, mime, title, tls, version, time, source, comment
     case highlight
 
     var title: String {
@@ -25,6 +25,7 @@ enum HistoryColumn: String, CaseIterable {
         case .mime: "MIME"
         case .title: "Title"
         case .tls: "TLS"
+        case .version: "Protocol"
         case .time: "Time"
         case .source: "Source"
         case .comment: "Comment"
@@ -36,7 +37,7 @@ enum HistoryColumn: String, CaseIterable {
         switch self {
         case .url: 320
         case .host, .title, .comment: 160
-        case .number, .method, .status, .params, .tls: 56
+        case .number, .method, .status, .params, .tls, .version: 56
         default: 80
         }
     }
@@ -69,6 +70,7 @@ enum HistoryColumn: String, CaseIterable {
         case .mime: row.mime ?? ""
         case .title: row.title ?? ""
         case .tls: row.scheme == .https ? "✓" : ""
+        case .version: row.httpVersion == .http2 ? "h2" : ""
         case .time: row.totalMs.map { String(format: "%.0f ms", $0) } ?? ""
         case .source: row.source.rawValue
         case .comment: row.comment ?? ""

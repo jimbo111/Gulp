@@ -1,6 +1,6 @@
 # F01 — Proxy
 
-> Milestones: M2 (plain HTTP), M3 (TLS), M4 (intercept, match & replace, WebSockets) ·
+> Milestones: M2 (plain HTTP), M3 (TLS), M4a (intercept, M&R), M4b (streaming, WebSockets), M22 (WSX-006) ·
 > Modules: `GulpProxy`, `GulpFeatures/Proxy` · Depends on: F02, F03, F05, F20
 
 ## 1. Purpose
@@ -32,7 +32,8 @@ editing (intercept), rewrite them automatically (match & replace), and feeds the
 | PRX-045 | P1 | "Don't send items to Proxy history or live tasks if out of scope" toggle. |
 | PRX-046 | P1 | Built-in landing page at `http://gulp/` (when browsing through the proxy) with CA download (`/cert.pem`, `/cert.der`) and a status page. |
 | PRX-047 | P2 | Request/response size limits and timeouts per listener; graceful overload handling (503 from proxy with a clear body). |
-| PRX-048 | P2 | Listen on a Unix domain socket (for local tools that support it). |
+| PRX-048 | P2 | **Cut (2026-11-08 feature review).** Was: listen on a Unix domain socket (for local tools that support it). Not built. |
+| PRX-050 | P0 | **Streaming responses**: long-lived and incremental responses — Server-Sent Events (`text/event-stream`), streamed `fetch`/chunked bodies, long-polling — are forwarded to the client **as bytes arrive** (no whole-body buffering, §4.3), over HTTP/1.1 and HTTP/2, while being recorded. The exchange is stored as **in progress** and updated as the body grows, then finalized on completion, error or client cancel. *(Added by the 2026-11-08 feature review, A1; M4b.)* |
 
 ### 2.2 Intercept
 
@@ -71,6 +72,7 @@ editing (intercept), rewrite them automatically (match & replace), and feeds the
 | PRX-034 | P1 | Decompress `permessage-deflate` for display and editing; re-compress on forward (or negotiate it away via a match-replace preset removing `Sec-WebSocket-Extensions`). |
 | PRX-035 | P1 | Send a WS message to Repeater: Repeater opens a WS session (F06 REP-012) on a new connection with the same upgrade request. |
 | PRX-036 | P2 | Socket.IO / STOMP / GraphQL-WS / JSON-RPC message pretty-printing. |
+| WSX-006 | P1 | Extends PRX-036: decode common WS sub-protocols/envelopes (JSON, STOMP, SignalR, socket.io, GraphQL-WS `connection_init`/`subscribe`) into an editable structured view and re-encode on send; shared by WS history, the WS Repeater (F06 REP-012) and the WS Fuzzer (F07 §2.6). Same registry idea as the F12 transforms; unknown protocols fall back to raw text/hex. *(Moved from F26, 2026-11-08; later: M22 — post-1.0.)* |
 
 ## 3. UI
 
@@ -129,12 +131,19 @@ are meant for the proxy, not the server. Everything else is forwarded byte-for-b
    (PRX-044) → write to the client.
 7. Record the exchange (async coalesced write) and emit events.
 
-### 4.3 Response streaming
+### 4.3 Response streaming (PRX-050)
 
-Stream large or slow responses to the client while recording them, instead of buffering the whole
-body. Cap the recorded body at the "max recorded body" setting (default 50 MB, rest truncated with a
-flag). If response interception or rewriting rules apply, buffer the response (bounded by the same
-limit).
+Stream every response to the client as it arrives instead of buffering the whole body — this is what
+makes SSE, streamed `fetch` (LLM chat UIs), long-polling and large downloads work through the proxy.
+Record while streaming: write the exchange early with state **in progress**, append body chunks to
+the recorder (coalesced like any write, doc 04 §4 "Write coalescer"), and finalize it on the last
+byte, an error, or a client cancel. There is no total-time cap on a streaming response; the
+idle-between-bytes timeout (HTTP-005) still applies, and an SSE comment/heartbeat counts as
+activity. Cap the **recorded** body at the "max recorded body" setting (default 50 MB; the rest is
+forwarded but not stored, with a truncation flag). If response interception or a body-rewriting
+match & replace rule applies, the response must be buffered (bounded by the same limit) — say so in
+the intercept UI, since it breaks streaming for that response. Request bodies stream the same way
+(today they are buffered up to 256 MB, doc 07 small decisions).
 
 ### 4.4 Content encoding
 
@@ -157,6 +166,10 @@ and re-encodes (or drops `Content-Encoding` when the "simplify encoding" option 
   connection error) and log the real cause. Bound the upstream connect/handshake with the F03
   timeouts so a slow upstream can't stall the client handshake indefinitely.
 - Client certificate requests from upstream: use the configured client certificate (F15 SES-040).
+- A streaming response the client abandons (tab closed mid-SSE): cancel the upstream request, keep
+  what was recorded, and mark the exchange "client cancelled" rather than failed.
+- An SSE stream that never ends: the history row stays "in progress" with a live length; it is
+  finalized when the user stops it or either side closes.
 - Loop detection: a request to the proxy's own listener address → serve the landing page (PRX-046)
   instead of looping.
 
@@ -173,3 +186,9 @@ and re-encodes (or drops `Content-Encoding` when the "simplify encoding" option 
    shows the tunnel entry.
 6. A WebSocket chat via the Gulp Browser → messages in both directions appear; an intercepted
    message, edited, arrives changed.
+7. "Copy as cURL / Python / fetch" on a history row (UI-040, ETL-008) produces runnable snippets that
+   reproduce the request, verified against `/echo` (moved from F17).
+8. Streaming (PRX-050): `curl -N` through the proxy to VulnLab `/sse` receives each event within
+   100 ms of VulnLab sending it (not at the end); the history row shows "in progress" with a growing
+   length, then completes with every event recorded. A 500 MB `/large` download streams to the client
+   with bounded proxy memory.

@@ -156,6 +156,9 @@ struct History: AsyncParsableCommand {
     @Option(help: "Also list the last N exchanges.")
     var last = 0
 
+    @Option(help: "Print one exchange's stored request and response.")
+    var show: Int64?
+
     func run() async throws {
         let url = URL(fileURLWithPath: project)
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -168,8 +171,18 @@ struct History: AsyncParsableCommand {
             let rows = try await store.summaries(offset: max(0, count - last), limit: last)
             for row in rows {
                 let status = row.status.map(String.init) ?? (row.error ?? "-")
-                print("\(row.id)\t\(row.method ?? "-")\t\(status)\t\(row.url)")
+                let version = row.httpVersion.rawValue
+                print("\(row.id)\t\(row.method ?? "-")\t\(status)\t\(version)\t\(row.url)")
             }
+        }
+        if let show {
+            guard let exchange = try await store.exchange(id: show) else {
+                throw ValidationError("No exchange \(show)")
+            }
+            print("--- request (\(exchange.httpVersion.rawValue)) ---")
+            print(exchange.request.bytes.string())
+            print("--- response ---")
+            print(exchange.response?.wireBytes.string() ?? "(none)")
         }
         try await store.close()
     }

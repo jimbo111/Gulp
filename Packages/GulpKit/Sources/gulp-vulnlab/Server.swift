@@ -1,14 +1,17 @@
 // gulp-vulnlab — two raw SwiftNIO listeners on 127.0.0.1 only:
 //   :8088  the HTTP fixtures (keep-alive, routed by `VulnLab.respond`)
 //   :8089  `/echo-raw`: writes back exactly the bytes it received, then closes (close-delimited)
-//   :8443  the same fixtures over TLS, with a certificate from a throwaway CA (F02 acceptance #4:
-//          "upstream to VulnLab's self-signed :8443")
+//   :8443  the same fixtures over TLS (HTTP/2 or HTTP/1.1 by ALPN), with a certificate from a
+//          throwaway CA (F02 acceptance #4: "upstream to VulnLab's self-signed :8443")
 
 import GulpCore
 import GulpTLS
 import NIOCore
+import NIOHPACK
+import NIOHTTP2
 import NIOPosix
 import NIOSSL
+import NIOTLS
 
 /// The running listeners.
 struct VulnLabServer: Sendable {
@@ -35,13 +38,25 @@ struct VulnLabServer: Sendable {
             .bind(host: "127.0.0.1", port: rawPort).get()
         // Not signed by anything a client trusts: a stand-in for a staging server's certificate.
         let minter = try LeafMinter(authority: CertificateAuthority.generate(keyType: .p256))
-        let context = try await minter.serverContext(for: "localhost", alpn: ["http/1.1"])
+        let context = try await minter.serverContext(for: "localhost", alpn: ["h2", "http/1.1"])
         let tls = try await ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
                 channel.eventLoop.makeCompletedFuture(withResultOf: {
                     try channel.pipeline.syncOperations.addHandler(NIOSSLServerHandler(context: context))
-                    try channel.pipeline.syncOperations.addHandler(AppHandler())
+                    try channel.pipeline.syncOperations.addHandler(
+                        ApplicationProtocolNegotiationHandler { result, channel in
+                            guard case .negotiated("h2") = result else {
+                                return channel.eventLoop.makeCompletedFuture {
+                                    try channel.pipeline.syncOperations.addHandler(AppHandler())
+                                }
+                            }
+                            return channel.configureHTTP2Pipeline(mode: .server) { stream in
+                                stream.eventLoop.makeCompletedFuture {
+                                    try stream.pipeline.syncOperations.addHandler(H2AppHandler())
+                                }
+                            }.map { _ in }
+                        })
                 })
             }
             .bind(host: "127.0.0.1", port: tlsPort).get()
@@ -127,5 +142,56 @@ final class RawEchoHandler: ChannelInboundHandler {
         out.writeBytes(received)
         let bound = NIOLoopBound(context, eventLoop: context.eventLoop)
         context.writeAndFlush(wrapOutboundOut(out)).whenComplete { _ in bound.value.close(promise: nil) }
+    }
+}
+
+/// The HTTP fixtures over HTTP/2: each stream becomes an `HTTP/2`-text request routed by
+/// `VulnLab.respond`, and the HTTP/1 reply is sent back as frames (a chunked reply's trailer section
+/// becomes real HTTP/2 trailers).
+final class H2AppHandler: ChannelInboundHandler {
+    typealias InboundIn = HTTP2Frame.FramePayload
+    typealias OutboundOut = HTTP2Frame.FramePayload
+    private var head: HPACKHeaders?
+    private var body: [UInt8] = []
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        switch unwrapInboundIn(data) {
+        case .headers(let frame):
+            if head == nil { head = frame.headers }
+            if frame.endStream { respond(context) }
+        case .data(let frame):
+            if case .byteBuffer(let buffer) = frame.data { body += buffer.readableBytesView }
+            if frame.endStream { respond(context) }
+        default:
+            break
+        }
+    }
+
+    private func respond(_ context: ChannelHandlerContext) {
+        guard let head else { return }
+        let fields = head.filter { !$0.name.hasPrefix(":") }.map { H2Header($0.name, $0.value) }
+        let parts = H2RequestParts(
+            method: head.first(name: ":method") ?? "GET", scheme: "https",
+            authority: head.first(name: ":authority") ?? "localhost",
+            path: head.first(name: ":path") ?? "/", headers: fields, body: body)
+        let reply = VulnLab.respond(to: HTTP2Text.request(parts))
+        let response = HTTP2Text.responseParts(RawResponse(Bytes(reply.bytes)))
+        var headers = HPACKHeaders([(":status", String(response.status))])
+        for header in response.headers { headers.add(name: header.name, value: header.value) }
+        let trailing = !response.trailers.isEmpty
+        let bodyless = response.body.isEmpty && !trailing
+        let headFrame = HTTP2Frame.FramePayload.Headers(headers: headers, endStream: bodyless)
+        context.write(wrapOutboundOut(.headers(headFrame)), promise: nil)
+        if !response.body.isEmpty {
+            let data = IOData.byteBuffer(context.channel.allocator.buffer(bytes: response.body))
+            context.write(wrapOutboundOut(.data(.init(data: data, endStream: !trailing))), promise: nil)
+        }
+        if trailing {
+            var trailers = HPACKHeaders()
+            for trailer in response.trailers { trailers.add(name: trailer.name, value: trailer.value) }
+            let tail = HTTP2Frame.FramePayload.Headers(headers: trailers, endStream: true)
+            context.write(wrapOutboundOut(.headers(tail)), promise: nil)
+        }
+        context.flush()
     }
 }

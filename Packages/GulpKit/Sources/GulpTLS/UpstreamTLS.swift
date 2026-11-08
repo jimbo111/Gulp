@@ -58,8 +58,9 @@ public struct UpstreamTLSSettings: Sendable, Codable, Hashable {
     public var maximumVersion: TLSProtocolVersion = .tls1_3
     /// OpenSSL-style cipher list for TLS ≤ 1.2; nil keeps the library default.
     public var cipherSuites: String?
-    /// ALPN protocols offered, in preference order. M3a speaks HTTP/1.1 upstream.
-    public var alpn: [String] = ["http/1.1"]
+    /// ALPN protocols offered, in preference order. Empty (the default) derives them from the
+    /// request's HTTP version preference (`h2, http/1.1` for auto).
+    public var alpn: [String] = []
     /// Fail the handshake when the server's certificate does not validate (off by default).
     public var validateCertificates = false
 

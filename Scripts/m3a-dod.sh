@@ -39,7 +39,8 @@ wait_port "$PROXY_PORT"
 # 1. VulnLab over TLS: its own certificate is untrusted, so only interception can satisfy curl.
 BODY=$(curl -sS --fail --cacert "$WORK/gulp-ca.pem" -x "http://127.0.0.1:$PROXY_PORT" \
   https://localhost:8443/echo)
-grep -q "GET /echo HTTP/1.1" <<< "$BODY"
+# (Since M3b the proxy may speak HTTP/2 to VulnLab, so the echoed request line ends HTTP/1.1 or HTTP/2.)
+grep -Eq "GET /echo HTTP/(1\.1|2)" <<< "$BODY"
 echo "PASS 1: https://localhost:8443/echo through Gulp, trusting only the Gulp CA"
 
 # 2. A real site (skipped, not failed, when this machine has no internet access at all).

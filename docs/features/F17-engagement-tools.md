@@ -1,67 +1,56 @@
-# F17 — Engagement tools
+# F17 — Engagement tools (merged)
 
-> Milestone: M16 · Modules: `GulpFeatures/Engagement`, small helpers in engines · Depends on: F05, F06, F07
+> Milestone: none — merged into other specs on 2026-11-08 · Modules: none of its own (was
+> `GulpFeatures/Engagement`) · Was scheduled: M16 · Depends on: F05, F06, F07
 
 ## 1. Purpose
 
-A collection of small, high-value utilities testers reach for constantly. Each is accessible from
-the "Engagement tools ▸" context menu (UI-040) and/or its own panel.
+**Merged (2026-11-08 feature review, `docs/FEATURE-REVIEW.md` §3.3; product decision #7 in
+`docs/07-decisions.md`).** F17 was a grab-bag of small utilities. Three of them duplicated
+requirements that already existed elsewhere; the rest now live in the spec of the tool they extend,
+so each ships with that tool instead of waiting for M16. The requirement IDs are unchanged, so
+existing references keep working. This file stays as the record of where each requirement went.
 
 ## 2. Requirements
 
+### 2.1 Where each requirement went
+
+| New home | Requirements (original IDs kept) | Milestone now |
+|---|---|---|
+| F07 Fuzzer §2.5 (content discovery as a Fuzzer mode) | ETL-003 | M8 |
+| F27 JS Recon Studio §2 (scripts/comments extraction, folded into the JS asset inventory) | ETL-004 | M19a |
+| F21 Automation §2.4 (task scheduler) | ETL-006, ETL-010 | M17 |
+| F19 Reporting §2.2 (CSRF PoC generator, the "small CSRF PoC" the review kept) | ETL-007 | M16a |
+| doc 05 §4 `SendToMenu` (UI-040) — "Copy as" serializers | ETL-008 | M4a |
+| F06 Repeater §2 (request builder, browser-like request) | ETL-009, ETL-011 | M5 |
+
+### 2.2 Cut requirements
+
+These duplicated existing requirements and are not built separately. The rows stay so references
+resolve.
+
 | ID | Pri | Requirement |
 |---|---|---|
-| ETL-001 | P0 | **Search** (project-wide): the global FTS/regex search (F05 HIS-050) surfaced as an engagement tool with grouped results and export. |
-| ETL-002 | P0 | **Find references**: given a selected value (token, filename, parameter), find every request/response in the project that contains it (F05 HIS-053). |
-| ETL-003 | P0 | **Discover content**: a guided content-discovery run (directory/file brute force) seeded from a URL, using wordlists + observed extensions, recursive, scope-gated — effectively a specialized Fuzzer config with a tree-style results view of found paths (status, length). |
-| ETL-004 | P1 | **Find scripts/comments**: extract all JavaScript files and HTML comments seen for a host (useful for secrets/endpoints); link to the secret scanner (F23). *(The extraction is M16; the secret-scanner link activates when F23/M19 lands — later: M19.)* |
-| ETL-005 | P1 | **Analyze target**: the per-host analysis panel (F04 TGT-008) — dynamic URLs, parameters, interesting observations. |
-| ETL-006 | P1 | **Schedule tasks**: run a scan/crawl/fuzz at a time or on an interval, and auto-pause/resume; a simple scheduler with a task list (useful for long engagements). |
-| ETL-007 | P1 | **Generate CSRF PoC**: from a request, generate an HTML form/fetch PoC that reproduces it cross-site (auto-handles method, params, content-type: form, multipart, or a fetch for JSON with the right mode), with options (auto-submit, include cookies note). Export HTML. |
-| ETL-008 | P1 | **Copy as**: cURL, PowerShell, fetch (JS), Python requests, Go — from any request (part of UI-040, centralized here). |
-| ETL-009 | P2 | **Manual request builder**: start a Repeater request from scratch (method/URL/headers templates). |
-| ETL-010 | P2 | **Task scheduler notifications** via macOS notifications (UI-090) when scheduled tasks finish or find high-severity issues. |
-| ETL-011 | P2 | **Simulate a browser request**: build a realistic request (headers, order, UA) for a given URL to compare against what the app expects. |
+| ETL-001 | P0 | **Cut (2026-11-08 feature review)** — duplicate of F05 HIS-050 (global search, grouped results). Project-wide search is HIS-050/HIS-051. |
+| ETL-002 | P0 | **Cut (2026-11-08 feature review)** — duplicate of F05 HIS-053 ("Find references"). |
+| ETL-005 | P1 | **Cut (2026-11-08 feature review)** — duplicate of F04 TGT-008 ("Analyze target" panel). |
 
 ## 3. UI
 
-An "Engagement tools" section with the panels (Discover content results tree, CSRF PoC generator,
-Scheduler) and the ubiquitous context-menu entries. Discover-content and schedule runs show up as
-Dashboard tasks.
+None of its own. The moved tools appear in their home tools' UI (the Fuzzer's content-discovery
+mode, the Reports tool's CSRF PoC generator, the Automation scheduler, the Send-to menu's "Copy as").
 
 ## 4. Implementation notes
 
-- Content discovery and "copy as" reuse existing engines (Fuzzer engine + wordlists; a request→code
-  serializer). Keep the serializers in a small `RequestExport` helper used by UI-040 everywhere.
-- CSRF PoC generator inspects the request's method/content-type to choose the right shape:
-  - form-urlencoded / multipart / text-plain bodies → an auto-submitting HTML `<form>` (these are
-    CORS "simple" content types and need no preflight) — the reliable, classic CSRF PoC.
-  - A body that *requires* `Content-Type: application/json` → a simple form or `no-cors` fetch
-    **cannot** set that header (no-cors restricts Content-Type to the simple set, and a custom type
-    triggers a CORS preflight), so such an endpoint is generally **not** CSRF-able via a cross-site
-    PoC. The generator must say exactly that (and why — preflight), rather than emit a `no-cors`
-    JSON fetch that silently won't send the JSON body. It emits a working `fetch` PoC only when the
-    endpoint accepts a simple content type, or when observed CORS (`Access-Control-Allow-Origin` +
-    credentials) actually permits the cross-site request.
-- Scheduler is a lightweight actor persisting scheduled jobs in the project as a `SchedulerSettings`
-  group in the `settings` table (doc 04 §6; same pattern as proxy/intercept rules — no dedicated
-  table needed); it drives existing task
-  APIs. Don't over-engineer — time/interval triggers only.
+See the new home specs. The `RequestExport` serializer helper (Copy as) is described with UI-040 in
+doc 05 §4; the scheduler's persistence (a `SchedulerSettings` group in the `settings` table) is in
+F21 §4.
 
 ## 5. Edge cases
 
-- Content discovery must respect scope and throttle; warn on large wordlists.
-- CSRF PoC for JSON endpoints that require a custom header → explain it's likely *not* CSRF-able and
-  say why (preflight), rather than emitting a PoC that won't work.
-- Scheduled runs while the app is closed → document that the app must be running (no background
-  daemon in v1).
+See the new home specs.
 
 ## 6. Acceptance tests
 
-1. "Discover content" on VulnLab finds the hidden `/admin` and backup files present in the fixtures;
-   results show as a path tree with statuses; scope is honored.
-2. "Generate CSRF PoC" for a VulnLab state-changing form produces an auto-submitting HTML PoC that,
-   when loaded through the Gulp Browser, reproduces the request.
-3. "Copy as cURL/Python/fetch" produces runnable snippets that reproduce a request (verified against
-   `/echo`).
-4. A scheduled scan starts at the set time and notifies on completion.
+Moved with their requirements: content discovery → F07 §6, CSRF PoC → F19 §6, Copy as → F01 §6,
+scheduled scan → F21 §6.

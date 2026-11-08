@@ -1,6 +1,7 @@
 # F04 — Target: site map and scope
 
-> Milestone: M6 · Modules: `GulpCore` (ScopeService), `GulpStore`, `GulpFeatures/Target` ·
+> Milestones: M6a (site map, scope), M6b (import entry point TGT-009), M9 (coverage index), M16b
+> (coverage view) · Modules: `GulpCore` (ScopeService), `GulpStore`, `GulpFeatures/Target` ·
 > Depends on: F05
 
 ## 1. Purpose
@@ -23,7 +24,7 @@ covers. Scope drives what active tools are allowed to touch and what the UI show
 | TGT-006 | P1 | Group parameterized paths: collapse numeric or UUID path segments into a `{id}` node (toggle), so `/users/1`, `/users/2` fold into `/users/{id}`. |
 | TGT-007 | P1 | Per-node annotations (comment, highlight) and per-host notes. |
 | TGT-008 | P1 | "Analyze target" panel for a host: counts of dynamic URLs, parameters seen (name → where used), interesting observations (params that look like filenames, redirects, tokens). |
-| TGT-009 | P2 | Import/merge URLs from a file, a sitemap.xml, an OpenAPI/Swagger spec (also see F23), or a HAR. |
+| TGT-009 | P2 | Import/merge URLs from a file, a sitemap.xml, an OpenAPI/Swagger spec, or a HAR into the site map. *(The Target entry point of the shared import/export service, F20 PRJ-012; OpenAPI request building is F23 ADV-050. Ships with PRJ-012 in M6b.)* |
 | TGT-010 | P2 | Compare two site maps (for example before/after a crawl) and highlight new content. |
 
 ### 2.2 Scope
@@ -37,6 +38,13 @@ covers. Scope drives what active tools are allowed to touch and what the UI show
 | TGT-024 | P1 | "Use scope for the proxy" option: the proxy drops/omits out-of-scope items from history and live tasks (PRX-045). |
 | TGT-025 | P1 | Export/import scope as JSON; show the effective scope as a readable summary ("In scope: https://*.example.com on 443; Excluded: /logout"). |
 | TGT-026 | P2 | Scope presets per project and a quick scope switcher in the toolbar. |
+
+### 2.3 Coverage (moved from F31 Journal, 2026-11-08)
+
+| ID | Pri | Requirement |
+|---|---|---|
+| JRN-001 | P0 | **Coverage index**: per endpoint (from the site map), record which tools have exercised it and last-tested time, derived from the `ToolSource` on exchanges. At its M9 landing the available sources are Repeater/Fuzzer/Notebook; the Scanner (active/passive) columns populate once F08 ships (M10a/M11b). The index is source-agnostic, so it extends automatically as tools come online. *(Moved from F31; M9.)* |
+| JRN-002 | P0 | **Coverage view**: the Target tree (UI-060) annotated with coverage badges, plus filters "show untested in-scope endpoints" and "show params never fuzzed". *(Moved from F31; M16b.)* |
 
 ## 3. UI
 
@@ -55,6 +63,10 @@ Target sub-tabs: **Site map** and **Scope**.
   `src`, `action`, `Location`, JSON URL-looking strings; add inferred nodes without requesting them.
 - Precompile scope regexes once; guard against catastrophic backtracking by validating
   user-supplied regexes (reject or warn on nested quantifiers; apply a match timeout).
+- The coverage index (JRN-001) is an aggregation over `exchanges.source` + endpoint identity (the
+  audit dedup key from F09 works here too); it is derived and rebuildable from the store, so it needs
+  no table. Compute it incrementally; categorize by tool so a single passive view doesn't count as an
+  active test ("touched" is not "tested").
 
 ## 5. Edge cases
 
@@ -71,3 +83,6 @@ Target sub-tabs: **Site map** and **Scope**.
 3. A Repeater send to an out-of-scope host triggers the confirmation dialog; confirming sends it;
    an active scan of an out-of-scope node is blocked without override.
 4. Changing scope recomputes `in_scope` for 100k rows in the background without freezing the UI.
+5. Coverage (moved from F31): sending an endpoint to Repeater then actively scanning it marks both
+   tools covered with correct timestamps in the coverage index; the "untested in-scope" filter lists
+   only endpoints with no recorded tool activity.

@@ -23,12 +23,13 @@ provider.
 | AI-004 | P0 | **Grounded tool use**: the assistant uses the F21 tool surface (list/get exchanges, search, send request, start scan, list issues, scope, Beacon, notes). Active actions are ScopeGuard-checked and honor the approval mode; all actions are logged and attributed `source = .ai`. |
 | AI-005 | P0 | **Context actions** from anywhere (UI-040 "Assistant ▸"): **Explain this request/response**, **What's suspicious here?**, **Suggest payloads for this parameter**, **Explain this issue & how to exploit/fix**, **Write a repro** — each builds a redacted, grounded prompt about the selected item. |
 | AI-006 | P1 | **Chat panel** scoped to the project: ask questions ("where does this token come from?", "which endpoints take a redirect param?"); the assistant answers by calling tools (search/filter) and citing the exchanges it used (clickable). |
-| AI-007 | P1 | **Payload crafting**: given a parameter/context, propose payloads and (with approval) run them via the Fuzzer/Repeater and summarize results; explain why each payload matters. |
+| AI-007 | P2 | **Payload crafting**: given a parameter/context, propose payloads and (with approval) run them via the Fuzzer/Repeater and summarize results; explain why each payload matters. *(P1 → P2 by the 2026-11-08 feature review.)* |
 | AI-008 | P1 | **Triage assist**: summarize/prioritize issues, flag likely false positives with reasoning, and cluster related findings. Clearly marked as suggestions; never auto-changes issue status without confirmation. |
-| AI-009 | P1 | **Report drafting** (F19 RPT-013): draft the executive summary and per-issue narratives from the real findings; user edits before use; marked as AI-drafted. |
+| AI-009 | P2 | **Report drafting** (F19 RPT-013): draft the executive summary and per-issue narratives from the real findings; user edits before use; marked as AI-drafted. *(P1 → P2 by the 2026-11-08 feature review.)* |
 | AI-010 | P1 | **Cost/limits**: show token usage and an optional budget cap; a kill switch; streaming with cancel. |
 | AI-011 | P2 | **Local model support** (Ollama/llama.cpp via an OpenAI-compatible endpoint) as a first-class provider for fully-offline use. |
 | AI-012 | P2 | **Explain mode for beginners**: deeper, didactic explanations of vulns/traffic (fits the "teach me" use case) with links to the issue catalog. |
+| AI-013 | P1 | **Bounded agentic follow-up**: "Investigate this endpoint" (from an exchange, site-map node or issue) lets the assistant plan and run a short sequence of tool calls (search, Repeater sends, a targeted scan of one insertion point) to confirm or rule out a hypothesis, within hard limits the user sets per run — in-scope only (ScopeGuard), a request budget and rate cap (drawing from the shared limiter, F03 §3.4), a step budget, and the approval mode for every active action (AUT-023). It shows the plan, streams each step with its citations, stops at any limit or on the panic stop (F20 GOV-001), and ends with a summary and optional Notebook entry. *(Added by the 2026-11-08 feature review, A7; M18.)* |
 
 ## 3. UI
 
@@ -71,3 +72,7 @@ acknowledgment. A clear on/off indicator in the status bar when enabled.
    approval mode on, it waits for confirmation; all actions appear in the audit log as `.ai`.
 5. (AI-011, post-v1) When a local OpenAI-compatible provider is added, switching to it keeps all data
    on-prem (no external calls observed). Not required for the Claude-only v1 (doc 07 decision #5).
+6. "Investigate this endpoint" (AI-013) on VulnLab `/sqli/bool?id=` with a 30-request budget plans
+   its steps, waits for approval before each active send, stops at the budget (or immediately on
+   the panic stop), never touches an out-of-scope host, and ends with a cited summary; on
+   `/safe/sqli/bool` it concludes "not confirmed".

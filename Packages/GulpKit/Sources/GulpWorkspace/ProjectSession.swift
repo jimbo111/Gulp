@@ -165,9 +165,8 @@ public actor ProjectSession {
         let engine = NIOHTTPEngine(recorder: recorder)
         self.http = engine
         self.minter = minter
-        let passThrough = settings.get(ProxySettings.self).passThroughHosts
-        self.proxy = ProxyServer(
-            engine: engine, tls: minter.map { ProxyTLSOptions(minter: $0, passThroughHosts: passThrough) })
+        let proxySettings = settings.get(ProxySettings.self)
+        self.proxy = ProxyServer(engine: engine, tls: minter.map { proxySettings.tlsOptions(minter: $0) })
     }
 
     /// The project file.
@@ -250,10 +249,7 @@ public actor ProjectSession {
     /// listener, or the user-facing bind error.
     public func startProxyListeners() async -> [UUID: Result<Int, GulpError>] {
         var results: [UUID: Result<Int, GulpError>] = [:]
-        if let minter {
-            let passThrough = settings.get(ProxySettings.self).passThroughHosts
-            await proxy.setTLS(ProxyTLSOptions(minter: minter, passThroughHosts: passThrough))
-        }
+        if let minter { await proxy.setTLS(settings.get(ProxySettings.self).tlsOptions(minter: minter)) }
         for listener in settings.get(ProxySettings.self).listeners where listener.enabled {
             do {
                 results[listener.id] = .success(try await proxy.start(listener))

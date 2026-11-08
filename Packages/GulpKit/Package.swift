@@ -86,11 +86,16 @@ let package = Package(
             name: "GulpHTTP",
             dependencies: ["GulpCore", "GulpTLS", "CZlib"] + nioHTTP + nioConcurrency + [
                 .product(name: "NIOTLS", package: "swift-nio"),
+                .product(name: "NIOHPACK", package: "swift-nio-http2"),
                 .product(name: "NIOHTTPCompression", package: "swift-nio-extras"),
                 .product(name: "NIOSOCKS", package: "swift-nio-extras"),
             ]),
         .target(
-            name: "GulpProxy", dependencies: ["GulpCore", "GulpHTTP", "GulpTLS"] + nioHTTP + nioConcurrency),
+            name: "GulpProxy",
+            dependencies: ["GulpCore", "GulpHTTP", "GulpTLS"] + nioHTTP + nioConcurrency + [
+                .product(name: "NIOTLS", package: "swift-nio"),
+                .product(name: "NIOHPACK", package: "swift-nio-http2"),
+            ]),
         .target(name: "GulpSession", dependencies: ["GulpCore", "GulpHTTP"]),
         .target(name: "GulpRepeater", dependencies: ["GulpCore", "GulpHTTP"]),
         .target(name: "GulpOAST", dependencies: ["GulpCore", "GulpHTTP"]),
@@ -149,6 +154,9 @@ let package = Package(
             name: "gulp-vulnlab",
             dependencies: ["GulpCore", "GulpTLS"] + nioCore + [
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
+                .product(name: "NIOTLS", package: "swift-nio"),
+                .product(name: "NIOHTTP2", package: "swift-nio-http2"),
+                .product(name: "NIOHPACK", package: "swift-nio-http2"),
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),
@@ -170,12 +178,16 @@ let package = Package(
         .testTarget(
             name: "GulpHTTPTests",
             dependencies: ["GulpHTTP", "GulpTLS"] + nioCore + nioConcurrency + [
-                .product(name: "NIOSSL", package: "swift-nio-ssl")
+                .product(name: "NIOSSL", package: "swift-nio-ssl"),
+                .product(name: "NIOHTTP2", package: "swift-nio-http2"),
+                .product(name: "NIOHPACK", package: "swift-nio-http2"),
             ]),
         .testTarget(
             name: "GulpProxyTests",
             dependencies: ["GulpProxy", "GulpTLS"] + nioCore + nioConcurrency + [
-                .product(name: "NIOSSL", package: "swift-nio-ssl")
+                .product(name: "NIOSSL", package: "swift-nio-ssl"),
+                .product(name: "NIOHTTP2", package: "swift-nio-http2"),
+                .product(name: "NIOHPACK", package: "swift-nio-http2"),
             ]),
         .testTarget(name: "GulpSessionTests", dependencies: ["GulpSession"]),
         .testTarget(name: "GulpRepeaterTests", dependencies: ["GulpRepeater"]),
