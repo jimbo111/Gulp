@@ -67,6 +67,7 @@ tests can measure false positives.
 | GraphQL | `/graphql` (introspection on, a field-level authz bug) | — | ADV |
 | OpenAPI | `/openapi.json` describing the `/api/*` routes | — | ADV, SCN |
 | WebSockets | `/ws/chat` (echo + broadcast; an XSS sink in messages) | — | PRX |
+| gRPC (M10b) | On the h2 listener :8443: a `vulnlab.Echo` service (`Say`, unary; `Stream`, server-streaming) with **server reflection** enabled and its `.proto` in `Fixtures/grpc/`; `vulnlab.Orders/Get` with a planted SQL injection in the `id` string field. On :8088: the same `Echo` service as **gRPC-Web** (binary and `-text`) and as a **Connect** unary endpoint | `vulnlab.SafeOrders/Get` (parameterized) | F33, SCN |
 | Clickjacking | `/frameable` (no X-Frame-Options / frame-ancestors) | `/safe/frameable` | BRW (Frame Kit) |
 | SPA | `/app/` (client-side routing, links rendered by JS) | — | CRL |
 

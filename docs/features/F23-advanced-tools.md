@@ -61,7 +61,7 @@ where it sits on the same `GulpCodec` operations. The requirement IDs are unchan
 | ADV-050 | P0 | Import **OpenAPI/Swagger** (2.0/3.x) and build requests for every operation (paths, methods, params, example/required bodies, auth), adding them to the site map and offering a scan of the whole API. |
 | ADV-051 | P1 | Import **Postman** collections and **HAR**; map to requests/site map. *(The API-import entry point of the shared import/export service, F20 PRJ-012.)* |
 | ADV-052 | P1 | Schema-aware insertion points and value generation (types/enums/formats) so scans send plausible, well-typed inputs. |
-| ADV-053 | P2 | gRPC-Web / protobuf decode helpers (best-effort) for API traffic. |
+| ADV-053 | P2 | gRPC-Web / protobuf decode helpers (best-effort) for API traffic. **Superseded (2026-11-08 feature review, A2)** — promoted to the full F33 gRPC & protobuf spec (GRP-001…GRP-007, P1, M10b); not built separately. |
 
 ## 7. Secret scanner
 

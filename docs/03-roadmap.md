@@ -16,7 +16,7 @@ Build the milestones **in order**. Each one ends with a usable, tested app. Requ
 | BCN | F10 Beacon | MAC | F24 macOS integration |
 | SEQ | F11 Sequencer | UI | doc 05 |
 | DEC | F12 Decoder | CMP | F13 Comparer |
-| NB | F14 Notebook | | |
+| NB | F14 Notebook | GRP | F33 gRPC & protobuf |
 
 Post-1.0 expansion prefixes (M21+, see Phase F): `SSO` (F25), `WSX` (F26), `JSR` (F27), `WCP` (F28),
 `GOV` (F29), `DRF` (F30), `JRN` (F31), `LLM` (F32).

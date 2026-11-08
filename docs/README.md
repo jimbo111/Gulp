@@ -42,6 +42,7 @@
 | F22 | [AI assistant](features/F22-ai-assistant.md) | M18 |
 | F23 | [Advanced testing tools (Authz Matrix, JWT, smuggling, GraphQL…)](features/F23-advanced-tools.md) | M19 |
 | F24 | [macOS integration](features/F24-macos-integration.md) | M3, M20 |
+| F33 | [gRPC & protobuf (gRPC, gRPC-Web, Connect; schema-less decode)](features/F33-grpc-protobuf.md) | M10b, M11c |
 
 ### Post-1.0 expansion (M21+)
 
@@ -77,8 +78,6 @@ full `Fxx` spec when scheduled):
   origins (beyond F08's passive "weak CSP" flag).
 - **Deserialization & Object-Injection Workbench** — detect/decode Java/.NET/PHP/pickle/Ruby
   serialized objects and safe OAST-correlated detection probes (beyond F08 signposting).
-- **gRPC & Protobuf Workbench** — schema-less protobuf decode, `.proto`/reflection import, gRPC-Web
-  framing (promotes F23 ADV-053 to a first-class tool).
 - **Arsenal** — cross-project payload/wordlist library and reusable test cases (promotes the per-
   attack UI-080 list to a managed asset).
 - **Share Packs** — file-based async collaboration: export/import curated findings + comment threads
