@@ -416,6 +416,10 @@ public final class NIOHTTPEngine: HTTPEngine {
         let remaining = max(deadline - connectStart, .milliseconds(1))
         let socksTarget: SOCKSAddress? =
             route?.kind == .socks5 ? .domain(effectiveHost(target), port: target.port) : nil
+        // h2c: the server sends SETTINGS as soon as we connect; hold them for the HTTP/2 pipeline
+        // (not behind an HTTP proxy, whose CONNECT reply must reach the HTTP/1 handler).
+        let gateReads =
+            options.httpVersion == .http2PriorKnowledge && target.scheme == .http && route?.kind != .http
         let bootstrap = ClientBootstrap(group: group)
             .connectTimeout(min(configured, remaining))
             .channelOption(ChannelOptions.tcpOption(.tcp_nodelay), value: 1)
@@ -426,6 +430,7 @@ public final class NIOHTTPEngine: HTTPEngine {
                         let socks = SOCKSClientHandler(targetAddress: socksTarget)
                         try channel.pipeline.syncOperations.addHandler(socks)
                     }
+                    if gateReads { try channel.pipeline.syncOperations.addHandler(ReadGate()) }
                     try channel.pipeline.syncOperations.addHandler(
                         HTTP1ClientHandler(), name: Self.http1HandlerName)
                 })
@@ -791,5 +796,33 @@ final class TLSHandshakeWaiter: ChannelInboundHandler {
     }
 }
 
-/// Tells `TLSHandshakeWaiter` the HTTP/2 pipeline is in place: deliver what it held.
+/// Tells `TLSHandshakeWaiter` / `ReadGate` the HTTP/2 pipeline is in place: deliver what was held.
 struct ReleaseHeldReads: Sendable {}
+
+/// Holds every read from the start of a cleartext prior-knowledge connection until the HTTP/2
+/// pipeline is installed (`ReleaseHeldReads`); then it only passes data through.
+final class ReadGate: ChannelInboundHandler {
+    typealias InboundIn = NIOAny
+    private var holding = true
+    private var held: [NIOAny] = []
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        if holding {
+            held.append(data)
+        } else {
+            context.fireChannelRead(data)
+        }
+    }
+
+    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        guard event is ReleaseHeldReads, holding else {
+            context.fireUserInboundEventTriggered(event)
+            return
+        }
+        holding = false
+        let reads = held
+        held = []
+        for read in reads { context.fireChannelRead(read) }
+        context.fireChannelReadComplete()
+    }
+}
