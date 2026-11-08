@@ -163,7 +163,7 @@ final class Backpressure: Sendable {
 }
 
 /// Frames requests off a client connection and hands them, in order, to the connection's task.
-final class ProxyConnectionHandler: ChannelInboundHandler {
+final class ProxyConnectionHandler: ChannelInboundHandler, RemovableChannelHandler {
     typealias InboundIn = ByteBuffer
 
     private enum Mode {

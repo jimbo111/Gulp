@@ -54,6 +54,8 @@ final class H2Connection: Sendable {
         let bound = try await channel.configureHTTP2Pipeline(
             mode: .client, initialLocalSettings: settings, inboundStreamInitializer: nil
         ).map { NIOLoopBound($0, eventLoop: loop) }.get()
+        // Bytes the server sent right after the handshake were held back until now (TLS only).
+        channel.pipeline.fireUserInboundEventTriggered(ReleaseHeldReads())
         return H2Connection(channel: channel, id: id, tls: tls, multiplexer: bound)
     }
 

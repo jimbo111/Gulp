@@ -747,13 +747,34 @@ final class HandshakeCapture: Sendable {
 final class TLSHandshakeWaiter: ChannelInboundHandler {
     typealias InboundIn = NIOAny
     private let done: EventLoopPromise<String?>
+    /// After an `h2` handshake the server's SETTINGS can arrive at once; they are held here until
+    /// the HTTP/2 pipeline replaces the HTTP/1 handler (`ReleaseHeldReads`), or HTTP/1 would see them.
+    private var holding = false
+    private var held: [NIOAny] = []
 
     init(done: EventLoopPromise<String?>) {
         self.done = done
     }
 
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        if holding {
+            held.append(data)
+        } else {
+            context.fireChannelRead(data)
+        }
+    }
+
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        if event is ReleaseHeldReads {
+            holding = false
+            let reads = held
+            held = []
+            for read in reads { context.fireChannelRead(read) }
+            context.fireChannelReadComplete()
+            return
+        }
         if let event = event as? TLSUserEvent, case .handshakeCompleted(let negotiated) = event {
+            holding = negotiated == "h2"
             done.succeed(negotiated)  // later completions of the promise are ignored by NIO
         }
         context.fireUserInboundEventTriggered(event)
@@ -769,3 +790,6 @@ final class TLSHandshakeWaiter: ChannelInboundHandler {
         context.fireChannelInactive()
     }
 }
+
+/// Tells `TLSHandshakeWaiter` the HTTP/2 pipeline is in place: deliver what it held.
+struct ReleaseHeldReads: Sendable {}

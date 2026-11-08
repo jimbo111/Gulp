@@ -69,7 +69,7 @@ private struct ResponseHead {
 }
 
 /// One request at a time per connection; pipelining (HTTP-011) is a separate mode.
-final class HTTP1ClientHandler: ChannelDuplexHandler {
+final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
     typealias InboundIn = ByteBuffer
     typealias OutboundIn = RequestCommand
     typealias OutboundOut = ByteBuffer
