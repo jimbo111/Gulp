@@ -20,9 +20,15 @@ public struct WorkspaceEnvironment: Sendable {
     /// Key type for a CA generated on first use (TLS-001: RSA-2048 by default).
     public var caKeyType: CAKeyType = .rsa2048
 
-    /// The platform's standard locations.
+    /// The platform's standard locations. `GULP_SUPPORT_DIR` overrides them with one folder and a
+    /// file CA store (automation and CI: no Keychain, nothing shared with the user's install).
     public static var standard: WorkspaceEnvironment {
         let fm = FileManager.default
+        if let override = ProcessInfo.processInfo.environment["GULP_SUPPORT_DIR"], !override.isEmpty {
+            let root = URL(fileURLWithPath: override, isDirectory: true)
+            return WorkspaceEnvironment(
+                supportDirectory: root, cachesDirectory: root.appendingPathComponent("Caches"))
+        }
         let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
         let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first
         let supportDirectory = (support ?? fm.temporaryDirectory).appendingPathComponent("Gulp")
