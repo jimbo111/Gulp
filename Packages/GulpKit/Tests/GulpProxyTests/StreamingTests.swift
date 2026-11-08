@@ -101,6 +101,10 @@ struct StreamingTests {
         let first = try #require(firstSeen)
         #expect(first - sentAt < .milliseconds(600))
         #expect(!recorder.text.contains("data: 2"))
+        // The pending row is written by a task started with the first bytes: give it a moment.
+        for _ in 0..<40 where await recorded.exchanges.isEmpty {
+            try await Task.sleep(for: .milliseconds(5))
+        }
         let pending = await recorded.exchanges
         #expect(pending.count == 1)
         #expect(pending.first?.state == .pending)  // HIS-007: the row exists while streaming
