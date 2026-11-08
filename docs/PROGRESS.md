@@ -6,13 +6,16 @@ order; within a milestone, do P0 first.
 
 ## Current status
 
-- **Phase**: **M4a DONE** — CI green on both platforms (run 42500664587, commit `dee2424`); the M4a
-  DoD (`Scripts/m4a-dod.sh`, Linux CI) PASS: a curl login POST through `gulp-cli proxy` is held in
-  the Intercept queue, edited (user=alice → user=admin, Content-Length fixed) and forwarded; a Match
-  & Replace rule adds a header; the recorded row keeps the original and its Copy-as-cURL snippet
-  reproduces the request against VulnLab `/echo`. M1–M3b DoD scripts still pass in the same run.
-- **Active milestone**: **M4b — Streaming responses, WebSockets, Gulp Browser launch** (PRX-050,
-  HIS-007, PRX-030…036, BRW-001…004).
+- **Phase**: **M4b DONE** — CI green on both platforms (run 42504816428, commit `0b0c6f7`); the M4b
+  DoD: `Scripts/m4b-dod.sh` (Linux CI) PASS — `curl -N` through `gulp-cli proxy` to VulnLab `/sse`
+  receives each event as it is sent (≈800 ms between first and last of 5), the row completes, and a
+  WebSocket conversation (`gulp-cli ws` → VulnLab `/ws`) appears in WebSockets history in both
+  directions with close code 1000; `Scripts/m4b-browser.sh` (macOS CI) PASS — headless Chrome
+  launched by the Gulp Browser launcher through the proxy loads `https://localhost:8443` with no
+  certificate interstitial (SPKI pin of the Gulp CA) and the request is in history. M1–M4a DoD
+  scripts still pass in the same run.
+- **Active milestone**: **M5 — Repeater (and the advanced HTTP engine)** (F06, HTTP-011…013,
+  HTTP-025, HTTP-030…036, REP-012/016/017, PRX-035).
 - **Branching**: `main` holds merged milestones (PRs jimbo111/Gulp#1 M0–M2, #2 review fixes,
   #3 M3a, then M3b + the feature-review adoption). Work happens on
   the session branch and is merged by PR once CI is green.
@@ -54,9 +57,21 @@ order; within a milestone, do P0 first.
   PRX-016, Content-Length toggle — always on for edits); Match & Replace P1s (scope PRX-023, test
   pane PRX-024, GulpQL conditions PRX-025); an edited *response* is sent to the client but History
   keeps the received one; "in scope" intercept conditions are always true until scope (M6a).
-- **Next action**: M4b — streaming responses through the proxy with in-progress history rows and an
-  SSE view (fixes the M2 "buffered whole" carry-over), WebSockets (proxying, history, intercept), and
-  the Gulp Browser launch (BRW-001…004); executable DoD.
+- **M4b carry-overs**: WebSocket over HTTP/2 (RFC 8441 extended CONNECT, part of PRX-030) is not
+  offered — browsers fall back to HTTP/1.1 upgrades; permessage-deflate messages are decompressed
+  for display but can't be edited (the "Turn off WebSocket compression" preset negotiates it away,
+  PRX-034); PRX-035 (send a WS message to Repeater) arrives with REP-012 in M5; PRX-036 (P2) not
+  scheduled; WS History loads a connection's messages whole (no paging yet) and has no
+  highlight/comment UI; a WS message held in Intercept when its client goes away stays queued until
+  decided. Gulp Browser: the Chrome-for-Testing download (macOS) is not exercised by CI; no
+  WKWebView fallback when the download is declined; the headed launch and quit-cleanup are covered
+  by the launcher unit test, the end-to-end check is headless. HIS-007: live partial-row updates
+  stop past 4 MB (the row still completes); SSE event *times* are shown for HTTP/1 bodies without a
+  Content-Encoding (HTTP/2 or compressed streams list events without times).
+- **Next action**: M5 — Repeater: tabs/groups/history, follow redirects, connection options,
+  streamed responses (REP-016), paste-to-request (REP-017), WS sessions (REP-012, PRX-035); raw
+  HTTP/2 (HTTP-025); group sends incl. single-packet (HTTP-030…036); pipelining, platform auth and
+  the shared throttle (HTTP-011…013); executable DoD.
 - **Waiting on the owner**: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
   **adopted on 2026-11-08** (product decision #7 in `docs/07-decisions.md`) and applied to the specs:
   merges, cuts, deferrals, new requirements (incl. F33) and the re-sequenced roadmap with letter-
@@ -152,7 +167,7 @@ for behavior.
 - [x] M3a — TLS interception + CA (HTTP/1.1) — **CI green both platforms + executable DoD PASS (`054b24a`)**
 - [x] M3b — HTTP/2 (client side + upstream, trailers) — **CI green both platforms + executable DoD PASS (`11cd7d5`)**
 - [x] M4a — Message editor, Intercept, Match & Replace, Send to / Copy as — **CI green both platforms + executable DoD PASS (`dee2424`)**
-- [ ] M4b — Streaming responses, WebSockets, Gulp Browser launch
+- [x] M4b — Streaming responses, WebSockets, Gulp Browser launch — **CI green both platforms + executable DoD PASS (`0b0c6f7`)**
 - [ ] M5 — Repeater + advanced HTTP engine (HTTP/2 raw, group/race sends, streaming, paste-to-request)
 - [ ] M6a — Target: site map + scope + ScopeGuard
 - [ ] M6b — Import/export service, API import, MCP read surface + `send_request`
@@ -347,6 +362,26 @@ for behavior.
   - gulp-cli: `proxy --add-header/--intercept-replace`, `copy-as`, `history --show` with originals.
   - Caught by CI: missing `import Foundation` (UUID), ArraySlice concatenation, a lint line break,
     `^` in header conditions needing line anchors.
+
+- 2026-11-08 — **M4b DONE** (CI run 42504816428, `0b0c6f7`; DoD `Scripts/m4b-dod.sh` + `Scripts/m4b-browser.sh`: PASS):
+  - Streaming (PRX-050/HIS-007): responses go to the client as they arrive; the row is recorded
+    pending at the first bytes, refreshed every 250 ms with what arrived (live length/duration),
+    completed in place; arrival marks feed the History Events tab (SSE id/event/data/time) and a
+    chunk timeline. VulnLab `/sse[?n=]`.
+  - WebSockets (PRX-030…034): upgrade on a fresh HTTP/1.1 connection, then a per-direction frame
+    pump forwarding original frame bytes; with WS Match & Replace rules or WS Intercept, whole
+    messages are rewritten/held and re-framed only if changed; recording in `ws_connections` /
+    `ws_messages` (edits and drops kept), permessage-deflate decoded for the record; Proxy →
+    WebSockets History tab; VulnLab `/ws` echo; `gulp-cli ws`, `history --websockets`.
+  - Gulp Browser (BRW-001…004): discovery (Chrome for Testing download on macOS), isolated
+    per-listener profile, `--proxy-server` + `<-loopback>` bypass removal, SPKI pins of the CA and
+    shared leaf key (the proxy now sends the CA after the leaf), `--disable-quic` and quiet-session
+    flags; ⌘⇧O toolbar button; launched browsers terminated on quit; `gulp-cli browser`.
+    `GULP_SUPPORT_DIR` points the workspace at one folder with a file CA store (CI, automation).
+  - Caught by CI: the HTTP/1 handler unwrapped raw WebSocket writes as request commands (writes now
+    pass through after a 101); the upgrade exchange's row wasn't flushed before the
+    `ws_connections` foreign key referenced it; a streamed row raced the first-chunk check in a test.
+  - Decisions: WS relay / WS Intercept / permessage-deflate / no RFC 8441 rows in `07-decisions.md`.
 
 ## How to pick up work (reminder)
 

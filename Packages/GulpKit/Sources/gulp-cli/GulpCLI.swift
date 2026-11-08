@@ -5,6 +5,7 @@
 import ArgumentParser
 import Dispatch
 import Foundation
+import GulpBrowser
 import GulpCodec
 import GulpCore
 import GulpHTTP
@@ -16,7 +17,7 @@ import GulpWorkspace
 /// Version marker for the Gulp command-line tool.
 enum GulpCLI {
     /// Semantic version of the CLI; bumped as the tool gains commands.
-    static let version = "0.3.0"
+    static let version = "0.4.0"
 }
 
 /// The root command. `@main` (in a file not named main.swift) is how ArgumentParser runs an async
@@ -25,7 +26,7 @@ enum GulpCLI {
 struct GulpCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "gulp-cli", abstract: "Gulp, headless.", version: GulpCLI.version,
-        subcommands: [Send.self, Proxy.self, History.self, CA.self, CopyAs.self])
+        subcommands: [Send.self, Proxy.self, History.self, CA.self, CopyAs.self, WS.self, Browser.self])
 }
 
 /// `gulp-cli send --raw request.txt --target http://host:port` writes the file's bytes exactly as
@@ -228,6 +229,9 @@ struct History: AsyncParsableCommand {
     @Option(help: "Print one exchange's stored request and response.")
     var show: Int64?
 
+    @Flag(help: "List WebSocket connections and their messages (PRX-031).")
+    var websockets = false
+
     func run() async throws {
         let url = URL(fileURLWithPath: project)
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -257,7 +261,25 @@ struct History: AsyncParsableCommand {
             print("--- response ---")
             print(exchange.response?.wireBytes.string() ?? "(none)")
         }
+        if websockets { try await printWebSockets(store) }
         try await store.close()
+    }
+
+    private func printWebSockets(_ store: ProjectStore) async throws {
+        let connections = try await store.webSocketConnections()
+        print("websockets: \(connections.count)")
+        for connection in connections {
+            let code = connection.closeCode.map(String.init) ?? "-"
+            let closed = connection.closedAt == nil ? "open" : "closed \(code)"
+            let upgrade = connection.upgradeExchangeID.map { "#\($0)" } ?? "-"
+            let count = "\(connection.messageCount) messages"
+            print("ws \(connection.id)\t\(connection.url)\tupgrade \(upgrade)\t\(closed)\t\(count)")
+            for message in try await store.webSocketMessages(connection: connection.id) {
+                let arrow = message.direction == WSDirection.toServer.rawValue ? "->" : "<-"
+                let name = WS.opcodeName(message.opcode)
+                print("  \(arrow) \(name)\t\(WS.preview(message.payload, opcode: message.opcode))")
+            }
+        }
     }
 }
 
@@ -333,5 +355,192 @@ final class OnceFlag: @unchecked Sendable {
         if done { return false }
         done = true
         return true
+    }
+}
+
+/// `gulp-cli ws --url ws://127.0.0.1:8088/ws --send hi` opens a WebSocket (optionally through a proxy
+/// with `--via`), sends each `--send` as a text message, prints what comes back, then closes
+/// (F01 PRX-030; the VulnLab echo and the M4b DoD use it).
+struct WS: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Talk to a WebSocket endpoint.")
+
+    @Option(help: "ws:// or wss:// URL.")
+    var url: String
+
+    @Option(help: "Connect through this HTTP proxy, e.g. http://127.0.0.1:8080.")
+    var via: String?
+
+    @Option(help: "A text message to send (repeatable).")
+    var send: [String] = []
+
+    @Option(help: "How many messages to wait for before closing (default: one per --send, plus one).")
+    var expect: Int?
+
+    @Option(help: "Seconds to wait for replies.")
+    var timeout = 5
+
+    func run() async throws {
+        guard let (target, path) = Self.target(url) else {
+            throw ValidationError("Invalid --url \(url); expected ws://host[:port]/path")
+        }
+        var options = SendOptions(recordAs: .automation)
+        options.timeouts.total = .seconds(timeout)
+        if let via {
+            guard let proxy = HTTPTarget(url: via) else { throw ValidationError("Invalid --via \(via)") }
+            options.upstreamProxy = .proxy(UpstreamProxy(kind: .http, host: proxy.host, port: proxy.port))
+        }
+        let standard = target.port == (target.scheme == .https ? 443 : 80)
+        let host = standard ? target.host : "\(target.host):\(target.port)"
+        let key = Data((0..<16).map { _ in UInt8.random(in: 0...255) }).base64EncodedString()
+        let request = RawRequest(
+            Bytes(
+                Array(
+                    ("GET \(path) HTTP/1.1\r\nHost: \(host)\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                        + "Sec-WebSocket-Key: \(key)\r\nSec-WebSocket-Version: 13\r\n\r\n").utf8)))
+        let (incoming, feed) = AsyncStream.makeStream(of: [UInt8].self)
+        let engine = NIOHTTPEngine()
+        defer { Task { await engine.shutdown() } }
+        let (result, connection) = await engine.upgrade(
+            request, to: target, options: options, onRead: { feed.yield($0) }, onClose: { feed.finish() })
+        guard let connection else {
+            let reason =
+                result.error?.userDescription ?? result.exchange.response?.bytes.string() ?? "no response"
+            FileHandle.standardError.write(Data("gulp-cli: upgrade failed: \(reason)\n".utf8))
+            throw ExitCode(2)
+        }
+        print("connected: \(result.exchange.response?.bytes.string().split(separator: "\r\n").first ?? "")")
+        for text in send {
+            try await connection.write(
+                WebSocketWire.frame(opcode: .text, payload: Array(text.utf8), mask: Self.mask()))
+            print("-> \(text)")
+        }
+        let wanted = expect ?? (send.count + 1)
+        let received = await Self.collect(incoming, messages: wanted, timeout: timeout)
+        for message in received {
+            let opcode = Int(message.opcode)
+            print("<- \(Self.opcodeName(opcode))\t\(Self.preview(message.payload, opcode: opcode))")
+        }
+        let close = WebSocketWire.frame(opcode: .close, payload: [0x03, 0xE8], mask: Self.mask())  // 1000
+        try? await connection.write(close)
+        try? await Task.sleep(for: .milliseconds(200))
+        await connection.close()
+        if received.count < wanted {
+            let message = "gulp-cli: got \(received.count) of \(wanted) messages\n"
+            FileHandle.standardError.write(Data(message.utf8))
+            throw ExitCode(2)
+        }
+    }
+
+    /// The HTTP target and request path for a ws/wss URL.
+    static func target(_ url: String) -> (HTTPTarget, String)? {
+        let lower = url.lowercased()
+        let http: String
+        if lower.hasPrefix("ws://") {
+            http = "http://" + url.dropFirst(5)
+        } else if lower.hasPrefix("wss://") {
+            http = "https://" + url.dropFirst(6)
+        } else {
+            return nil
+        }
+        guard let target = HTTPTarget(url: http) else { return nil }
+        let rest = http.split(separator: "/", maxSplits: 3, omittingEmptySubsequences: false)
+        let path = rest.count > 3 ? "/" + rest[3] : "/"
+        return (target, path)
+    }
+
+    static func mask() -> [UInt8] { (0..<4).map { _ in UInt8.random(in: 0...255) } }
+
+    static func opcodeName(_ opcode: Int) -> String {
+        WSOpcode(rawValue: UInt8(truncatingIfNeeded: opcode)).map { "\($0)" } ?? "op\(opcode)"
+    }
+
+    /// Messages received so far (shared between the reader and the timeout).
+    actor Inbox {
+        var messages: [WSMessage] = []
+        func add(_ message: WSMessage) { messages.append(message) }
+    }
+
+    /// Messages (data and control) from the server, until `messages` arrived or `timeout` passed;
+    /// on timeout, whatever arrived.
+    static func collect(_ incoming: AsyncStream<[UInt8]>, messages: Int, timeout: Int) async -> [WSMessage] {
+        let inbox = Inbox()
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                var parser = WSFrameParser()
+                var assembler = WSMessageAssembler()
+                var count = 0
+                for await bytes in incoming {
+                    for frame in parser.feed(bytes) {
+                        guard let message = assembler.add(frame) else { continue }
+                        await inbox.add(message)
+                        count += 1
+                    }
+                    if count >= messages { break }
+                }
+            }
+            group.addTask { try? await Task.sleep(for: .seconds(timeout)) }
+            await group.next()
+            group.cancelAll()
+        }
+        return await inbox.messages
+    }
+
+    /// Text as text (cut at 200 characters), anything else as a byte count.
+    static func preview(_ payload: [UInt8], opcode: Int) -> String {
+        if opcode == Int(WSOpcode.text.rawValue) {
+            let text = String(decoding: payload, as: UTF8.self)
+            return text.count > 200 ? String(text.prefix(200)) + "…" : text
+        }
+        if opcode == Int(WSOpcode.close.rawValue), payload.count >= 2 {
+            return "code \(Int(payload[0]) << 8 | Int(payload[1]))"
+        }
+        return "\(payload.count) bytes"
+    }
+}
+
+/// `gulp-cli browser --proxy-port 8080 --url https://localhost:8443/` launches the Gulp Browser
+/// (F16 BRW-001…BRW-003) through a running Gulp listener, trusting the user's Gulp CA by its key pin.
+/// `--headless --dump-dom` prints the page and exits (the M4b browser check on macOS CI).
+struct Browser: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Launch a browser proxied through Gulp.")
+
+    @Option(help: "The Gulp listener port to proxy through.")
+    var proxyPort: Int
+
+    @Option(help: "A page to open (repeatable).")
+    var url: [String] = []
+
+    @Option(help: "Browser executable (default: the first Chromium-family browser found).")
+    var browser: String?
+
+    @Flag(help: "Run without a window.")
+    var headless = false
+
+    @Flag(help: "With --headless: print the page's DOM and exit.")
+    var dumpDom = false
+
+    func run() async throws {
+        let environment = WorkspaceEnvironment.standard
+        let chosen: InstalledBrowser
+        if let browser {
+            chosen = InstalledBrowser(name: "browser", executable: URL(fileURLWithPath: browser))
+        } else if let found = environment.installedBrowsers().first {
+            chosen = found
+        } else {
+            throw ValidationError("No Chromium-family browser found; pass --browser /path/to/chrome")
+        }
+        let authority = try environment.certificateAuthority()
+        // A fresh profile per CLI run; the proxy presents the CA in its chain, so its pin suffices.
+        let profile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gulp-browser-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: profile) }
+        let options = BrowserLaunchOptions(
+            proxyPort: proxyPort, spkiPins: [authority.key.spkiPin], profile: profile, urls: url,
+            headless: headless, dumpDOM: dumpDom)
+        print("gulp-cli browser: \(chosen.name) via 127.0.0.1:\(proxyPort)")
+        let launcher = BrowserLauncher()
+        let launched = try launcher.launch(chosen, options: options, output: .standardOutput)
+        let status = launcher.wait(launched) ?? 0
+        if status != 0 { throw ExitCode(status) }
     }
 }

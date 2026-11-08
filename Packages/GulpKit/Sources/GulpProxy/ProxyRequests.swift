@@ -119,14 +119,17 @@ enum ForwardRewrite {
         "close", "keep-alive", "content-length", "transfer-encoding", "host", "connection",
     ]
 
-    static func strippingHopByHop(_ request: RawRequest) -> RawRequest {
+    /// With `keepingUpgrade`, `Upgrade` survives being named in `Connection` (PRX-030: the upgrade
+    /// is what the request is for).
+    static func strippingHopByHop(_ request: RawRequest, keepingUpgrade: Bool = false) -> RawRequest {
+        let protected = keepingUpgrade ? Self.protected.union(["upgrade"]) : Self.protected
         var names: Set<String> = ["proxy-connection", "proxy-authorization"]
         let fields = request.parsed.headers
         for field in fields where request.bytes[field.name].string().lowercased() == "connection" {
             for token in request.bytes[field.value].string().split(separator: ",") {
                 let name = String(token).trimmedOf(" \t").lowercased()
                 // Never strip the headers that frame or route the message, whatever `Connection` says.
-                if !name.isEmpty, !Self.protected.contains(name) { names.insert(name) }
+                if !name.isEmpty, !protected.contains(name) { names.insert(name) }
             }
         }
         var result = request

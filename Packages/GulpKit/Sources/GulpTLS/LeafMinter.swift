@@ -55,7 +55,7 @@ public actor LeafMinter {
         let leaf = try await leaf(for: host)
         let key = ContextKey(subject: leaf.subject, alpn: alpn)
         if let context = contexts.value(for: key) { return context }
-        let context = try Self.makeServerContext(leaf: leaf, alpn: alpn)
+        let context = try Self.makeServerContext(leaf: leaf, alpn: alpn, issuer: authorityDER)
         contexts.set(context, for: key)
         return context
     }
@@ -63,12 +63,23 @@ public actor LeafMinter {
     /// Number of cached leaves.
     public var cachedLeafCount: Int { leaves.count }
 
-    /// Build a TLS server context for `leaf`.
-    public static func makeServerContext(leaf: MintedLeaf, alpn: [String]) throws -> NIOSSLContext {
+    /// The SPKI pins of the CA and of the shared leaf key, for a browser that should accept this
+    /// minter's certificates without a trust-store change (BRW-002).
+    public nonisolated var spkiPins: [String] { [authority.key.spkiPin, leafKey.spkiPin] }
+
+    private var authorityDER: [UInt8]? { try? authority.certificateDER() }
+
+    /// Build a TLS server context for `leaf`. With `issuer`, the CA certificate is sent after the
+    /// leaf, so a client pinning the CA's key (Chromium's SPKI list, BRW-002) finds it in the chain.
+    public static func makeServerContext(
+        leaf: MintedLeaf, alpn: [String], issuer: [UInt8]? = nil
+    ) throws -> NIOSSLContext {
         let certificate = try NIOSSLCertificate(bytes: leaf.der, format: .der)
         let key = try NIOSSLPrivateKey(bytes: Array(leaf.key.pem.utf8), format: .pem)
+        var chain: [NIOSSLCertificateSource] = [.certificate(certificate)]
+        if let issuer { chain.append(.certificate(try NIOSSLCertificate(bytes: issuer, format: .der))) }
         var configuration = TLSConfiguration.makeServerConfiguration(
-            certificateChain: [.certificate(certificate)], privateKey: .privateKey(key))
+            certificateChain: chain, privateKey: .privateKey(key))
         configuration.applicationProtocols = alpn
         configuration.minimumTLSVersion = .tlsv1  // accept old clients; the upstream side is separate
         return try NIOSSLContext(configuration: configuration)

@@ -147,11 +147,12 @@ public final class NIOHTTPEngine: HTTPEngine {
         }
     }
 
-    /// WebSockets arrive in M4 (F03 §2).
+    /// Message-level WebSocket sessions arrive with the Repeater (M5, REP-012); `upgrade(…)` gives
+    /// a raw upgraded connection today.
     public func openWebSocket(
         _ upgrade: RawRequest, to target: HTTPTarget, options: SendOptions
     ) async throws -> WebSocketSession {
-        throw GulpError(message: "WebSockets are implemented in M4", underlying: nil)
+        throw GulpError(message: "WebSocket sessions arrive with the Repeater (M5)", underlying: nil)
     }
 
     /// Pre-connect for ALPN mirroring (PRX-008): an existing HTTP/2 or pooled HTTP/1 connection
@@ -192,6 +193,49 @@ public final class NIOHTTPEngine: HTTPEngine {
         }
     }
 
+    /// The upgrade send (see `upgrade(_:to:options:onRead:onClose:)`): a raw-stream handler waits at
+    /// the end of the pipeline; on `101` the HTTP/1 handler starts passing bytes through to it.
+    func upgradeSend(
+        _ request: RawRequest, to target: HTTPTarget, options: SendOptions,
+        onRead: @escaping @Sendable ([UInt8]) -> Void, onClose: @escaping @Sendable () -> Void
+    ) async -> (result: ExchangeResult, connection: UpgradedConnection?) {
+        let start = NIODeadline.now()
+        var timing = Timing(start: Date())
+        var outgoing = OutgoingRequest(request: request, target: target)
+        let route = upstreamRoute(for: target, options: options)
+        if let route, route.kind == .http, !route.tunnelPlainHTTP, target.scheme == .http {
+            outgoing.request = request.forPlainHTTPProxy(
+                target: target, proxyAuthorization: route.basicAuthorization)
+        }
+        let deadline = start + timeAmount(options.timeouts.total)
+        let channel: any Channel
+        let tls: TLSInfo?
+        do {
+            (channel, tls) = try await connect(
+                target, route: route, options: options, deadline: deadline, timing: &timing)
+            try await channel.eventLoop.submit {
+                let raw = RawStreamHandler(onRead: onRead, onClose: onClose)
+                try channel.pipeline.syncOperations.addHandler(raw)
+            }.get()
+        } catch {
+            let mapped = (error as? GulpNetworkError) ?? HTTP1ClientHandler.networkError(error)
+            let failed = await finish(
+                outgoing, options: options, wire: nil, error: mapped, connectionID: 0, timing: timing)
+            return (failed, nil)
+        }
+        let result = await exchange(
+            on: channel, request: outgoing.request, options: options, totalDeadline: deadline)
+        timing.totalMs = milliseconds(from: start, to: .now())
+        let finished = await finish(
+            outgoing, options: options, wire: result.wire, error: result.wire.error, connectionID: 0,
+            timing: timing, tls: tls)
+        guard result.wire.error == nil, finished.exchange.response?.parsed.statusCode == 101 else {
+            channel.close(promise: nil)
+            return (finished, nil)
+        }
+        return (finished, UpgradedConnection(channel: channel))
+    }
+
     // MARK: send pipeline
 
     func send(
@@ -229,6 +273,21 @@ public final class NIOHTTPEngine: HTTPEngine {
             outgoing.request = outgoing.request.forPlainHTTPProxy(
                 target: outgoing.target, proxyAuthorization: route.basicAuthorization)
         }
+        // HIS-007: a streamed response is recorded as pending when its first bytes arrive, updated
+        // with what arrived so far as it grows, then replaced in place when it completes.
+        let streamRecord = StreamRecord(start: start)
+        if let forward = options.onResponseBytes, let recorder {
+            var pendingExchange = Exchange(
+                source: options.recordAs, target: outgoing.target, request: outgoing.request,
+                clientAddress: options.clientAddress)
+            pendingExchange.state = .pending
+            pendingExchange.timing = timing
+            let pendingCopy = pendingExchange
+            options.onResponseBytes = { bytes in
+                forward(bytes)
+                streamRecord.received(bytes, pending: pendingCopy, recorder: recorder)
+            }
+        }
         let attempt = await perform(
             outgoing, options: options, route: route, pool: pool, start: start, timing: &timing)
         if let wire = attempt.wire {
@@ -239,10 +298,12 @@ public final class NIOHTTPEngine: HTTPEngine {
             }
         }
         timing.totalMs = milliseconds(from: start, to: .now())
+        let streamed = await streamRecord.finish()
+        if !streamed.marks.isEmpty { timing.streamMarks = streamed.marks }
         return await finish(
             outgoing, options: options, wire: attempt.wire, error: attempt.error,
             connectionID: attempt.connectionID, timing: timing, tls: attempt.tls,
-            httpVersion: attempt.httpVersion)
+            httpVersion: attempt.httpVersion, streamedAs: streamed.id)
     }
 
     /// The upstream proxy for `target` (HTTP-006): the per-send override, else the first matching
@@ -286,7 +347,9 @@ public final class NIOHTTPEngine: HTTPEngine {
         let key = PoolKey(target: outgoing.target, options: options, route: route)
         let method = request.bytes[request.parsed.method].string()
         let idempotent = ["GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"].contains(method)
-        let totalDeadline = start + timeAmount(options.timeouts.total)
+        // A streaming response has no total-time cap (PRX-050); the idle timeout still applies.
+        let totalDeadline =
+            options.onResponseBytes == nil ? start + timeAmount(options.timeouts.total) : .distantFuture
         var policy = options.connection
 
         let wantsH2 =
@@ -626,7 +689,7 @@ public final class NIOHTTPEngine: HTTPEngine {
             isConnect: isConnect, maxResponseBytes: options.maxResponseBytes,
             firstByteTimeout: timeAmount(options.timeouts.firstByte),
             idleTimeout: timeAmount(options.timeouts.idleBetweenBytes), totalDeadline: totalDeadline,
-            promise: promise)
+            promise: promise, onBytes: options.onResponseBytes)
         let writeStart = NIODeadline.now()
         // The explicit-promise form: in an async context the plain `writeAndFlush(_:)` resolves to
         // NIO's `async throws` overload, but we need the future to chain a failure handler onto.
@@ -654,7 +717,8 @@ public final class NIOHTTPEngine: HTTPEngine {
     /// Build the exchange (response hooks, derived fields), record it, and wrap it as a result.
     private func finish(
         _ outgoing: OutgoingRequest, options: SendOptions, wire: WireResponse?, error: GulpNetworkError?,
-        connectionID: UInt64, timing: Timing, tls: TLSInfo? = nil, httpVersion: HTTPVersion = .http1_1
+        connectionID: UInt64, timing: Timing, tls: TLSInfo? = nil, httpVersion: HTTPVersion = .http1_1,
+        streamedAs: ExchangeID? = nil
     ) async -> ExchangeResult {
         let isHead = outgoing.request.bytes[outgoing.request.parsed.method].string() == "HEAD"
         var response: RawResponse?
@@ -691,7 +755,14 @@ public final class NIOHTTPEngine: HTTPEngine {
             edited: edited)
         exchange.tls = tls
         exchange.httpVersion = httpVersion
-        if let recorder { exchange.id = await recorder.record(exchange) }
+        if let recorder {
+            if let streamedAs {
+                exchange.id = streamedAs
+                await recorder.update(exchange)
+            } else {
+                exchange.id = await recorder.record(exchange)
+            }
+        }
         return ExchangeResult(exchange: exchange, error: error)
     }
 }
@@ -834,5 +905,71 @@ final class ReadGate: ChannelInboundHandler {
         held = []
         for read in reads { context.fireChannelRead(read) }
         context.fireChannelReadComplete()
+    }
+}
+
+/// The pending row of a streaming response (HIS-007): recorded when the first bytes arrive, then
+/// updated with the bytes so far at most every 250 ms (up to 4 MB, beyond which only completion
+/// updates it). Updates run in order, and `finish` waits for them, so the final write wins.
+final class StreamRecord: Sendable {
+    static let updateInterval = TimeAmount.milliseconds(250)
+    static let liveLimit = 4 * 1_024 * 1_024
+
+    private struct State {
+        var record: Task<ExchangeID, Never>?
+        var chain: Task<Void, Never>?
+        var received: [UInt8] = []
+        var marks: [StreamMark] = []
+        var lastUpdate = NIODeadline.uptimeNanoseconds(0)
+        var finished = false
+    }
+
+    private let start: NIODeadline
+    private let state = NIOLockedValueBox(State())
+
+    init(start: NIODeadline) {
+        self.start = start
+    }
+
+    /// Response bytes arrived (on the connection's event loop, in order).
+    func received(_ bytes: [UInt8], pending: Exchange, recorder: any ExchangeRecorder) {
+        let now = NIODeadline.now()
+        let ms = Double((now - start).nanoseconds) / 1_000_000
+        state.withLockedValue { state in
+            guard !state.finished else { return }
+            state.received += bytes
+            state.marks.append(StreamMark(offset: state.received.count, ms: ms))
+            guard let record = state.record else {
+                state.record = Task { await recorder.record(pending) }
+                state.lastUpdate = now
+                return
+            }
+            guard now - state.lastUpdate >= Self.updateInterval, state.received.count <= Self.liveLimit else {
+                return
+            }
+            state.lastUpdate = now
+            var partial = pending
+            partial.response = RawResponse(Bytes(state.received))
+            partial.timing.streamMarks = state.marks
+            let snapshot = partial
+            let previous = state.chain
+            state.chain = Task {
+                await previous?.value
+                var update = snapshot
+                update.id = await record.value
+                await recorder.update(update)
+            }
+        }
+    }
+
+    /// Stop updating; returns the pending row's id (nil if nothing streamed) and the marks, once
+    /// every update already started has been written.
+    func finish() async -> (id: ExchangeID?, marks: [StreamMark]) {
+        let (record, chain, marks) = state.withLockedValue { state in
+            state.finished = true
+            return (state.record, state.chain, state.marks)
+        }
+        await chain?.value
+        return (await record?.value, marks)
     }
 }

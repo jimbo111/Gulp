@@ -17,6 +17,8 @@ struct RequestCommand: Sendable {
     let idleTimeout: TimeAmount
     let totalDeadline: NIODeadline
     let promise: EventLoopPromise<WireResponse>
+    /// Streaming (PRX-050): every inbound chunk, as it arrives.
+    var onBytes: (@Sendable ([UInt8]) -> Void)? = nil
 }
 
 /// The bytes and outcome of one request on the wire.
@@ -80,6 +82,7 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
         let isConnect: Bool
         let maxBytes: Int
         let idleTimeout: TimeAmount
+        let onBytes: (@Sendable ([UInt8]) -> Void)?
         var buffer: [UInt8] = []
         var interim: [[UInt8]] = []
         /// Where the current (non-interim) message starts in `buffer`.
@@ -93,6 +96,9 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
 
     private var pending: Pending?
     private var context: ChannelHandlerContext?
+    /// After `101 Switching Protocols` the connection carries another protocol (WebSocket): bytes
+    /// pass down the pipeline untouched instead of being parsed as HTTP (PRX-030).
+    private var passThrough = false
 
     func handlerAdded(context: ChannelHandlerContext) {
         self.context = context
@@ -104,6 +110,11 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
     }
 
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
+        if passThrough {
+            // Upgraded: writes are raw `ByteBuffer`s for the other protocol, not request commands.
+            context.write(data, promise: promise)
+            return
+        }
         let command = unwrapOutboundIn(data)
         guard pending == nil else {
             command.promise.fail(GulpNetworkError.other("A request is already in flight on this connection"))
@@ -112,7 +123,7 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
         }
         pending = Pending(
             promise: command.promise, isHead: command.isHead, isConnect: command.isConnect,
-            maxBytes: command.maxResponseBytes, idleTimeout: command.idleTimeout)
+            maxBytes: command.maxResponseBytes, idleTimeout: command.idleTimeout, onBytes: command.onBytes)
         let bound = NIOLoopBound(self, eventLoop: context.eventLoop)
         pending?.totalTimer = context.eventLoop.scheduleTask(deadline: command.totalDeadline) {
             bound.value.timedOut(.totalTimeout)
@@ -122,6 +133,10 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        if passThrough {
+            context.fireChannelRead(data)
+            return
+        }
         let incoming = unwrapInboundIn(data)
         guard pending != nil else {
             // Bytes nobody asked for: the connection can no longer be trusted for reuse.
@@ -130,6 +145,7 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
         }
         if pending?.firstByteAt == nil { pending?.firstByteAt = .now() }
         pending?.buffer.append(contentsOf: incoming.readableBytesView)
+        pending?.onBytes?(Array(incoming.readableBytesView))
         if let p = pending, p.buffer.count > p.maxBytes {
             fail(.tooLarge(limit: p.maxBytes))
             context.close(promise: nil)
@@ -203,11 +219,19 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
     private func complete(end: Int, reusable: Bool) {
         guard let p = pending else { return }
         let surplus = p.buffer.count > end
+        let switching = p.head?.status == 101
         finish(
             WireResponse(
                 bytes: Array(p.buffer[p.start..<end]), interim: p.interim, error: nil,
-                firstByteAt: p.firstByteAt, lastByteAt: .now(), reusable: reusable && !surplus,
+                firstByteAt: p.firstByteAt, lastByteAt: .now(), reusable: reusable && !surplus && !switching,
                 receivedAny: true))
+        guard switching, let context else { return }
+        // The first frames may have arrived with the 101: hand them on, then pass everything through.
+        passThrough = true
+        if surplus {
+            let rest = context.channel.allocator.buffer(bytes: p.buffer[end...])
+            context.fireChannelRead(NIOAny(rest))
+        }
     }
 
     private func fail(_ error: GulpNetworkError) {

@@ -104,3 +104,61 @@ enum Zlib {
         return output
     }
 }
+
+/// Undoes `permessage-deflate` (RFC 7692) for one direction of a WebSocket, for display and
+/// recording (PRX-034). The window is kept between messages, which decodes both context-takeover
+/// and no-context-takeover senders. The bytes on the wire are never changed by this.
+public final class WebSocketInflater {
+    private let stream: UnsafeMutablePointer<z_stream>
+    private var ready: Bool
+
+    /// A fresh inflater (raw DEFLATE, 32 KiB window).
+    public init() {
+        // Heap-allocated: zlib keeps a pointer back to the stream and rejects a moved one.
+        stream = .allocate(capacity: 1)
+        stream.initialize(to: z_stream())
+        ready = inflateInit2_(stream, -15, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size)) == Z_OK
+    }
+
+    deinit {
+        if ready { _ = inflateEnd(stream) }
+        stream.deinitialize(count: 1)
+        stream.deallocate()
+    }
+
+    /// The uncompressed payload of one compressed message (its frames' payloads joined).
+    public func inflate(_ message: [UInt8], limit: Int = 64 * 1024 * 1024) throws -> [UInt8] {
+        guard ready else { throw ContentDecodingError.corrupt("zlib initialisation failed") }
+        var input = message + [0x00, 0x00, 0xFF, 0xFF]  // the tail every message drops (§7.2.1)
+        var output: [UInt8] = []
+        var chunk = [UInt8](repeating: 0, count: 64 * 1024)
+        let stream = self.stream
+        try input.withUnsafeMutableBufferPointer { inBuffer in
+            stream.pointee.next_in = inBuffer.baseAddress
+            stream.pointee.avail_in = uInt(inBuffer.count)
+            repeat {
+                var status = Z_OK
+                let produced = chunk.withUnsafeMutableBufferPointer { outBuffer -> Int in
+                    stream.pointee.next_out = outBuffer.baseAddress
+                    stream.pointee.avail_out = uInt(outBuffer.count)
+                    status = CZlib.inflate(stream, Z_SYNC_FLUSH)
+                    return outBuffer.count - Int(stream.pointee.avail_out)
+                }
+                output.append(contentsOf: chunk[0..<produced])
+                if output.count > limit { throw ContentDecodingError.tooLarge(limit: limit) }
+                if status == Z_BUF_ERROR { break }  // no progress possible: all input used
+                guard status == Z_OK || status == Z_STREAM_END else {
+                    ready = false
+                    throw ContentDecodingError.corrupt("zlib error \(status)")
+                }
+            } while stream.pointee.avail_in > 0 || stream.pointee.avail_out == 0
+        }
+        return output
+    }
+
+    /// Whether the 101 `response` negotiated `permessage-deflate`.
+    public static func negotiated(in response: RawResponse) -> Bool {
+        response.headerValue("sec-websocket-extensions")?.string().lowercased()
+            .contains("permessage-deflate") == true
+    }
+}

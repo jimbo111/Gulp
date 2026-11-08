@@ -66,6 +66,89 @@ struct StoreTests {
         #expect(loaded.state == .complete)
     }
 
+    @Test("HIS-007: update replaces a recorded exchange in place and announces exchangeUpdated")
+    func test_HIS007_update() async throws {
+        let bus = EventBus()
+        let events = await bus.subscribe()
+        let store = try ProjectStore.open(at: temporaryProject(), eventBus: bus)
+        var exchange = sampleExchange(path: "/stream")
+        exchange.state = .pending
+        exchange.id = await store.writer.record(exchange)
+        exchange.state = .complete
+        exchange.response = RawResponse(Bytes("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"))
+        await store.writer.update(exchange)
+        await store.writer.flush()
+        let count = try await store.count()
+        #expect(count == 1)
+        let loaded = try await store.exchange(id: exchange.id)
+        #expect(loaded?.response?.bytes.string().hasSuffix("ok") == true)
+        var sawUpdate = false
+        for await delivery in events {
+            if case .exchangeUpdated(let id) = delivery.event, id == exchange.id { sawUpdate = true }
+            if sawUpdate { break }
+        }
+        #expect(sawUpdate)
+        try await store.close()
+    }
+
+    @Test("PRX-031/032: WebSocket connections and messages are stored with frames and announced")
+    func test_PRX031_webSocketRows() async throws {
+        let bus = EventBus()
+        let events = await bus.subscribe()
+        let store = try ProjectStore.open(at: temporaryProject(), eventBus: bus)
+        let upgrade = await store.writer.record(sampleExchange(path: "/chat"))  // not flushed yet
+        let id = try await store.openWebSocket(upgradeExchangeID: upgrade, url: "ws://h/chat")
+        let frames = [
+            WSFrameInfo(fin: false, opcode: 1, rsv: 0, length: 3, masked: true),
+            WSFrameInfo(fin: true, opcode: 0, rsv: 0, length: 2, masked: true),
+        ]
+        let message = try await store.recordWebSocketMessage(
+            connection: id, direction: 0, opcode: 1, payload: Array("Hello".utf8), frames: frames)
+        try await store.recordWebSocketMessage(
+            connection: id, direction: 1, opcode: 2, payload: [0, 1, 2], frames: [])
+        var connections = try await store.webSocketConnections()
+        #expect(connections.count == 1)
+        #expect(connections.first?.url == "ws://h/chat" && connections.first?.upgradeExchangeID == upgrade)
+        #expect(connections.first?.messageCount == 2 && connections.first?.closedAt == nil)
+        try await store.closeWebSocket(id, code: 1000)
+        connections = try await store.webSocketConnections()
+        #expect(connections.first?.closeCode == 1000 && connections.first?.closedAt != nil)
+        let messages = try await store.webSocketMessages(connection: id)
+        #expect(messages.map(\.direction) == [0, 1])
+        #expect(messages.first?.payload == Array("Hello".utf8))
+        #expect(messages.first?.frames == frames)
+        #expect(messages.last?.payload == [0, 1, 2] && messages.last?.opcode == 2)
+        var seen: [GulpEvent] = []
+        for await delivery in events {
+            guard let event = delivery.event else { continue }
+            if case .exchangeRecorded = event { continue }
+            seen.append(event)
+            if seen.count == 4 { break }
+        }
+        #expect(seen.first == .wsConnectionChanged(id))
+        #expect(seen.contains(.wsMessage(message)))
+        #expect(seen.last == .wsConnectionChanged(id))
+        try await store.close()
+    }
+
+    @Test("PRX-032: the message filter by direction, kind and text (UTF-8 or raw bytes)")
+    func test_PRX032_messageFilter() {
+        func message(_ direction: Int, _ opcode: Int, _ payload: [UInt8]) -> WebSocketMessageRecord {
+            WebSocketMessageRecord(
+                id: 1, direction: direction, opcode: opcode, createdAt: Date(), payload: payload, frames: [])
+        }
+        let text = message(0, 1, Array("Hello Wörld".utf8))
+        let binary = message(1, 2, [0x00, 0xFF, 0x41])
+        let ping = message(1, 9, [])
+        #expect(WebSocketMessageFilter().matches(text))
+        #expect(!WebSocketMessageFilter(direction: .toClient).matches(text))
+        #expect(WebSocketMessageFilter(kind: .control).matches(ping))
+        #expect(!WebSocketMessageFilter(kind: .data).matches(ping))
+        #expect(WebSocketMessageFilter(text: "wörld").matches(text))
+        #expect(WebSocketMessageFilter(text: "a").matches(binary))  // 0x41 'A', case-insensitive
+        #expect(!WebSocketMessageFilter(text: "zzz").matches(text))
+    }
+
     @Test("Interim 1xx responses are stored as received and split again on load")
     func test_interimRoundTrip() async throws {
         let store = try ProjectStore.open(at: temporaryProject())

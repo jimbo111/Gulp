@@ -66,12 +66,16 @@ enum HistoryColumn: String, CaseIterable {
         case .method: row.method ?? ""
         case .url: row.url
         case .params: row.paramCount > 0 ? "✓" : ""
+        case .status where row.state == "pending":  // HIS-007: still streaming
+            row.status.map { "\($0) ⋯" } ?? "⋯"
         case .status: row.status.map(String.init) ?? (row.error ?? "")
         case .length: row.responseLength.map(String.init) ?? ""
         case .mime: row.mime ?? ""
         case .title: row.title ?? ""
         case .tls: row.scheme == .https ? "✓" : ""
         case .version: row.httpVersion == .http2 ? "h2" : ""
+        case .time where row.state == "pending":  // live duration (rows refresh as updates land)
+            String(format: "%.1f s ⋯", Date().timeIntervalSince(row.createdAt))
         case .time: row.totalMs.map { String(format: "%.0f ms", $0) } ?? ""
         case .source: row.source.rawValue
         case .comment: row.comment ?? ""

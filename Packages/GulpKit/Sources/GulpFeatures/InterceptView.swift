@@ -20,6 +20,7 @@ final class InterceptModel {
     var editing: [UInt8] = []
     private(set) var interceptRequests = false
     private(set) var interceptResponses = false
+    private(set) var interceptWebSockets = false
 
     @ObservationIgnored private let session: ProjectSession
     @ObservationIgnored private var listener: Task<Void, Never>?
@@ -30,6 +31,7 @@ final class InterceptModel {
         let stored = session.settings.get(InterceptSettings.self)
         interceptRequests = stored.interceptRequests
         interceptResponses = stored.interceptResponses
+        interceptWebSockets = stored.interceptWebSockets
         let events = session.events
         listener = Task { [weak self] in
             for await delivery in await events.subscribe() {
@@ -56,6 +58,7 @@ final class InterceptModel {
         switch item.kind {
         case .request: original = item.request.bytes.rawBytes
         case .response: original = item.response?.wireBytes.rawBytes ?? []
+        case .webSocket: original = item.webSocketPayload ?? []
         }
         editing = original
     }
@@ -91,9 +94,14 @@ final class InterceptModel {
         }
     }
 
-    /// Turn request or response interception on or off (stored in the project, PRX-010/014).
-    func setIntercepting(requests: Bool? = nil, responses: Bool? = nil) {
+    /// Turn request, response or WebSocket interception on or off (stored in the project,
+    /// PRX-010/014/033).
+    func setIntercepting(requests: Bool? = nil, responses: Bool? = nil, webSockets: Bool? = nil) {
         var stored = session.settings.get(InterceptSettings.self)
+        if let webSockets {
+            stored.interceptWebSockets = webSockets
+            interceptWebSockets = webSockets
+        }
         if let requests {
             stored.interceptRequests = requests
             interceptRequests = requests
@@ -136,8 +144,12 @@ public struct InterceptView: View {
                     "Responses",
                     isOn: Binding(
                         get: { model.interceptResponses }, set: { model.setIntercepting(responses: $0) }))
+                Toggle(
+                    "WebSockets",
+                    isOn: Binding(
+                        get: { model.interceptWebSockets }, set: { model.setIntercepting(webSockets: $0) }))
                 Button("Rules…") { editingRules = true }
-                    .help("Which requests and responses are held (PRX-013, PRX-014)")
+                    .help("Which requests, responses and WebSocket connections are held")
                 Spacer()
                 Button("Forward") { model.forward() }
                     .keyboardShortcut("f", modifiers: [.command, .option])
@@ -155,13 +167,10 @@ public struct InterceptView: View {
             VSplitView {
                 queue.frame(minHeight: 100, idealHeight: 160)
                 if let item = model.selected {
-                    MessageEditor(
-                        title: item.kind == .request ? "Request" : "Response", bytes: $model.editing,
-                        editable: true
-                    )
-                    .frame(minHeight: 200)
+                    MessageEditor(title: Self.title(item), bytes: $model.editing, editable: true)
+                        .frame(minHeight: 200)
                 } else {
-                    let on = model.interceptRequests || model.interceptResponses
+                    let on = model.interceptRequests || model.interceptResponses || model.interceptWebSockets
                     ContentUnavailableView(
                         on ? "Nothing held" : "Intercept is off",
                         systemImage: "hand.raised",
@@ -177,14 +186,34 @@ public struct InterceptView: View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             List(model.items, selection: $model.selectedID) { item in
                 HStack {
-                    Text(item.kind == .request ? "→" : "←").foregroundStyle(.secondary)
-                    Text(item.request.bytes[item.request.parsed.method].string()).bold()
+                    Text(Self.arrow(item)).foregroundStyle(.secondary)
+                    Text(Self.label(item)).bold()
                     Text(Self.url(item)).lineLimit(1).truncationMode(.middle)
                     Spacer()
                     Text(Self.waiting(item)).monospacedDigit().foregroundStyle(.secondary)
                 }
                 .tag(item.id)
             }
+        }
+    }
+
+    static func title(_ item: InterceptItem) -> String {
+        switch item.kind {
+        case .request: "Request"
+        case .response: "Response"
+        case .webSocket(.toServer): "WebSocket message to server"
+        case .webSocket(.toClient): "WebSocket message to client"
+        }
+    }
+
+    static func label(_ item: InterceptItem) -> String {
+        item.isWebSocket ? "WS" : item.request.bytes[item.request.parsed.method].string()
+    }
+
+    static func arrow(_ item: InterceptItem) -> String {
+        switch item.kind {
+        case .request, .webSocket(.toServer): "→"
+        case .response, .webSocket(.toClient): "←"
         }
     }
 
@@ -219,6 +248,9 @@ struct InterceptRulesSheet: View {
                 .foregroundStyle(.secondary)
             ConditionList(title: "Requests", conditions: $settings.requestRules)
             ConditionList(title: "Responses", conditions: $settings.responseRules)
+            ConditionList(
+                title: "WebSocket connections (conditions on the upgrade request)",
+                conditions: $settings.webSocketRules)
             HStack {
                 if let status { Text(status).foregroundStyle(.secondary) }
                 Spacer()
@@ -239,7 +271,7 @@ struct InterceptRulesSheet: View {
             }
         }
         .padding()
-        .frame(minWidth: 720, minHeight: 420)
+        .frame(minWidth: 720, minHeight: 540)
     }
 }
 

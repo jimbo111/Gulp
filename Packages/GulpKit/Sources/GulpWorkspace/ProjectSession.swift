@@ -20,9 +20,15 @@ public struct WorkspaceEnvironment: Sendable {
     /// Key type for a CA generated on first use (TLS-001: RSA-2048 by default).
     public var caKeyType: CAKeyType = .rsa2048
 
-    /// The platform's standard locations.
+    /// The platform's standard locations. `GULP_SUPPORT_DIR` overrides them with one folder and a
+    /// file CA store (automation and CI: no Keychain, nothing shared with the user's install).
     public static var standard: WorkspaceEnvironment {
         let fm = FileManager.default
+        if let override = ProcessInfo.processInfo.environment["GULP_SUPPORT_DIR"], !override.isEmpty {
+            let root = URL(fileURLWithPath: override, isDirectory: true)
+            return WorkspaceEnvironment(
+                supportDirectory: root, cachesDirectory: root.appendingPathComponent("Caches"))
+        }
         let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
         let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first
         let supportDirectory = (support ?? fm.temporaryDirectory).appendingPathComponent("Gulp")
@@ -90,15 +96,18 @@ public enum SettingsSource: Sendable {
     case project(URL)
 }
 
-/// Records the engine's exchanges into whichever store the session currently uses, so Save As can
-/// switch files without rebuilding the engine.
-actor ProjectRecorder: ExchangeRecorder {
+/// Records the engine's exchanges (and the proxy's WebSocket traffic) into whichever store the
+/// session currently uses, so Save As can switch files without rebuilding the engine.
+actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
+    private var store: ProjectStore
     private var writer: StoreWriter
     private var paused = false
     private var held: [(Exchange, CheckedContinuation<ExchangeID, Never>)] = []
+    private var waiting: [CheckedContinuation<Void, Never>] = []
 
-    init(writer: StoreWriter) {
-        self.writer = writer
+    init(store: ProjectStore) {
+        self.store = store
+        self.writer = store.writer
     }
 
     func record(_ exchange: Exchange) async -> ExchangeID {
@@ -108,13 +117,19 @@ actor ProjectRecorder: ExchangeRecorder {
         return await writer.record(exchange)
     }
 
+    func update(_ exchange: Exchange) async {
+        await writer.update(exchange)
+    }
+
     /// Hold new recordings (Save As copies the file meanwhile, PRJ-002).
     func pause() {
         paused = true
     }
 
-    /// Continue recording into `newWriter`, first writing everything held during the pause, in order.
-    func resume(with newWriter: StoreWriter) async {
+    /// Continue recording into `newStore`, first writing everything held during the pause, in order.
+    func resume(with newStore: ProjectStore) async {
+        store = newStore
+        let newWriter = newStore.writer
         writer = newWriter
         while !held.isEmpty {
             let batch = held
@@ -124,6 +139,32 @@ actor ProjectRecorder: ExchangeRecorder {
             }
         }
         paused = false
+        let woken = waiting
+        waiting = []
+        for continuation in woken { continuation.resume() }
+    }
+
+    /// The store to write WebSocket rows to, once any Save As copy has finished.
+    private func currentStore() async -> ProjectStore {
+        while paused { await withCheckedContinuation { waiting.append($0) } }
+        return store
+    }
+
+    func webSocketOpened(upgradeExchangeID: ExchangeID?, url: String) async -> Int64? {
+        try? await currentStore().openWebSocket(upgradeExchangeID: upgradeExchangeID, url: url)
+    }
+
+    func webSocketMessage(
+        _ connection: Int64, direction: WSDirection, message: WSMessage, original: [UInt8]?, dropped: Bool
+    ) async {
+        _ = try? await currentStore().recordWebSocketMessage(
+            connection: connection, direction: direction.rawValue, opcode: Int(message.opcode),
+            payload: message.payload, frames: message.frames, originalPayload: original,
+            comment: dropped ? "Dropped in Intercept" : nil)
+    }
+
+    func webSocketClosed(_ connection: Int64, code: Int?) async {
+        try? await currentStore().closeWebSocket(connection, code: code)
     }
 }
 
@@ -146,6 +187,8 @@ public actor ProjectSession {
     public private(set) var store: ProjectStore
     /// A temporary project is deleted on close unless saved (PRJ-001).
     public private(set) var isTemporary: Bool
+    /// Ports of the listeners started by `startProxyListeners`, in settings order.
+    public private(set) var listenerPorts: [Int] = []
     private let recorder: ProjectRecorder
     /// Mints leaves for TLS interception; nil when the CA could not be loaded (CONNECT then fails
     /// with a clear page instead of the project failing to open).
@@ -164,7 +207,7 @@ public actor ProjectSession {
         self.settings = settings
         self.isTemporary = isTemporary
         self.environment = environment
-        let recorder = ProjectRecorder(writer: store.writer)
+        let recorder = ProjectRecorder(store: store)
         self.recorder = recorder
         let matchReplace = MatchReplaceHook(rules: settings.get(MatchReplaceSettings.self).rules)
         self.matchReplace = matchReplace
@@ -176,15 +219,18 @@ public actor ProjectSession {
         self.intercept = intercept
         let proxySettings = settings.get(ProxySettings.self)
         self.proxy = ProxyServer(
-            engine: engine, tls: minter.map { proxySettings.tlsOptions(minter: $0) }, intercept: intercept)
+            engine: engine, tls: minter.map { proxySettings.tlsOptions(minter: $0) }, intercept: intercept,
+            matchReplace: matchReplace, webSockets: recorder)
     }
 
     /// Apply the stored intercept settings to the queue (call after opening or changing them).
     public func applyInterceptSettings() async {
         let stored = settings.get(InterceptSettings.self)
-        await intercept.setRules(requests: stored.requestRules, responses: stored.responseRules)
+        await intercept.setRules(
+            requests: stored.requestRules, responses: stored.responseRules, webSockets: stored.webSocketRules)
         await intercept.setIntercepting(
             requests: stored.interceptRequests, responses: stored.interceptResponses)
+        await intercept.setInterceptingWebSockets(stored.interceptWebSockets)
     }
 
     /// Store and apply Match & Replace rules (PRX-020).
@@ -264,13 +310,13 @@ public actor ProjectSession {
             try await store.backup(to: destination)
             newStore = try ProjectStore.open(at: destination, eventBus: events)
         } catch {
-            await recorder.resume(with: store.writer)
+            await recorder.resume(with: store)
             throw error
         }
         let oldStore = store
         settings.switchStore(newStore)
         store = newStore
-        await recorder.resume(with: newStore.writer)
+        await recorder.resume(with: newStore)
         try await oldStore.close()
         if isTemporary { Self.removeDatabaseFiles(oldStore.url) }
         isTemporary = false
@@ -282,9 +328,12 @@ public actor ProjectSession {
     public func startProxyListeners() async -> [UUID: Result<Int, GulpError>] {
         var results: [UUID: Result<Int, GulpError>] = [:]
         if let minter { await proxy.setTLS(settings.get(ProxySettings.self).tlsOptions(minter: minter)) }
+        listenerPorts = []
         for listener in settings.get(ProxySettings.self).listeners where listener.enabled {
             do {
-                results[listener.id] = .success(try await proxy.start(listener))
+                let port = try await proxy.start(listener)
+                listenerPorts.append(port)
+                results[listener.id] = .success(port)
             } catch let error as GulpError {
                 results[listener.id] = .failure(error)
             } catch {

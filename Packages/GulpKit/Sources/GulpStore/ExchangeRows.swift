@@ -96,6 +96,12 @@ enum ExchangeRows {
         title, extension, param_count, highlight, comment, state, error, timing_json, http_version
         """
 
+    /// Remove an exchange row and its search text (before re-inserting an updated version).
+    static func delete(_ id: ExchangeID, in db: Database) throws {
+        try db.execute(sql: "DELETE FROM fts_exchanges WHERE rowid = ?", arguments: [id])
+        try db.execute(sql: "DELETE FROM exchanges WHERE id = ?", arguments: [id])
+    }
+
     /// Insert `exchange` (whose `id` is already assigned) with its blobs, tags and search text.
     static func insert(_ exchange: Exchange, in db: Database) throws {
         let d = exchange.derived

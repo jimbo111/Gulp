@@ -37,16 +37,22 @@ public actor ProxyServer {
     private let engine: any HTTPEngine
     private var tls: ProxyTLSOptions?
     private let intercept: InterceptQueue?
+    private let matchReplace: MatchReplaceHook?
+    private let webSockets: (any WebSocketRecorder)?
     private var listeners: [UUID: (server: any Channel, clients: ClientConnections)] = [:]
 
     /// Create a proxy that forwards (and, through the engine's recorder, records) via `engine`.
-    /// Without `tls`, CONNECT is refused (no CA to intercept with).
+    /// Without `tls`, CONNECT is refused (no CA to intercept with). WebSocket traffic is recorded
+    /// to `webSockets` (PRX-031).
     public init(
-        engine: any HTTPEngine, tls: ProxyTLSOptions? = nil, intercept: InterceptQueue? = nil
+        engine: any HTTPEngine, tls: ProxyTLSOptions? = nil, intercept: InterceptQueue? = nil,
+        matchReplace: MatchReplaceHook? = nil, webSockets: (any WebSocketRecorder)? = nil
     ) {
         self.engine = engine
         self.tls = tls
         self.intercept = intercept
+        self.matchReplace = matchReplace
+        self.webSockets = webSockets
     }
 
     /// Change TLS interception for connections accepted from now on.
@@ -62,6 +68,8 @@ public actor ProxyServer {
         let engine = self.engine
         let tls = self.tls
         let intercept = self.intercept
+        let matchReplace = self.matchReplace
+        let webSockets = self.webSockets
         let clients = ClientConnections()
         let channel: any Channel
         do {
@@ -74,7 +82,7 @@ public actor ProxyServer {
                     let pressure = Backpressure()
                     let upstream = ProxyUpstream(
                         engine: engine, client: client, forceHTTP1: tls?.forceHTTP1ToServer ?? false,
-                        intercept: intercept)
+                        intercept: intercept, matchReplace: matchReplace, webSockets: webSockets)
                     Task {
                         await ProxyConnection.serve(
                             items, channel: channel, upstream: upstream, pressure: pressure,
@@ -139,6 +147,8 @@ enum ProxyItem: Sendable {
     case request(RawRequest, tunnel: HTTPTarget?)
     /// Answer a CONNECT; the handler is already waiting for the tunnel to start.
     case connect(RawRequest)
+    /// Switch protocols (PRX-030): relay the connection until it closes, or resume HTTP if declined.
+    case upgrade(RawRequest, tunnel: HTTPTarget?)
     /// Answer `100 Continue` (after any earlier responses).
     case sendContinue
     /// Answer an error and close (unframeable input).
@@ -188,6 +198,12 @@ final class ProxyConnectionHandler: ChannelInboundHandler, RemovableChannelHandl
     private var sentContinue = false
     private var rejected = false
     private var mode = Mode.forward
+    /// PRX-030: an upgrade request is out (bytes wait), or the connection relays raw bytes to `sink`.
+    private var upgrade: Upgrade = .none
+    private enum Upgrade {
+        case none, pending
+        case relaying(@Sendable ([UInt8]) -> Void)
+    }
 
     private let upstream: ProxyUpstream
 
@@ -203,6 +219,10 @@ final class ProxyConnectionHandler: ChannelInboundHandler, RemovableChannelHandl
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         guard !rejected else { return }
+        if case .relaying(let sink) = upgrade {
+            sink(Array(unwrapInboundIn(data).readableBytesView))
+            return
+        }
         buffer.append(contentsOf: unwrapInboundIn(data).readableBytesView)
         frame(context: context)
     }
@@ -210,14 +230,25 @@ final class ProxyConnectionHandler: ChannelInboundHandler, RemovableChannelHandl
     private func frame(context: ChannelHandlerContext) {
         loop: while true {
             if case .tunnelPending = mode { return }
+            guard case .none = upgrade else { return }
             switch RequestFramer.next(buffer) {
             case .request(let request, let length):
                 buffer.removeFirst(length)
                 sentContinue = false
+                if ProxyWebSocket.isUpgrade(request), !Self.isConnect(request) {
+                    // Later bytes may be WebSocket frames: hold them until the upgrade is decided.
+                    upgrade = .pending
+                    if case .tunnel(let target) = mode {
+                        enqueue(.upgrade(request, tunnel: target), context: context)
+                    } else {
+                        enqueue(.upgrade(request, tunnel: nil), context: context)
+                    }
+                    return
+                }
                 switch mode {
                 case .tunnel(let target):
                     enqueue(.request(request, tunnel: target), context: context)
-                case .forward where request.bytes[request.parsed.method].string() == "CONNECT":
+                case .forward where Self.isConnect(request):
                     mode = .tunnelPending  // the bytes after CONNECT belong to the tunnel
                     enqueue(.connect(request), context: context)
                     return
@@ -241,8 +272,19 @@ final class ProxyConnectionHandler: ChannelInboundHandler, RemovableChannelHandl
         }
     }
 
+    static func isConnect(_ request: RawRequest) -> Bool {
+        request.bytes[request.parsed.method].string() == "CONNECT"
+    }
+
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
-        if let ready = event as? TunnelReady, let tls {
+        if let established = event as? UpgradeEstablished {
+            upgrade = .relaying(established.sink)
+            if !buffer.isEmpty { established.sink(buffer) }
+            buffer = []
+        } else if event is UpgradeDeclined {
+            upgrade = .none
+            frame(context: context)
+        } else if let ready = event as? TunnelReady, let tls {
             // `200 Connection established` is out: let the sniffer decide what the tunnel carries.
             let sniffer = TunnelSniffer(
                 host: ready.host, port: ready.port, tls: tls, upstream: upstream, initial: buffer)
@@ -298,7 +340,7 @@ enum ProxyConnection {
             var tunnel: TunnelReady?
             switch item {
             case .request(let request, let target):
-                reply = await forward(request, tunnel: target, upstream: upstream)
+                reply = await forward(request, tunnel: target, upstream: upstream, client: channel)
             case .connect(let request):
                 if intercepts, let authority = connectAuthority(request) {
                     reply = (Array("HTTP/1.1 200 Connection established\r\n\r\n".utf8), false)
@@ -309,6 +351,8 @@ enum ProxyConnection {
                         ? "CONNECT needs a host:port target." : "HTTPS interception is off (no Gulp CA)."
                     reply = (errorPage(intercepts ? 400 : 502, message, close: true), true)
                 }
+            case .upgrade(let request, let target):
+                reply = await upgrade(request, tunnel: target, upstream: upstream, client: channel)
             case .sendContinue: reply = (Array("HTTP/1.1 100 Continue\r\n\r\n".utf8), false)
             case .reject(let status, let message): reply = (errorPage(status, message, close: true), true)
             }
@@ -332,7 +376,8 @@ enum ProxyConnection {
 
     /// Forward one request (PRX-002) and decide whether the client connection stays open (PRX-003).
     static func forward(
-        _ request: RawRequest, tunnel: HTTPTarget?, upstream: ProxyUpstream
+        _ request: RawRequest, tunnel: HTTPTarget?, upstream: ProxyUpstream,
+        client: (any Channel)? = nil
     ) async -> (bytes: [UInt8], close: Bool) {
         let method = request.bytes[request.parsed.method].string()
         let version = request.bytes[request.parsed.version].string()
@@ -355,7 +400,13 @@ enum ProxyConnection {
             return (errorPage(400, message, close: clientWantsClose), clientWantsClose)
         }
         let forwarded = ForwardRewrite.strippingHopByHop(originForm)
-        switch await upstream.send(forwarded, to: target) {
+        switch await upstream.send(forwarded, to: target, streamTo: client) {
+        case .streamed(let response, let complete):
+            // The bytes already went to the client as they arrived (PRX-050).
+            let close =
+                !complete || clientWantsClose || response?.parsed.bodyFraming == .closeDelimited
+                || response?.hasHeaderToken("connection", "close") == true
+            return ([], close)
         case .response(let response):
             let close =
                 clientWantsClose || response.parsed.bodyFraming == .closeDelimited
@@ -369,6 +420,25 @@ enum ProxyConnection {
         case .dropped:
             return (errorPage(502, droppedMessage, close: true), true)
         }
+    }
+
+    /// Switch protocols (PRX-030). `Upgrade` is hop-by-hop, but here it is the point: it goes
+    /// upstream with `Connection`; the proxy-management headers are dropped as usual.
+    static func upgrade(
+        _ request: RawRequest, tunnel: HTTPTarget?, upstream: ProxyUpstream, client: any Channel
+    ) async -> (bytes: [UInt8], close: Bool) {
+        let originForm: RawRequest
+        let target: HTTPTarget
+        if let tunnel {
+            (originForm, target) = (request, tunnel)
+        } else if let rewritten = ForwardRewrite.originForm(request) {
+            (originForm, target) = rewritten
+        } else {
+            let message = "Gulp is a forward proxy: configure it as your HTTP proxy (absolute-form requests)."
+            return (errorPage(400, message, close: true), true)
+        }
+        let outgoing = ForwardRewrite.strippingHopByHop(originForm, keepingUpgrade: true)
+        return await ProxyWebSocket.relay(outgoing, to: target, upstream: upstream, client: client)
     }
 
     static let droppedMessage = "The request was dropped in Gulp's Intercept."

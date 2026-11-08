@@ -45,17 +45,16 @@ public struct ProxyHistoryView: View {
 
     @ViewBuilder private func messages(_ model: HistoryModel) -> some View {
         let request = model.selected?.request.bytes
-        let response = model.selected?.response?.wireBytes
         Group {
             if sideBySide {
                 HSplitView {
                     MessageViewer(title: "Request", bytes: request)
-                    MessageViewer(title: "Response", bytes: response)
+                    ResponsePane(exchange: model.selected)
                 }
             } else {
                 VSplitView {
                     MessageViewer(title: "Request", bytes: request)
-                    MessageViewer(title: "Response", bytes: response)
+                    ResponsePane(exchange: model.selected)
                 }
             }
         }
@@ -65,6 +64,101 @@ public struct ProxyHistoryView: View {
             }
             .help("Show request and response side by side or stacked (UI-050)")
         }
+    }
+}
+
+/// The response, plus HIS-007's Events tab (one row per SSE event with its arrival time) for
+/// `text/event-stream` and a chunk timeline for other streamed bodies.
+struct ResponsePane: View {
+    enum Tab: String, CaseIterable {
+        case message = "Response"
+        case events = "Events"
+        case chunks = "Chunks"
+    }
+
+    let exchange: Exchange?
+    @State private var tab = Tab.message
+
+    var body: some View {
+        let response = exchange?.response
+        let marks = exchange?.timing.streamMarks ?? []
+        let isEventStream = response.map(SSETimeline.isEventStream) ?? false
+        let tabs = Tab.allCases.filter { tab in
+            switch tab {
+            case .message: true
+            case .events: isEventStream
+            case .chunks: !marks.isEmpty && !isEventStream
+            }
+        }
+        VStack(spacing: 0) {
+            if tabs.count > 1 {
+                Picker("", selection: $tab) {
+                    ForEach(tabs, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(4)
+            }
+            switch tabs.contains(tab) ? tab : .message {
+            case .message:
+                MessageViewer(title: "Response", bytes: response?.wireBytes)
+            case .events:
+                EventsTable(events: response.map { SSETimeline.events(in: $0, marks: marks) } ?? [])
+            case .chunks:
+                ChunkTimeline(marks: marks)
+            }
+        }
+    }
+}
+
+/// HIS-007: SSE events — id, event, data, time.
+struct EventsTable: View {
+    struct Row: Identifiable {
+        let id: Int
+        let event: SSEEvent
+    }
+
+    let events: [SSEEvent]
+
+    var body: some View {
+        Table(events.enumerated().map { Row(id: $0.offset + 1, event: $0.element) }) {
+            TableColumn("#") { Text("\($0.id)").monospacedDigit() }.width(40)
+            TableColumn("id") { Text($0.event.id ?? "") }.width(70)
+            TableColumn("event") { Text($0.event.event ?? "message") }.width(90)
+            TableColumn("data") {
+                Text($0.event.data).lineLimit(2).font(.system(.body, design: .monospaced))
+            }
+            TableColumn("time") { Text(ChunkTimeline.format($0.event.receivedMs)).monospacedDigit() }
+                .width(80)
+        }
+    }
+}
+
+/// HIS-007: when each piece of a streamed body arrived.
+struct ChunkTimeline: View {
+    struct Row: Identifiable {
+        let id: Int
+        let mark: StreamMark
+        let size: Int
+    }
+
+    let marks: [StreamMark]
+
+    var body: some View {
+        let rows = marks.enumerated().map { index, mark in
+            Row(id: index + 1, mark: mark, size: mark.offset - (index > 0 ? marks[index - 1].offset : 0))
+        }
+        Table(rows) {
+            TableColumn("#") { Text("\($0.id)").monospacedDigit() }.width(40)
+            TableColumn("time") { Text(Self.format($0.mark.ms)).monospacedDigit() }.width(90)
+            TableColumn("bytes") { Text("\($0.size)").monospacedDigit() }.width(80)
+            TableColumn("total") { Text("\($0.mark.offset)").monospacedDigit() }
+        }
+    }
+
+    static func format(_ ms: Double?) -> String {
+        guard let ms else { return "" }
+        return ms < 1_000 ? String(format: "%.0f ms", ms) : String(format: "%.2f s", ms / 1_000)
     }
 }
 
