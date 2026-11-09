@@ -1,4 +1,5 @@
 import Testing
+
 @testable import GulpCore
 
 // M1 GulpCore: the raw-bytes-are-truth guarantee (CLAUDE.md §4) and HTTP/1 framing (F03 HTTP-001/002).

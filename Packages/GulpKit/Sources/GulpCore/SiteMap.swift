@@ -27,6 +27,10 @@ public struct SiteMapNode: Sendable, Hashable, Identifiable {
     public var visited: Bool
     /// Some exchange at this node or below it was in scope.
     public var inScope: Bool
+    /// Some exchange at this node or below it got a response other than 404 (TGT-005).
+    public var found: Bool = false
+    /// Response MIME types seen at this node or below it (TGT-005).
+    public var mimes: Set<String> = []
     /// Exchanges whose path ends exactly at this node, oldest first.
     public var exchanges: [ExchangeID]
     /// Child node ids, in name order.
@@ -43,13 +47,22 @@ public struct SiteMapEntry: Sendable, Hashable {
     public var path: String
     /// Whether it is in scope.
     public var inScope: Bool
+    /// The response status, if any.
+    public var status: Int?
+    /// The response MIME type, if any.
+    public var mime: String?
 
     /// An entry.
-    public init(id: ExchangeID, target: HTTPTarget, path: String, inScope: Bool) {
+    public init(
+        id: ExchangeID, target: HTTPTarget, path: String, inScope: Bool, status: Int? = nil,
+        mime: String? = nil
+    ) {
         self.id = id
         self.target = target
         self.path = path
         self.inScope = inScope
+        self.status = status
+        self.mime = mime
     }
 }
 
@@ -83,13 +96,17 @@ public struct SiteMap: Sendable {
     /// Add a request that was seen (visited).
     public mutating func add(_ entry: SiteMapEntry) {
         insert(
-            target: entry.target, path: entry.path, exchange: entry.id, visited: true, inScope: entry.inScope)
+            target: entry.target, path: entry.path, exchange: entry.id, visited: true, inScope: entry.inScope,
+            found: entry.status != 404, mime: entry.mime)
     }
 
     /// Add a URL only referenced by a response (inferred, TGT-003). Non-http(s) URLs are ignored.
     public mutating func addInferred(url: String) {
         guard let target = HTTPTarget(url: url) else { return }
-        insert(target: target, path: Self.path(of: url), exchange: nil, visited: false, inScope: false)
+        insert(
+            target: target, path: Self.path(of: url), exchange: nil, visited: false, inScope: false,
+            found: false,
+            mime: nil)
     }
 
     /// Every exchange at `id` or below it (the endpoints table for a selected node, TGT-002).
@@ -108,6 +125,9 @@ public struct SiteMap: Sendable {
             for child in node.children where walk(child) { anyChild = true }
             let passes =
                 (!filter.inScopeOnly || node.inScope) && (!filter.visitedOnly || node.visited)
+                && (!filter.hideNotFound || !node.visited || node.found)
+                && (filter.mimes.isEmpty
+                    || node.mimes.contains { mime in filter.mimes.contains { mime.contains($0) } })
                 && (filter.search.isEmpty || id.localizedCaseInsensitiveContains(filter.search))
             guard anyChild || passes else { return false }
             keep.insert(id)
@@ -120,7 +140,8 @@ public struct SiteMap: Sendable {
     // MARK: building
 
     private mutating func insert(
-        target: HTTPTarget, path: String, exchange: ExchangeID?, visited: Bool, inScope: Bool
+        target: HTTPTarget, path: String, exchange: ExchangeID?, visited: Bool, inScope: Bool, found: Bool,
+        mime: String?
     ) {
         let hostKey = Self.hostKey(target)
         if nodes[hostKey] == nil {
@@ -150,6 +171,8 @@ public struct SiteMap: Sendable {
         for id in chain {
             if visited { nodes[id]?.visited = true }
             if inScope { nodes[id]?.inScope = true }
+            if found { nodes[id]?.found = true }
+            if let mime { nodes[id]?.mimes.insert(mime) }
         }
     }
 
@@ -179,13 +202,23 @@ public struct SiteMapFilter: Sendable, Hashable {
     public var inScopeOnly = false
     /// Hide inferred-only nodes.
     public var visitedOnly = false
+    /// Hide visited nodes whose every response was a 404.
+    public var hideNotFound = false
+    /// Only nodes with a response whose MIME type contains one of these (e.g. `html`, `json`);
+    /// empty = any.
+    public var mimes: Set<String> = []
     /// Text that must appear in the node's URL.
     public var search = ""
 
     /// No filtering.
-    public init(inScopeOnly: Bool = false, visitedOnly: Bool = false, search: String = "") {
+    public init(
+        inScopeOnly: Bool = false, visitedOnly: Bool = false, hideNotFound: Bool = false,
+        mimes: Set<String> = [], search: String = ""
+    ) {
         self.inScopeOnly = inScopeOnly
         self.visitedOnly = visitedOnly
+        self.hideNotFound = hideNotFound
+        self.mimes = mimes
         self.search = search
     }
 }

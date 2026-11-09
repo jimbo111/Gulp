@@ -1,4 +1,5 @@
 import Testing
+
 @testable import GulpSequencer
 
 @Suite("GulpSequencer scaffolding")

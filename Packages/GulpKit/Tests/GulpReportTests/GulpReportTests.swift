@@ -1,4 +1,5 @@
 import Testing
+
 @testable import GulpReport
 
 @Suite("GulpReport scaffolding")

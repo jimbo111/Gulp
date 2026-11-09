@@ -16,11 +16,21 @@ enum Schema {
             try db.execute(sql: "ALTER TABLE scope_rules ADD COLUMN uid TEXT")
             try db.execute(sql: "ALTER TABLE scope_rules ADD COLUMN host_is_regex INTEGER NOT NULL DEFAULT 1")
         }
+        // F04 TGT-007: per-node annotations and per-host notes on the site map, keyed by the node's
+        // URL key (`https://host:443/a/b`; a host node's key is the host key). The tree itself is
+        // rebuilt from `exchanges`, so only what the user typed is stored.
+        migrator.registerMigration("v3_site_map_notes") { db in
+            try db.execute(
+                sql: """
+                    CREATE TABLE site_map_notes (node_key TEXT PRIMARY KEY, comment TEXT, highlight TEXT,
+                    notes TEXT)
+                    """)
+        }
         return migrator
     }
 
     /// The current schema version written to `meta.schema_version`.
-    static let version = 2
+    static let version = 3
 
     /// Schema v1, generated from the SQL block in doc 04 §4 (comments stripped, lines wrapped).
     static let v1 = """

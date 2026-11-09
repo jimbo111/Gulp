@@ -1,4 +1,5 @@
 import Testing
+
 @testable import GulpAutomation
 
 @Suite("GulpAutomation scaffolding")

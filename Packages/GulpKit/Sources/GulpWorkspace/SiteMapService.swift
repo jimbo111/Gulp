@@ -111,3 +111,41 @@ extension ProjectSession {
         }
     }
 }
+
+extension ProjectSession {
+    /// The endpoints table for a site-map node (TGT-002): every exchange at it or below it.
+    public func siteMapEndpoints(_ nodeID: String) async throws -> [ExchangeSummary] {
+        let ids = await siteMap.snapshot.exchanges(under: nodeID)
+        return try await store.summaries(ids: ids)
+    }
+
+    /// "Delete branch" (TGT-004): delete every exchange at `nodeID` or below it, then rebuild.
+    /// Returns how many were deleted.
+    @discardableResult
+    public func deleteSiteMapBranch(_ nodeID: String) async throws -> Int {
+        let ids = await siteMap.snapshot.exchanges(under: nodeID)
+        try await store.delete(ids)
+        await siteMap.rebuild()
+        return ids.count
+    }
+
+    /// Every site-map annotation (TGT-007), by node id.
+    public func siteMapNotes() async throws -> [String: SiteMapNote] {
+        try await store.siteMapNotes()
+    }
+
+    /// Store a site-map annotation or host notes (TGT-007); an empty note removes it.
+    public func setSiteMapNote(_ note: SiteMapNote) async throws {
+        try await store.setSiteMapNote(note)
+    }
+
+    /// "Analyze target" for the host of `nodeID` (TGT-008), over its newest 5,000 exchanges.
+    /// Nil if the node isn't in the map.
+    public func analyzeTarget(_ nodeID: String) async throws -> TargetAnalysis? {
+        let map = await siteMap.snapshot
+        guard map.node(nodeID) != nil else { return nil }
+        let hostKey = map.hosts.first { nodeID == $0.id || nodeID.hasPrefix($0.id + "/") }?.id ?? nodeID
+        guard let target = HTTPTarget(url: hostKey) else { return nil }
+        return TargetAnalysis.analyze(try await store.exchanges(to: target))
+    }
+}

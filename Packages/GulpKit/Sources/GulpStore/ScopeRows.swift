@@ -113,7 +113,8 @@ extension ProjectStore {
             try Row.fetchAll(
                 db,
                 sql:
-                    "SELECT id, scheme, host, port, path, in_scope FROM exchanges WHERE id > ? ORDER BY id LIMIT ?",
+                    "SELECT id, scheme, host, port, path, in_scope, status, mime FROM exchanges WHERE id > ? "
+                    + "ORDER BY id LIMIT ?",
                 arguments: [after, limit]
             ).map { row in
                 let scheme: String = row["scheme"] ?? "http"
@@ -122,7 +123,8 @@ extension ProjectStore {
                     target: HTTPTarget(
                         scheme: scheme == "https" ? .https : .http, host: row["host"] ?? "",
                         port: row["port"] ?? 0),
-                    path: row["path"] ?? "/", inScope: (row["in_scope"] as Int?) == 1)
+                    path: row["path"] ?? "/", inScope: (row["in_scope"] as Int?) == 1, status: row["status"],
+                    mime: row["mime"])
             }
         }
     }

@@ -1,4 +1,5 @@
 import Testing
+
 @testable import GulpQuery
 
 @Suite("GulpQuery scaffolding")

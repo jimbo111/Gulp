@@ -416,4 +416,30 @@ struct SiteMapServiceTests {
         #expect(map.node("http://a:80/app/x")?.inScope == true && map.node("http://a:80")?.inScope == true)
         try await session.close()
     }
+
+    @Test("TGT-002/004/007/008: endpoints, notes, Analyze target and Delete branch on a node")
+    func test_TGT007_nodeActions() async throws {
+        let environment = isolatedEnvironment()
+        let url = projectURL(environment, "sitemap-actions")
+        let session = try await ProjectSession.open(at: url, environment: environment)
+        for path in ["/shop/a?id=1", "/shop/b", "/other"] { await recordSample(session, path: path) }
+        await session.store.writer.flush()
+        _ = await waitForMap(session) { $0.node("http://a:80/other") != nil }
+        #expect(try await session.siteMapEndpoints("http://a:80/shop").map(\.path) == ["/shop/a", "/shop/b"])
+        let analysis = try #require(try await session.analyzeTarget("http://a:80/shop/a"))
+        #expect(analysis.requestCount == 3 && analysis.parameters.map(\.name) == ["id"])
+        try await session.setSiteMapNote(SiteMapNote(nodeKey: "http://a:80", notes: "login at /shop"))
+        try await session.setSiteMapNote(SiteMapNote(nodeKey: "http://a:80/shop/b", highlight: .red))
+        #expect(try await session.deleteSiteMapBranch("http://a:80/shop") == 2)
+        #expect(await session.siteMap.snapshot.node("http://a:80/shop") == nil)
+        try await session.close()
+
+        let reopened = try await ProjectSession.open(at: url, environment: environment)
+        let notes = try await reopened.siteMapNotes()
+        #expect(
+            notes["http://a:80"]?.notes == "login at /shop" && notes["http://a:80/shop/b"]?.highlight == .red)
+        try await reopened.setSiteMapNote(SiteMapNote(nodeKey: "http://a:80/shop/b"))
+        #expect(try await reopened.siteMapNotes().count == 1)
+        try await reopened.close()
+    }
 }

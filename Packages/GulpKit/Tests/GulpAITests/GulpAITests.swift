@@ -1,4 +1,5 @@
 import Testing
+
 @testable import GulpAI
 
 @Suite("GulpAI scaffolding")

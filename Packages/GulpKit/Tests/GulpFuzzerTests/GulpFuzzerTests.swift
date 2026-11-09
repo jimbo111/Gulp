@@ -1,4 +1,5 @@
 import Testing
+
 @testable import GulpFuzzer
 
 @Suite("GulpFuzzer scaffolding")

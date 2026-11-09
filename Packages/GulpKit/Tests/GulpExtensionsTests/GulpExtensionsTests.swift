@@ -1,4 +1,5 @@
 import Testing
+
 @testable import GulpExtensions
 
 @Suite("GulpExtensions scaffolding")
