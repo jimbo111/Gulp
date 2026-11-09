@@ -123,6 +123,22 @@ public struct MatchReplaceSettings: SettingsGroup, Hashable {
     }
 }
 
+/// Project variables for Transform Tags' `var(name)` (F12 DEC-021), stored with the project.
+public struct VariablesSettings: SettingsGroup, Hashable {
+    /// Storage key.
+    public static let key = "tools.variables"
+    /// No variables.
+    public static let defaultValue = VariablesSettings(values: [:])
+
+    /// Name → value.
+    public var values: [String: String]
+
+    /// Variables.
+    public init(values: [String: String]) {
+        self.values = values
+    }
+}
+
 /// Intercept toggles and rules (PRX-010…PRX-014), stored with the project.
 public struct InterceptSettings: SettingsGroup, Hashable {
     /// Storage key.

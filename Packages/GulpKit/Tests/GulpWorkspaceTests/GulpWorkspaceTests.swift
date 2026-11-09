@@ -505,4 +505,35 @@ struct SiteMapServiceTests {
         #expect(await session.scope().rules.first?.host == "lab")
         try await session.close()
     }
+
+    @Test(
+        "F12 acceptance 3: Repeater sends evaluated tags (original kept); the toggle sends the literal text")
+    func test_DEC022_repeaterTags() async throws {
+        let environment = isolatedEnvironment()
+        let session = try await open(environment, "tags")
+        try await session.setTagVariables(["user": "alice", "pass": "s3cret"])
+        let text =
+            "GET / HTTP/1.1\r\nHost: 127.0.0.1:1\r\nAuthorization: Basic «base64{ «var(user)»:«var(pass)» }»\r\n\r\n"
+        let preview = String(decoding: try session.previewTags(Array(text.utf8)), as: UTF8.self)
+        #expect(preview.contains("Authorization: Basic YWxpY2U6czNjcmV0\r\n"))
+        var options = RepeaterOptions()
+        options.timeoutSeconds = 5
+        let tab = await session.repeater.openTab(
+            request: RawRequest(Bytes(text)), target: HTTPTarget(scheme: .http, host: "127.0.0.1", port: 1),
+            options: options)
+        let sent = try #require(await session.repeater.send(tab.id))
+        await session.store.writer.flush()
+        let stored = try #require(try await session.store.exchange(id: sent.exchange.id))
+        #expect(stored.request.bytes.string() == preview)  // what was sent matches the preview
+        #expect(stored.edited?.originalRequest?.bytes.string() == text)  // the tags are kept as the original
+        options.transformTags = false
+        await session.repeater.setOptions(tab.id, options)
+        let literal = try #require(await session.repeater.send(tab.id))
+        #expect(literal.exchange.request.bytes.string() == text)
+        // Variables persist with the project.
+        try await session.close()
+        let reopened = try await open(environment, "tags")
+        #expect(await reopened.tagVariables() == ["user": "alice", "pass": "s3cret"])
+        try await reopened.close()
+    }
 }

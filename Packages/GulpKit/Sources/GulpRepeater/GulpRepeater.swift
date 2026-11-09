@@ -42,13 +42,15 @@ public struct RepeaterOptions: Sendable, Codable, Hashable {
     public var isWebSocket = false
     /// A WebSocket tab's message editor contents.
     public var webSocketMessage = ""
+    /// Evaluate Transform Tags (`«op{…}»`, F12 DEC-022) before sending; off sends the text literally.
+    public var transformTags = true
 
     /// Defaults.
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
         case version, updateContentLength, redirects, maxRedirects, newConnection, validateCertificates
-        case timeoutSeconds, isWebSocket, webSocketMessage
+        case timeoutSeconds, isWebSocket, webSocketMessage, transformTags
     }
 
     /// Decode, defaulting fields that tabs saved by older versions don't have.
@@ -66,6 +68,7 @@ public struct RepeaterOptions: Sendable, Codable, Hashable {
         timeoutSeconds = try c.decodeIfPresent(Int.self, forKey: .timeoutSeconds) ?? defaults.timeoutSeconds
         isWebSocket = try c.decodeIfPresent(Bool.self, forKey: .isWebSocket) ?? false
         webSocketMessage = try c.decodeIfPresent(String.self, forKey: .webSocketMessage) ?? ""
+        transformTags = try c.decodeIfPresent(Bool.self, forKey: .transformTags) ?? defaults.transformTags
     }
 
     /// The engine options for a send.
@@ -90,6 +93,7 @@ public struct RepeaterOptions: Sendable, Codable, Hashable {
         options.connection = newConnection ? .new : .reuse
         options.tls.validateCertificates = validateCertificates
         options.timeouts.total = .seconds(timeoutSeconds)
+        if !transformTags { options.applyHooks.remove(.transformTags) }
         return options
     }
 }

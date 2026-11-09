@@ -3,6 +3,7 @@
 // same. M2 wires the store, settings, events, HTTP engine and proxy; later milestones add the rest.
 
 import Foundation
+import GulpCodec
 import GulpCore
 import GulpHTTP
 import GulpProxy
@@ -217,6 +218,8 @@ public actor ProjectSession {
     public nonisolated let intercept: InterceptQueue
     /// Match & Replace for proxy traffic and, per rule, every tool (PRX-020…PRX-022).
     public nonisolated let matchReplace: MatchReplaceHook
+    /// Transform Tag variables and counters (F12 DEC-021), shared by every send of the project.
+    public nonisolated let tagState: TagState
     /// The Repeater's tabs and sends (F06), stored in this project.
     public nonisolated let repeater: RepeaterService
     /// ScopeGuard (F04 TGT-023): active tools ask it before sending; manual sends ask the user.
@@ -238,8 +241,11 @@ public actor ProjectSession {
         self.recorder = recorder
         let matchReplace = MatchReplaceHook(rules: settings.get(MatchReplaceSettings.self).rules)
         self.matchReplace = matchReplace
+        let tagState = TagState(variables: settings.get(VariablesSettings.self).values)
+        self.tagState = tagState
         let engine = NIOHTTPEngine(
-            requestHooks: [matchReplace], responseHooks: [matchReplace], recorder: recorder)
+            requestHooks: [TransformTagHook(state: tagState), matchReplace], responseHooks: [matchReplace],
+            recorder: recorder)
         self.http = engine
         self.minter = minter
         let intercept = InterceptQueue(events: events)
