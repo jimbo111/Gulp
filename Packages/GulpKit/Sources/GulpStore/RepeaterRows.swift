@@ -116,3 +116,43 @@ extension ProjectStore {
         }
     }
 }
+
+extension ProjectStore {
+    /// All Repeater groups (REP-010): id, name, color, send mode.
+    public func repeaterGroups() async throws -> [(id: Int64, name: String, color: String, mode: String)] {
+        try await pool.read { db in
+            try Row.fetchAll(db, sql: "SELECT * FROM repeater_groups ORDER BY id").map { row in
+                (row["id"], row["name"] ?? "", row["color"] ?? "", row["send_mode"] ?? "")
+            }
+        }
+    }
+
+    /// Insert (`id == 0`) or update a group; returns its id.
+    public func saveRepeaterGroup(id: Int64, name: String, color: String, mode: String) async throws -> Int64
+    {
+        try await pool.write { db in
+            if id != 0,
+                try Int.fetchOne(db, sql: "SELECT 1 FROM repeater_groups WHERE id = ?", arguments: [id])
+                    != nil
+            {
+                try db.execute(
+                    sql: "UPDATE repeater_groups SET name = ?, color = ?, send_mode = ? WHERE id = ?",
+                    arguments: [name, color, mode, id])
+                return id
+            }
+            try db.execute(
+                sql: "INSERT INTO repeater_groups (name, color, send_mode) VALUES (?, ?, ?)",
+                arguments: [name, color, mode])
+            return db.lastInsertedRowID
+        }
+    }
+
+    /// Delete a group; tabs that pointed at it become ungrouped.
+    public func deleteRepeaterGroup(_ id: Int64) async throws {
+        try await pool.write { db in
+            try db.execute(
+                sql: "UPDATE repeater_tabs SET group_id = NULL WHERE group_id = ?", arguments: [id])
+            try db.execute(sql: "DELETE FROM repeater_groups WHERE id = ?", arguments: [id])
+        }
+    }
+}

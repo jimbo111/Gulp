@@ -126,6 +126,54 @@ public struct RepeaterTab: Sendable, Codable, Hashable, Identifiable {
     }
 }
 
+/// A group of Repeater tabs sent together (REP-010), e.g. for a race.
+public struct RepeaterGroup: Sendable, Codable, Hashable, Identifiable {
+    /// How the group's requests go out (F03 HTTP-030…HTTP-034).
+    public enum Mode: String, Sendable, Codable, Hashable, CaseIterable {
+        case sequential, separate, parallel, singlePacket
+
+        /// The engine's group mode.
+        public var engineMode: GroupSendMode {
+            switch self {
+            case .sequential: .sequentialSingleConnection
+            case .separate: .sequentialSeparateConnections
+            case .parallel: .parallel
+            case .singlePacket: .singlePacket
+            }
+        }
+    }
+
+    /// Stable id (the store's row id).
+    public var id: Int64
+    /// Name shown on the group.
+    public var name: String
+    /// Label color name.
+    public var color: String
+    /// Send mode.
+    public var mode: Mode
+
+    /// A group.
+    public init(id: Int64 = 0, name: String, color: String = "blue", mode: Mode = .singlePacket) {
+        self.id = id
+        self.name = name
+        self.color = color
+        self.mode = mode
+    }
+}
+
+/// One row of a group send's results (REP-010).
+public struct RepeaterGroupResult: Sendable, Identifiable {
+    /// The tab the request came from.
+    public var tabID: Int64
+    /// The recorded exchange.
+    public var exchange: Exchange
+    /// The error, if any.
+    public var error: GulpNetworkError?
+
+    /// Row identity (the tab).
+    public var id: Int64 { tabID }
+}
+
 /// Where Repeater tabs and their history are kept (implemented by GulpWorkspace on GulpStore).
 public protocol RepeaterPersistence: Sendable {
     /// All tabs, in tab-bar order.
@@ -140,6 +188,12 @@ public protocol RepeaterPersistence: Sendable {
     func appendHistory(tab: Int64, exchange: ExchangeID) async throws
     /// A recorded exchange.
     func exchange(_ id: ExchangeID) async throws -> Exchange?
+    /// All groups.
+    func loadGroups() async throws -> [RepeaterGroup]
+    /// Insert (`id == 0`) or update a group; returns its id.
+    func saveGroup(_ group: RepeaterGroup) async throws -> Int64
+    /// Delete a group (its tabs stay, ungrouped).
+    func deleteGroup(_ id: Int64) async throws
 }
 
 /// The outcome of one Repeater send.
@@ -185,6 +239,7 @@ public actor RepeaterService {
     private var pendingSaves: [Int64: Task<Void, Never>] = [:]
     private var closed: [RepeaterTab] = []
     private var nextLocalID: Int64 = -1
+    private var groups: [RepeaterGroup] = []
     private var sockets: [Int64: WebSocketSession] = [:]
     private var socketLogs: [Int64: [RepeaterWSEntry]] = [:]
     private var socketWatchers: [Int64: AsyncStream<RepeaterWSEntry>.Continuation] = [:]
@@ -200,6 +255,7 @@ public actor RepeaterService {
         guard let persistence else { return }
         tabs = try await persistence.loadTabs()
         for tab in tabs { histories[tab.id] = try await persistence.history(of: tab.id) }
+        groups = try await persistence.loadGroups()
     }
 
     /// The tabs, in order.
@@ -314,6 +370,71 @@ public actor RepeaterService {
     /// Cancel a tab's send in flight (the Stop button, REP-016).
     public func cancel(_ id: Int64) {
         sending.removeValue(forKey: id)?.cancel()
+    }
+
+    // MARK: groups (REP-010)
+
+    /// The groups.
+    public var allGroups: [RepeaterGroup] { groups }
+
+    /// Create a group from `tabs` (moving them out of any other group).
+    @discardableResult
+    public func createGroup(
+        name: String, tabs members: [Int64], mode: RepeaterGroup.Mode = .singlePacket
+    ) async -> RepeaterGroup {
+        var group = RepeaterGroup(name: name, mode: mode)
+        if let persistence, let id = try? await persistence.saveGroup(group) {
+            group.id = id
+        } else {
+            group.id = nextLocalID
+            nextLocalID -= 1
+        }
+        groups.append(group)
+        for id in members { assign(id, to: group.id) }
+        return group
+    }
+
+    /// Put a tab in a group, or take it out (nil).
+    public func assign(_ id: Int64, to group: Int64?) {
+        modify(id) { $0.groupID = group }
+    }
+
+    /// Change a group's name, color or mode.
+    public func update(_ group: RepeaterGroup) async {
+        guard let index = groups.firstIndex(where: { $0.id == group.id }) else { return }
+        groups[index] = group
+        _ = try? await persistence?.saveGroup(group)
+    }
+
+    /// Delete a group; its tabs stay, ungrouped.
+    public func deleteGroup(_ id: Int64) async {
+        groups.removeAll { $0.id == id }
+        for tab in tabs where tab.groupID == id { assign(tab.id, to: nil) }
+        try? await persistence?.deleteGroup(id)
+    }
+
+    /// The tabs in a group, in tab-bar order.
+    public func members(of group: Int64) -> [RepeaterTab] { tabs.filter { $0.groupID == group } }
+
+    /// "Send group" (REP-010): every member's draft goes out per the group's mode (single-packet
+    /// for races); each result is appended to its own tab's history.
+    public func sendGroup(_ id: Int64) async -> [RepeaterGroupResult] {
+        guard let group = groups.first(where: { $0.id == id }) else { return [] }
+        let members = members(of: id).filter { !$0.options.isWebSocket }
+        guard let first = members.first else { return [] }
+        var options = first.options.sendOptions
+        options.followRedirects = .never
+        let items = members.map { GroupItem(request: RawRequest(Bytes($0.draft)), target: $0.target) }
+        let results = await engine.sendGroup(items, mode: group.mode.engineMode, options: options)
+        var rows: [RepeaterGroupResult] = []
+        for (tab, result) in zip(members, results) {
+            if result.exchange.id != 0 {
+                histories[tab.id, default: []].append(result.exchange.id)
+                try? await persistence?.appendHistory(tab: tab.id, exchange: result.exchange.id)
+            }
+            rows.append(RepeaterGroupResult(tabID: tab.id, exchange: result.exchange, error: result.error))
+        }
+        return rows
     }
 
     // MARK: WebSocket tabs (REP-012)

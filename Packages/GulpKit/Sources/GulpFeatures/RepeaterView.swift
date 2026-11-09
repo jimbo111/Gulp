@@ -55,6 +55,12 @@ public final class RepeaterModel {
     public private(set) var webSocketConnected = false
     /// Why the last WebSocket connect or send failed.
     public private(set) var webSocketError: String?
+    /// The groups (REP-010).
+    public private(set) var groups: [RepeaterGroup] = []
+    /// The last group send's results, shown in a sheet.
+    public var groupResults: [RepeaterGroupResult]?
+    /// A group send is in flight.
+    public private(set) var sendingGroup = false
 
     @ObservationIgnored private let session: ProjectSession
     @ObservationIgnored private var loading = false
@@ -96,6 +102,7 @@ public final class RepeaterModel {
     /// Reload the tabs from the service, selecting `id` (or keeping the selection).
     func reload(select id: Int64?) async {
         tabs = await session.repeater.allTabs
+        groups = await session.repeater.allGroups
         if let id {
             selectedID = id
         } else if selectedID == nil || selected == nil {
@@ -218,6 +225,64 @@ public final class RepeaterModel {
             await reload(select: selectedID)
         }
     }
+
+    // MARK: groups (REP-010)
+
+    /// The selected tab's group.
+    public var selectedGroup: RepeaterGroup? {
+        guard let id = selected?.groupID else { return nil }
+        return groups.first { $0.id == id }
+    }
+
+    /// The group of `tab`, if any.
+    public func group(of tab: RepeaterTab) -> RepeaterGroup? {
+        tab.groupID.flatMap { id in groups.first { $0.id == id } }
+    }
+
+    /// How many tabs a group has.
+    public func memberCount(_ group: RepeaterGroup) -> Int { tabs.filter { $0.groupID == group.id }.count }
+
+    /// Start a new group holding `tab`.
+    public func newGroup(with tab: Int64) {
+        let name = "Group \(groups.count + 1)"
+        Task {
+            await session.repeater.createGroup(name: name, tabs: [tab])
+            await reload(select: selectedID)
+        }
+    }
+
+    /// Put `tab` in `group` (nil takes it out).
+    public func assign(_ tab: Int64, to group: Int64?) {
+        Task {
+            await session.repeater.assign(tab, to: group)
+            await reload(select: selectedID)
+        }
+    }
+
+    /// Change the selected group's send mode.
+    public func setGroupMode(_ mode: RepeaterGroup.Mode) {
+        guard var group = selectedGroup else { return }
+        group.mode = mode
+        if let index = groups.firstIndex(where: { $0.id == group.id }) { groups[index] = group }
+        let changed = group
+        Task { await session.repeater.update(changed) }
+    }
+
+    /// "Send group": the selected tab's group goes out in its mode; results show in a sheet.
+    public func sendGroup() {
+        guard let group = selectedGroup, !sendingGroup else { return }
+        sendingGroup = true
+        let repeater = session.repeater
+        Task {
+            let results = await repeater.sendGroup(group.id)
+            sendingGroup = false
+            groupResults = results
+            if let id = selectedID { history = await repeater.history(id) }
+        }
+    }
+
+    /// A tab's title (for the results table).
+    public func title(of tab: Int64) -> String { tabs.first { $0.id == tab }?.title ?? "#\(tab)" }
 
     // MARK: target (REP-003)
 
@@ -386,6 +451,7 @@ public struct RepeaterView: View {
             }
         }
         .navigationTitle("Repeater")
+        .sheet(isPresented: groupResultsShown) { groupResultsSheet }
         .alert("Rename tab", isPresented: renamingBinding) {
             TextField("Title", text: $newTitle)
             Button("Rename") {
@@ -393,6 +459,49 @@ public struct RepeaterView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+    }
+
+    private var groupResultsShown: Binding<Bool> {
+        Binding(get: { model.groupResults != nil }, set: { if !$0 { model.groupResults = nil } })
+    }
+
+    /// REP-010 / HTTP-035: the group send's results, with each request's final-write offset.
+    private var groupResultsSheet: some View {
+        let results = model.groupResults ?? []
+        let spread = results.compactMap(\.exchange.timing.finalWriteOffsetMs).max()
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Group results").font(.headline)
+            if let spread {
+                Text(String(format: "Final writes spread over %.2f ms", spread)).foregroundStyle(.secondary)
+            }
+            Table(results) {
+                TableColumn("Tab") { Text(model.title(of: $0.tabID)) }
+                TableColumn("Status") { result in
+                    Text(
+                        result.exchange.response.map { String($0.parsed.statusCode) }
+                            ?? (result.error?.code ?? "–"))
+                }
+                .width(60)
+                TableColumn("Length") { Text("\($0.exchange.response?.bytes.count ?? 0)").monospacedDigit() }
+                    .width(70)
+                TableColumn("Time") {
+                    Text($0.exchange.timing.totalMs.map { String(format: "%.0f ms", $0) } ?? "–")
+                }
+                .width(80)
+                TableColumn("Final write") { result in
+                    Text(
+                        result.exchange.timing.finalWriteOffsetMs.map { String(format: "+%.2f ms", $0) }
+                            ?? "–")
+                }
+                .width(90)
+            }
+            .frame(minWidth: 520, minHeight: 240)
+            HStack {
+                Spacer()
+                Button("Done") { model.groupResults = nil }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
     }
 
     private var renamingBinding: Binding<Bool> {
@@ -437,6 +546,12 @@ public struct RepeaterView: View {
     private func tabChip(_ tab: RepeaterTab, at index: Int) -> some View {
         let isSelected = tab.id == model.selectedID
         return HStack(spacing: 4) {
+            if let group = model.group(of: tab) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Self.color(group.color))
+                    .frame(width: 4, height: 14)
+                    .help("Group: \(group.name)")
+            }
             if model.sendingTabs.contains(tab.id) {
                 Circle().fill(.orange).frame(width: 6, height: 6)
             }
@@ -472,7 +587,29 @@ public struct RepeaterView: View {
             Button("Move Right") { model.move(tab.id, to: index + 1) }
                 .disabled(index == model.tabs.count - 1)
             Divider()
+            Menu("Group") {
+                Button("New Group") { model.newGroup(with: tab.id) }
+                ForEach(model.groups) { group in
+                    Button("Add to \(group.name)") { model.assign(tab.id, to: group.id) }
+                        .disabled(tab.groupID == group.id)
+                }
+                if tab.groupID != nil {
+                    Divider()
+                    Button("Remove from Group") { model.assign(tab.id, to: nil) }
+                }
+            }
+            Divider()
             Button("Close") { model.close(tab.id) }
+        }
+    }
+
+    static func color(_ name: String) -> Color {
+        switch name {
+        case "red": .red
+        case "orange": .orange
+        case "green": .green
+        case "purple": .purple
+        default: .blue
         }
     }
 
@@ -511,6 +648,23 @@ public struct RepeaterView: View {
             }
             .help("Send options")
             .popover(isPresented: $showOptions) { optionsForm.padding().frame(width: 300) }
+            if let group = model.selectedGroup {
+                Divider().frame(height: 16)
+                Picker("Group mode", selection: Binding(get: { group.mode }, set: { model.setGroupMode($0) }))
+                {
+                    Text("Single packet").tag(RepeaterGroup.Mode.singlePacket)
+                    Text("Parallel").tag(RepeaterGroup.Mode.parallel)
+                    Text("Sequential").tag(RepeaterGroup.Mode.sequential)
+                    Text("Separate connections").tag(RepeaterGroup.Mode.separate)
+                }
+                .labelsHidden()
+                .fixedSize()
+                Button(model.sendingGroup ? "Sending group…" : "Send group (\(model.memberCount(group)))") {
+                    model.sendGroup()
+                }
+                .disabled(model.sendingGroup)
+                .help("Send every tab in \(group.name) together (the race-condition workflow)")
+            }
             Spacer()
             Button {
                 model.step(-1)

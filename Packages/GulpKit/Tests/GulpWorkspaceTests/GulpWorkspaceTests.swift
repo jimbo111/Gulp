@@ -335,4 +335,32 @@ struct RepeaterProjectTests {
         #expect(await session.sendWebSocketToRepeater(connection: 999) == nil)
         try await session.close()
     }
+
+    @Test("REP-010: groups and membership are stored in the project")
+    func test_REP010_groupsPersist() async throws {
+        let environment = isolatedEnvironment()
+        let url = projectURL(environment, "groups")
+        let session = try await ProjectSession.open(at: url, environment: environment)
+        let target = HTTPTarget(scheme: .http, host: "127.0.0.1", port: 1)
+        let a = await session.repeater.openTab(
+            request: RawRequest(Bytes("GET /a HTTP/1.1\r\n\r\n")), target: target)
+        let b = await session.repeater.openTab(
+            request: RawRequest(Bytes("GET /b HTTP/1.1\r\n\r\n")), target: target)
+        var group = await session.repeater.createGroup(name: "race", tabs: [a.id, b.id], mode: .parallel)
+        group.color = "red"
+        await session.repeater.update(group)
+        try await session.close()
+
+        let reopened = try await ProjectSession.open(at: url, environment: environment)
+        let groups = await reopened.repeater.allGroups
+        #expect(
+            groups.map(\.name) == ["race"] && groups.first?.mode == .parallel && groups.first?.color == "red")
+        #expect(await reopened.repeater.members(of: groups.first?.id ?? 0).map(\.title) == ["1", "2"])
+        await reopened.repeater.deleteGroup(groups.first?.id ?? 0)
+        try await reopened.close()
+        let again = try await ProjectSession.open(at: url, environment: environment)
+        #expect(await again.repeater.allGroups.isEmpty)
+        #expect(await again.repeater.allTabs.allSatisfy { $0.groupID == nil })
+        try await again.close()
+    }
 }

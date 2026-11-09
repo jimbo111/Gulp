@@ -52,8 +52,13 @@ final class ScriptedEngine: HTTPEngine {
     func sendGroup(
         _ items: [GroupItem], mode: GroupSendMode, options: SendOptions
     ) async -> [ExchangeResult] {
-        []
+        var results: [ExchangeResult] = []
+        for item in items { results.append(await send(item.request, to: item.target, options: options)) }
+        groupModes.withLockedValue { $0.append(mode) }
+        return results
     }
+
+    let groupModes = NIOLockedValueBox<[GroupSendMode]>([])
 
     func openWebSocket(
         _ upgrade: RawRequest, to target: HTTPTarget, options: SendOptions
@@ -92,6 +97,22 @@ actor MemoryRepeaterStore: RepeaterPersistence {
     func appendHistory(tab: Int64, exchange: ExchangeID) { histories[tab, default: []].append(exchange) }
 
     func exchange(_ id: ExchangeID) -> Exchange? { nil }
+
+    var groups: [Int64: RepeaterGroup] = [:]
+
+    func loadGroups() -> [RepeaterGroup] { groups.values.sorted { $0.id < $1.id } }
+
+    func saveGroup(_ group: RepeaterGroup) -> Int64 {
+        var stored = group
+        if stored.id == 0 {
+            stored.id = nextID
+            nextID += 1
+        }
+        groups[stored.id] = stored
+        return stored.id
+    }
+
+    func deleteGroup(_ id: Int64) { groups[id] = nil }
 }
 
 @Suite("GulpRepeater — tabs and sends (REP-001…REP-007, REP-016)")
@@ -178,5 +199,37 @@ struct GulpRepeaterTests {
         #expect(send.followRedirects == RedirectPolicy(mode: .onSite, maxHops: 3))
         #expect(send.connection == .new)
         #expect(!send.updateContentLength)
+    }
+
+    @Test("REP-010: a group sends its tabs together in its mode; each result lands in its tab")
+    func test_REP010_groupSend() async throws {
+        let engine = ScriptedEngine()
+        let store = MemoryRepeaterStore()
+        let repeater = RepeaterService(engine: engine, persistence: store)
+        var tabs: [RepeaterTab] = []
+        for index in 0..<3 {
+            let request = RawRequest(Bytes("POST /redeem?n=\(index) HTTP/1.1\r\nHost: x\r\n\r\n"))
+            tabs.append(await repeater.openTab(request: request, target: target))
+        }
+        let outsider = await repeater.openTab(request: request, target: target)
+        let group = await repeater.createGroup(name: "race", tabs: tabs.map(\.id))
+        #expect(group.id > 0 && group.mode == .singlePacket)
+        #expect(await repeater.members(of: group.id).map(\.id) == tabs.map(\.id))
+        let results = await repeater.sendGroup(group.id)
+        #expect(results.map(\.tabID) == tabs.map(\.id))
+        #expect(engine.groupModes.withLockedValue { $0 } == [.singlePacket])
+        for (index, tab) in tabs.enumerated() {
+            #expect(await repeater.history(tab.id).count == 1)
+            #expect(results[index].exchange.response?.bytes.string().hasSuffix("n=\(index) HTTP/1.1") == true)
+        }
+        #expect(await repeater.history(outsider.id).isEmpty)
+        // Groups persist; deleting one leaves its tabs ungrouped.
+        await repeater.flush()
+        let reloaded = RepeaterService(engine: engine, persistence: store)
+        try await reloaded.load()
+        #expect(await reloaded.allGroups.map(\.name) == ["race"])
+        await repeater.deleteGroup(group.id)
+        #expect(await repeater.members(of: group.id).isEmpty)
+        #expect(await repeater.allGroups.isEmpty)
     }
 }

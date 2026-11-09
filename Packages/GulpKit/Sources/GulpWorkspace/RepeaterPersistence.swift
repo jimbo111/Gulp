@@ -69,6 +69,23 @@ final class StoreRepeaterPersistence: RepeaterPersistence {
     func exchange(_ id: ExchangeID) async throws -> Exchange? {
         try await store.exchange(id: id)
     }
+
+    func loadGroups() async throws -> [RepeaterGroup] {
+        try await store.repeaterGroups().map { row in
+            RepeaterGroup(
+                id: row.id, name: row.name, color: row.color,
+                mode: RepeaterGroup.Mode(rawValue: row.mode) ?? .singlePacket)
+        }
+    }
+
+    func saveGroup(_ group: RepeaterGroup) async throws -> Int64 {
+        try await store.saveRepeaterGroup(
+            id: group.id, name: group.name, color: group.color, mode: group.mode.rawValue)
+    }
+
+    func deleteGroup(_ id: Int64) async throws {
+        try await store.deleteRepeaterGroup(id)
+    }
 }
 
 extension ProjectSession {
