@@ -11,11 +11,16 @@ enum Schema {
         migrator.registerMigration("v1_initial") { db in
             try db.execute(sql: v1)
         }
+        // F04 TGT-020: a scope rule's host is an exact name or a regex, and rules keep a stable id.
+        migrator.registerMigration("v2_scope_rule_identity") { db in
+            try db.execute(sql: "ALTER TABLE scope_rules ADD COLUMN uid TEXT")
+            try db.execute(sql: "ALTER TABLE scope_rules ADD COLUMN host_is_regex INTEGER NOT NULL DEFAULT 1")
+        }
         return migrator
     }
 
     /// The current schema version written to `meta.schema_version`.
-    static let version = 1
+    static let version = 2
 
     /// Schema v1, generated from the SQL block in doc 04 §4 (comments stripped, lines wrapped).
     static let v1 = """

@@ -21,6 +21,8 @@ public actor StoreWriter {
     private var pending: [(exchange: Exchange, replace: Bool)] = []
     private var timer: Task<Void, Never>?
     private var tail: Task<Void, Never>?
+    /// Decides each row's `in_scope` as it is written (F04 TGT-022).
+    private var scope = ScopeService()
 
     init(pool: DatabasePool, nextID: ExchangeID, eventBus: EventBus?, durable: Bool) {
         self.pool = pool
@@ -60,6 +62,11 @@ public actor StoreWriter {
         }
     }
 
+    /// Rows written from now on get `in_scope` from `scope` (existing rows: `ProjectStore.setScope`).
+    public func setScope(_ scope: ScopeService) {
+        self.scope = scope
+    }
+
     /// Write everything queued so far and wait until it is on disk.
     public func flush() async {
         startFlush()
@@ -86,11 +93,13 @@ public actor StoreWriter {
     }
 
     private func write(_ batch: [(exchange: Exchange, replace: Bool)]) async {
+        let scope = self.scope
         do {
             try await pool.write { db in
                 for (exchange, replace) in batch {
                     if replace { try ExchangeRows.delete(exchange.id, in: db) }
-                    try ExchangeRows.insert(exchange, in: db)
+                    let inScope = scope.isInScope(exchange.target, path: ScopePath.of(exchange))
+                    try ExchangeRows.insert(exchange, inScope: inScope, in: db)
                 }
             }
             if let eventBus {

@@ -200,6 +200,8 @@ public actor ProjectSession {
     public nonisolated let matchReplace: MatchReplaceHook
     /// The Repeater's tabs and sends (F06), stored in this project.
     public nonisolated let repeater: RepeaterService
+    /// ScopeGuard (F04 TGT-023): active tools ask it before sending; manual sends ask the user.
+    public nonisolated let scopeGuard = ScopeGuard()
     private let currentStore: CurrentStore
 
     private init(
@@ -295,6 +297,7 @@ public actor ProjectSession {
             environment: environment, minter: minter)
         await session.applyInterceptSettings()
         try? await session.repeater.load()
+        if let scope = try? await store.loadScope() { await session.scopeGuard.set(scope) }
         return session
     }
 
@@ -318,6 +321,7 @@ public actor ProjectSession {
             Self.removeDatabaseFiles(destination)
             try await store.backup(to: destination)
             newStore = try ProjectStore.open(at: destination, eventBus: events)
+            _ = try? await newStore.loadScope()
         } catch {
             await recorder.resume(with: store)
             throw error

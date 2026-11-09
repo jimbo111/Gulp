@@ -56,6 +56,11 @@ public final class ProjectStore: Sendable {
             throw StoreError.newerSchema(Schema.version)
         }
         try Schema.migrator().migrate(pool)
+        try pool.write { db in
+            try db.execute(
+                sql: "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
+                arguments: [String(Schema.version)])
+        }
         let nextID = try pool.write { db -> ExchangeID in
             let hasUUID = try String.fetchOne(db, sql: "SELECT value FROM meta WHERE key = 'project_uuid'")
             if hasUUID == nil {

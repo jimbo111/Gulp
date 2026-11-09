@@ -103,7 +103,7 @@ enum ExchangeRows {
     }
 
     /// Insert `exchange` (whose `id` is already assigned) with its blobs, tags and search text.
-    static func insert(_ exchange: Exchange, in db: Database) throws {
+    static func insert(_ exchange: Exchange, inScope: Bool = false, in db: Database) throws {
         let d = exchange.derived
         let requestBlob = try BlobStore.store(exchange.request.bytes.rawBytes, in: db)
         let responseBlob = try exchange.response.map { try BlobStore.store($0.wireBytes.rawBytes, in: db) }
@@ -132,7 +132,7 @@ enum ExchangeRows {
             ("connection_id", Int64(bitPattern: exchange.connectionID)),
             ("client_address", exchange.clientAddress), ("highlight", note.highlight?.rawValue),
             ("comment", note.comment), ("param_count", d.paramCount), ("has_cookies", d.hasCookies),
-            ("sets_cookies", d.setsCookies), ("extension", d.ext),
+            ("sets_cookies", d.setsCookies), ("extension", d.ext), ("in_scope", inScope),
         ]
         let names = columns.map(\.0).joined(separator: ", ")
         let marks = Array(repeating: "?", count: columns.count).joined(separator: ", ")

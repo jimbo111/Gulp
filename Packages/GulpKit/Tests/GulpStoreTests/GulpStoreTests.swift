@@ -46,7 +46,7 @@ struct StoreTests {
         for table in expected { #expect(tables.contains(table), "missing table \(table)") }
         let version = try await store.meta("schema_version")
         let uuid = try await store.meta("project_uuid")
-        #expect(version == "1" && uuid != nil)
+        #expect(version == "2" && uuid != nil)
     }
 
     @Test("PRJ-003: an exchange round-trips byte-for-byte with its metadata")
@@ -147,6 +147,40 @@ struct StoreTests {
         #expect(WebSocketMessageFilter(text: "wörld").matches(text))
         #expect(WebSocketMessageFilter(text: "a").matches(binary))  // 0x41 'A', case-insensitive
         #expect(!WebSocketMessageFilter(text: "zzz").matches(text))
+    }
+
+    @Test("TGT-022: rows get in_scope on insert; changing scope recomputes every row and says so")
+    func test_TGT022_inScope() async throws {
+        let bus = EventBus()
+        let store = try ProjectStore.open(at: temporaryProject(), eventBus: bus)
+        let events = await bus.subscribe()
+        try await store.setScope([ScopeRule(host: "a.test")])
+        func record(_ host: String, _ path: String) async {
+            let request = RawRequest(Bytes("GET \(path) HTTP/1.1\r\nHost: \(host)\r\n\r\n"))
+            _ = await store.writer.record(
+                Exchange(
+                    source: .proxy, target: HTTPTarget(scheme: .http, host: host, port: 80), request: request)
+            )
+        }
+        for index in 0..<3_000 { await record(index % 2 == 0 ? "a.test" : "b.test", "/p\(index)?q=1") }
+        await store.writer.flush()
+        var page = HistoryFilter()
+        page.inScopeOnly = true
+        #expect(try await store.count(filter: page) == 1_500)
+        try await store.setScope([
+            ScopeRule(host: "b.test"), ScopeRule(kind: .exclude, host: "b.test", path: "^/p1"),
+        ])
+        let inScope = try await store.count(filter: page)
+        let excluded = (0..<3_000).filter { $0 % 2 == 1 && "/p\($0)".hasPrefix("/p1") }.count
+        #expect(inScope == 1_500 - excluded)
+        #expect(try await store.scopeRules().map(\.host) == ["b.test", "b.test"])
+        var sawChange = false
+        for await delivery in events {
+            if delivery.event == .scopeChanged { sawChange = true }
+            if sawChange { break }
+        }
+        #expect(sawChange)
+        try await store.close()
     }
 
     @Test("Interim 1xx responses are stored as received and split again on load")
