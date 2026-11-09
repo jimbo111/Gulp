@@ -259,8 +259,6 @@ public enum GroupSendMode: Sendable {
     case sequentialSingleConnection, sequentialSeparateConnections, parallel, singlePacket
 }
 
-
-
 // MARK: - Hooks and recording
 
 /// A request about to be written, as seen by hooks.
