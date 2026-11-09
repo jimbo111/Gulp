@@ -25,9 +25,9 @@ public struct TransformTagError: Error, Sendable, Equatable, CustomStringConvert
     public var description: String { "Transform tag at byte \(offset): \(message)" }
 }
 
-/// Values tags read and counters they advance. Shared by every send of a project.
 // Mutable state behind a lock: the counters advance from concurrent sends (Repeater tabs, Fuzzer
 // lanes), and every access goes through `lock`, so sharing it across tasks is safe.
+/// Values tags read and counters they advance. Shared by every send of a project.
 public final class TagState: @unchecked Sendable {
     private let lock = NSLock()
     private var variables: [String: String]
