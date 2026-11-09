@@ -220,7 +220,7 @@ public actor ProjectSession {
     /// The Repeater's tabs and sends (F06), stored in this project.
     public nonisolated let repeater: RepeaterService
     /// ScopeGuard (F04 TGT-023): active tools ask it before sending; manual sends ask the user.
-    public nonisolated let scopeGuard = ScopeGuard()
+    public nonisolated let scopeGuard: ScopeGuard
     /// The live site map (F04 TGT-001).
     public nonisolated let siteMap: SiteMapService
     private let currentStore: CurrentStore
@@ -250,7 +250,11 @@ public actor ProjectSession {
             matchReplace: matchReplace, webSockets: recorder)
         let currentStore = CurrentStore(store)
         self.currentStore = currentStore
-        self.repeater = RepeaterService(engine: engine, persistence: StoreRepeaterPersistence(currentStore))
+        let scopeGuard = ScopeGuard()
+        self.scopeGuard = scopeGuard
+        self.repeater = RepeaterService(
+            engine: engine, persistence: StoreRepeaterPersistence(currentStore),
+            scope: { await scopeGuard.current })
         self.siteMap = SiteMapService { await currentStore.store }
     }
 
@@ -355,6 +359,7 @@ public actor ProjectSession {
         store = newStore
         await currentStore.set(newStore)
         await recorder.resume(with: newStore)
+        await siteMap.idle()  // a site-map read still on the old file would make close fail
         try await oldStore.close()
         if isTemporary { Self.removeDatabaseFiles(oldStore.url) }
         isTemporary = false

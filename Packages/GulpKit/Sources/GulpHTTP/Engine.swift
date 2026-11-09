@@ -202,6 +202,9 @@ public struct SendOptions: Sendable {
     public var tls = UpstreamTLSSettings()
     /// Upstream proxy override (HTTP-006).
     public var upstreamProxy: UpstreamProxyOverride = .useRules
+    /// The project's scope, for the `in-scope` redirect mode (F04 TGT-022); without it, `in-scope`
+    /// follows nothing off the current host.
+    public var scope: ScopeService?
     /// Which hooks run.
     public var applyHooks: HookSet = .all
     /// The tool the exchange is recorded as.

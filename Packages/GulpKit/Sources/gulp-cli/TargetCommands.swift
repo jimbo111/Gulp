@@ -78,7 +78,7 @@ struct Scope: AsyncParsableCommand {
             guard let target = HTTPTarget(url: url) else {
                 throw ValidationError("Not an http(s) URL: \(url)")
             }
-            let path = Self.pathAndQuery(url)
+            let path = ScopeService.requestPath(ofURL: url)
             let rule = scope.decidingRule(for: target, path: path)
             let verdict = rule?.kind == .include ? "IN" : "OUT"
             let why = rule.flatMap { r in
@@ -90,15 +90,6 @@ struct Scope: AsyncParsableCommand {
             try await session.exportScope().write(to: URL(fileURLWithPath: exportFile))
             print("exported \(scope.rules.count) rule(s) to \(exportFile)")
         }
-    }
-
-    /// The path and query of an absolute URL.
-    static func pathAndQuery(_ url: String) -> String {
-        guard let schemeEnd = url.range(of: "://") else { return "/" }
-        let rest = url[schemeEnd.upperBound...]
-        guard let start = rest.firstIndex(where: { $0 == "/" || $0 == "?" }) else { return "/" }
-        let tail = String(rest[start...].prefix { $0 != "#" })
-        return tail.hasPrefix("?") ? "/" + tail : tail
     }
 }
 

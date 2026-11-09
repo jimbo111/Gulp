@@ -35,6 +35,26 @@ struct RedirectTests {
         #expect(hop(302, "/x", .never) == nil)
     }
 
+    @Test("in-scope follows only to in-scope URLs (other hosts included); without a scope, on-site")
+    func test_REP006_inScope() throws {
+        let get = RawRequest(Bytes("GET / HTTP/1.1\r\nHost: site.test\r\n\r\n"))
+        let policy = RedirectPolicy(mode: .inScope)
+        let scope = ScopeService(rules: [
+            ScopeRule(host: "site.test", path: "^/app"), ScopeRule(host: "sso.test"),
+        ])
+        func follows(_ location: String, _ scope: ScopeService?) -> Bool {
+            Redirects.next(
+                after: response(302, location: location), request: get, target: target, policy: policy,
+                scope: scope)
+                != nil
+        }
+        #expect(follows("/app/home", scope))
+        #expect(!follows("/logout", scope))  // same host, but out of scope
+        #expect(follows("https://sso.test/login", scope))  // another host, in scope
+        #expect(!follows("https://evil.test/", scope))
+        #expect(follows("/logout", nil) && !follows("https://sso.test/login", nil))  // no scope: on-site
+    }
+
     @Test("on-site stays on the host; absolute/scheme-relative locations rewrite Host; cookies carry over")
     func test_REP006_scope() throws {
         let get = RawRequest(Bytes("GET / HTTP/1.1\r\nHost: site.test\r\nCookie: a=1; b=2\r\n\r\n"))

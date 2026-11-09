@@ -14,8 +14,8 @@ order; within a milestone, do P0 first.
   launched by the Gulp Browser launcher through the proxy loads `https://localhost:8443` with no
   certificate interstitial (SPKI pin of the Gulp CA) and the request is in history. M1–M4a DoD
   scripts still pass in the same run.
-- **Active milestone**: **M5 — Repeater (and the advanced HTTP engine)** (F06, HTTP-011…013,
-  HTTP-025, HTTP-030…036, REP-012/016/017, PRX-035).
+- **Active milestone**: **M6a — Target: site map, scope, ScopeGuard** (F04 §2.1–2.2), implemented
+  after M5; both await the macOS CI run (see the M5 and M6a status below).
 - **Branching**: `main` holds merged milestones (PRs jimbo111/Gulp#1 M0–M2, #2 review fixes,
   #3 M3a, then M3b + the feature-review adoption). Work happens on
   the session branch and is merged by PR once CI is green.
@@ -92,10 +92,31 @@ order; within a milestone, do P0 first.
   structured Inspector edits; REP-011 variable capture (needs Transform Tags, M7); REP-013…015 (P2);
   single-packet h2 does not yet detect `SETTINGS_MAX_CONCURRENT_STREAMS` < group size (it falls
   back only when h2 isn't negotiated); the Repeater keeps WebSocket logs per session in memory (not
-  in WebSockets History); the `in-scope` redirect mode behaves as `on-site` until M6a.
+  in WebSockets History). (The `in-scope` redirect mode now follows the project scope — done in M6a.)
+- **M6a status — implementation complete; macOS verification pending** (2026-11-09):
+  - Local gate: build OK, **240/240 tests** (three runs in a row), **M1…M5 and M6a DoD scripts
+    PASS**, lint clean. The M6a DoD (`Scripts/m6a-dod.sh`, also added to CI): curl browses VulnLab
+    through `gulp-cli proxy` and `gulp-cli target` prints the tree with the visited paths and the
+    home page's links as inferred nodes; filters hide inferred/404-only nodes and fold `{id}`;
+    `gulp-cli scope` adds an include and an exclude and `--test` names the deciding rule; the
+    in-scope view shows only `/race`; with `--use-scope` the proxy records only the in-scope request
+    of three; scope JSON exports and imports into another project; `gulp-cli repeater` refuses an
+    out-of-scope target (exit 3, "Target is out of scope. Send anyway?") and sends it with
+    `--allow-out-of-scope`; Analyze target lists parameters and flags the `to` redirect parameter.
+  - Done in M6a: TGT-001…008 (TGT-004's "Actively scan this branch" and "Crawl from here" are
+    disabled menu items until the Scanner/Crawler), TGT-020…025, PRX-045; the M5 `in-scope`
+    redirect mode.
+  - **Not verified (no macOS here):** `GulpFeatures/TargetView.swift` (Site map + Scope tabs), the
+    Repeater's out-of-scope confirmation and badge, `App/ProjectWindow.swift` (`.target`).
+- **M6a carry-overs**: the site map tree is a SwiftUI hierarchical `List`, not the UI-060
+  NSOutlineView `TreeView` (virtualized, lazy children) — needed before 100k-node maps are smooth;
+  "don't ask again for this host" lasts for the session (not stored per project); History's
+  "add to scope" menu item and in-scope filter chip (HIS-004/006) are still to add to the History
+  UI; F04 acceptance 4 (100k-row recompute without UI freeze) is batched (2,000 rows per write) but
+  not benchmarked.
 - **Next action**: when CI minutes return, run CI on the branch head, fix any macOS compile issues
-  in the new SwiftUI code, then open the M5 PR and merge. Meanwhile continue with M6a (Target: site
-  map, scope, ScopeGuard) on the Linux-testable core.
+  in the new SwiftUI code (M5 Repeater, M6a Target), then open the M5 and M6a PRs and merge. Meanwhile
+  continue with M6b (import/export service, API import, MCP read surface) on the Linux-testable core.
 - **Waiting on the owner**: GitHub Actions minutes (CI is the only macOS build available).
 - Earlier waiting items: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
   **adopted on 2026-11-08** (product decision #7 in `docs/07-decisions.md`) and applied to the specs:
@@ -193,8 +214,8 @@ for behavior.
 - [x] M3b — HTTP/2 (client side + upstream, trailers) — **CI green both platforms + executable DoD PASS (`11cd7d5`)**
 - [x] M4a — Message editor, Intercept, Match & Replace, Send to / Copy as — **CI green both platforms + executable DoD PASS (`dee2424`)**
 - [x] M4b — Streaming responses, WebSockets, Gulp Browser launch — **CI green both platforms + executable DoD PASS (`0b0c6f7`)**
-- [ ] M5 — Repeater + advanced HTTP engine (HTTP/2 raw, group/race sends, streaming, paste-to-request)
-- [ ] M6a — Target: site map + scope + ScopeGuard
+- [ ] M5 — Repeater + advanced HTTP engine (HTTP/2 raw, group/race sends, streaming, paste-to-request) — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
+- [ ] M6a — Target: site map + scope + ScopeGuard — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M6b — Import/export service, API import, MCP read surface + `send_request`
 - [ ] M7 — Decoder + Comparer + JWT Workbench
 - [ ] M8 — Fuzzer (with content discovery)
@@ -407,6 +428,15 @@ for behavior.
     pass through after a 101); the upgrade exchange's row wasn't flushed before the
     `ws_connections` foreign key referenced it; a streamed row raced the first-chunk check in a test.
   - Decisions: WS relay / WS Intercept / permessage-deflate / no RFC 8441 rows in `07-decisions.md`.
+- 2026-11-09 — **M6a implemented** (local Linux gate; macOS UI unverified): site map trie +
+  live service + inferred links (TGT-001…003), endpoints/notes/Analyze target/Delete branch
+  (TGT-002/004/007/008), filters incl. 404/MIME and `{id}` folding (TGT-005/006), schema v3
+  `site_map_notes`; scope rules, ScopeGuard, `in_scope` recompute (TGT-020…023), proxy uses scope
+  (TGT-024/PRX-045), scope JSON (TGT-025); Repeater out-of-scope confirmation; `gulp-cli scope` /
+  `target`, `proxy --use-scope`, `repeater --allow-out-of-scope`; VulnLab home page `/`;
+  `Scripts/m6a-dod.sh` PASS. Fixed: closing a session now cancels and awaits the site map
+  listener first (a concurrent read made the close checkpoint fail with "database is locked").
+
 
 ## How to pick up work (reminder)
 

@@ -23,7 +23,9 @@ public enum ParameterLocation: String, Sendable, Hashable, Codable, CaseIterable
 }
 
 /// One parameter name and where it was used.
-public struct ParameterUse: Sendable, Hashable {
+public struct ParameterUse: Sendable, Hashable, Identifiable {
+    /// The parameter name (unique within an analysis).
+    public var id: String { name }
     /// The parameter name.
     public var name: String
     /// Where it appeared.

@@ -243,11 +243,17 @@ public actor RepeaterService {
     private var sockets: [Int64: WebSocketSession] = [:]
     private var socketLogs: [Int64: [RepeaterWSEntry]] = [:]
     private var socketWatchers: [Int64: AsyncStream<RepeaterWSEntry>.Continuation] = [:]
+    private let scope: (@Sendable () async -> ScopeService)?
 
-    /// A Repeater sending through `engine`; tabs persist through `persistence` when given.
-    public init(engine: any HTTPEngine, persistence: (any RepeaterPersistence)? = nil) {
+    /// A Repeater sending through `engine`; tabs persist through `persistence` when given. `scope`
+    /// supplies the project's scope for the `in-scope` redirect mode (REP-006).
+    public init(
+        engine: any HTTPEngine, persistence: (any RepeaterPersistence)? = nil,
+        scope: (@Sendable () async -> ScopeService)? = nil
+    ) {
         self.engine = engine
         self.persistence = persistence
+        self.scope = scope
     }
 
     /// Load the project's tabs (call once after opening).
@@ -350,6 +356,7 @@ public actor RepeaterService {
         cancel(id)
         var options = tab.options.sendOptions
         options.onResponseBytes = onBytes
+        if options.followRedirects.mode == .inScope { options.scope = await scope?() }
         let engine = self.engine
         let request = RawRequest(Bytes(tab.draft))
         let task = Task {

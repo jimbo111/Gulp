@@ -12,6 +12,11 @@ public actor SiteMapService {
     private var lastID: ExchangeID = 0
     private let storeProvider: @Sendable () async -> ProjectStore
     private var watchers: [UUID: AsyncStream<Void>.Continuation] = [:]
+    /// The last queued operation. Rebuilds and catch-ups run one at a time, in order: an actor only
+    /// keeps them from running *simultaneously* — at every `await` on the store another call could
+    /// otherwise interleave, and a rebuild that started earlier would overwrite a catch-up's newer
+    /// map (actor reentrancy).
+    private var tail: Task<Void, Never>?
 
     init(groupParameterized: Bool = false, store: @escaping @Sendable () async -> ProjectStore) {
         map = SiteMap(groupsParameterizedSegments: groupParameterized)
@@ -35,15 +40,46 @@ public actor SiteMapService {
 
     /// Fold numeric/UUID segments into `{id}` (TGT-006); rebuilds.
     public func setGroupsParameterized(_ on: Bool) async {
-        guard on != map.groupsParameterizedSegments else { return }
-        map = SiteMap(groupsParameterizedSegments: on)
-        lastID = 0
-        await rebuild()
+        await serially { service in
+            guard on != service.map.groupsParameterizedSegments else { return }
+            service.map = SiteMap(groupsParameterizedSegments: on)
+            service.lastID = 0
+            await service.performRebuild()
+        }
     }
 
     /// Rebuild from the store: every exchange (visited) and links in recent textual responses
     /// (inferred).
     public func rebuild() async {
+        await serially { await $0.performRebuild() }
+    }
+
+    /// Add exchanges recorded since the last update (called on `exchangeRecorded`).
+    public func catchUp() async {
+        await serially { await $0.performCatchUp() }
+    }
+
+    /// Wait until no operation is running (e.g. before the store it reads is closed).
+    public func idle() async {
+        await tail?.value
+    }
+
+    /// Run `operation` after every operation queued before it; cancelling the caller cancels it.
+    private func serially(_ operation: @escaping @Sendable (isolated SiteMapService) async -> Void) async {
+        let previous = tail
+        let task = Task {
+            await previous?.value
+            await operation(self)
+        }
+        tail = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func performRebuild() async {
         let store = await storeProvider()
         var fresh = SiteMap(groupsParameterizedSegments: map.groupsParameterizedSegments)
         var after: ExchangeID = 0
@@ -64,8 +100,7 @@ public actor SiteMapService {
         notify()
     }
 
-    /// Add exchanges recorded since the last update (called on `exchangeRecorded`).
-    public func catchUp() async {
+    private func performCatchUp() async {
         let store = await storeProvider()
         var changed = false
         while !Task.isCancelled, let page = try? await store.siteMapEntries(after: lastID, limit: 1_000),

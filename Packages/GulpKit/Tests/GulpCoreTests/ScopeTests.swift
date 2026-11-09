@@ -98,6 +98,14 @@ struct ScopeTests {
         #expect(await guardian.permits(other, path: "/x"))
     }
 
+    @Test("requestPath: path and query of a URL, as isInScope takes it")
+    func test_TGT020_requestPath() {
+        #expect(ScopeService.requestPath(ofURL: "https://a.test") == "/")
+        #expect(ScopeService.requestPath(ofURL: "https://a.test?x=1") == "/?x=1")
+        #expect(ScopeService.requestPath(ofURL: "https://a.test:8443/a/b?x=1#frag") == "/a/b?x=1")
+        #expect(ScopeService.requestPath(ofURL: "https://a.test#frag") == "/")
+    }
+
     @Test("TGT-025: scope exports to JSON and imports back; hand-written files get defaults")
     func test_TGT025_json() throws {
         let rules = [

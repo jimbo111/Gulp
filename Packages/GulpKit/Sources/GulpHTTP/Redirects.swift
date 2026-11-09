@@ -4,8 +4,8 @@
 //   - 303 (and 301/302 after a POST, as browsers do) becomes a GET without the body and its
 //     framing/type headers; 307/308 repeat the method and body unchanged;
 //   - `Host` is rewritten when the authority changes; every other header is kept as written;
-//   - `on-site` stays on the same host (any scheme/port); `in-scope` behaves as `on-site` until
-//     scope lands (M6a); `always` follows anywhere.
+//   - `on-site` stays on the same host (any scheme/port); `in-scope` follows only to in-scope URLs
+//     (the caller's `ScopeService`; with none, it behaves as `on-site`); `always` follows anywhere.
 
 import GulpCore
 
@@ -17,7 +17,8 @@ public enum Redirects {
     /// The next request after `response` to `request` (sent to `target`), or nil when it isn't a
     /// redirect `policy` follows.
     public static func next(
-        after response: RawResponse, request: RawRequest, target: HTTPTarget, policy: RedirectPolicy
+        after response: RawResponse, request: RawRequest, target: HTTPTarget, policy: RedirectPolicy,
+        scope: ScopeService? = nil
     ) -> (request: RawRequest, target: HTTPTarget)? {
         guard policy.mode != .never, statuses.contains(response.parsed.statusCode),
             let location = response.headerValue("location")?.string().trimmedOf(" \t"),
@@ -29,6 +30,8 @@ public enum Redirects {
         }
         switch policy.mode {
         case .never: return nil
+        case .inScope where scope != nil:
+            guard scope?.isInScope(nextTarget, path: path) == true else { return nil }
         case .onSite, .inScope:
             guard nextTarget.host.lowercased() == target.host.lowercased() else { return nil }
         case .always: break

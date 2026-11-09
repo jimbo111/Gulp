@@ -92,6 +92,8 @@ struct ProjectWindow: View {
                     Button("Listeners…") { showListeners = true }
                         .help("Proxy listeners for this project (PRX-001)")
                 }
+        case .target:
+            TargetView(session: session)
         case .repeater:
             RepeaterView(session: session)
         default:

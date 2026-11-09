@@ -113,7 +113,7 @@ public final class NIOHTTPEngine: HTTPEngine {
             let response = result.exchange.response,
             let next = Redirects.next(
                 after: response, request: current.request, target: current.target,
-                policy: options.followRedirects)
+                policy: options.followRedirects, scope: options.scope)
         {
             chain.append(result.exchange)
             current = next

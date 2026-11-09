@@ -123,7 +123,7 @@ Split from the original M3 after the 2026-11-07 feature review (docs/FEATURE-REV
 - [ ] F03 remaining P1 engine features: HTTP/1 pipelining for Turbo mode, platform auth, and the shared global/per-host throttle (HTTP-011, HTTP-012, HTTP-013). The HTTP-013 limiter is extended with concurrency budgets and backoff in M11a (F03 §3.4, GOV-002/003/007).
 - **DoD:** The VulnLab race-condition endpoint (doc 06 §3) can be exploited with a group send in single-packet mode; a pasted cURL command reproduces its request (F06 test 8); `/sse` streams in a Repeater tab (F06 test 7).
 
-### M6a — Target: site map and scope
+### M6a — Target: site map and scope — implemented; awaiting macOS CI (see PROGRESS)
 - [ ] All P0/P1 of F04 §2.1–§2.2 (site map, scope, ScopeGuard).
 - **DoD:** The site map tree fills from proxy traffic; scope rules hide out-of-scope items; ScopeGuard blocks out-of-scope Repeater sends (with a confirmation dialog).
 

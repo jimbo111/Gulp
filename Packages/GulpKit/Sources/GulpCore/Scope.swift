@@ -200,6 +200,16 @@ public struct ScopeService: Sendable {
         return nil
     }
 
+    /// The path and query of an absolute URL, as `isInScope` takes it (`/` if it has none; the
+    /// fragment dropped).
+    public static func requestPath(ofURL url: String) -> String {
+        guard let schemeEnd = url.range(of: "://") else { return "/" }
+        let rest = url[schemeEnd.upperBound...]
+        guard let start = rest.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) else { return "/" }
+        let tail = String(rest[start...].prefix { $0 != "#" })
+        return tail.isEmpty ? "/" : (tail.hasPrefix("?") ? "/" + tail : tail)
+    }
+
     /// A readable summary (TGT-025), e.g. "In scope: https://example.com /app. Excluded: /logout".
     public var summary: String {
         let active = rules.filter(\.enabled)

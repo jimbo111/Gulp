@@ -384,13 +384,14 @@ struct SiteMapServiceTests {
         let environment = isolatedEnvironment()
         let session = try await open(environment, "sitemap")
         let target = HTTPTarget(scheme: .https, host: "lab", port: 443)
-        var page = Exchange(
+        // The response goes to init: `derived` (mime, status) is computed there.
+        let page = Exchange(
             source: .proxy, target: target,
-            request: RawRequest(Bytes("GET /shop/index.html HTTP/1.1\r\nHost: lab\r\n\r\n")))
-        page.response = RawResponse(
-            Bytes(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 46\r\n\r\n"
-                    + "<a href=\"cart\">c</a><img src=\"/img/logo.png\">"))
+            request: RawRequest(Bytes("GET /shop/index.html HTTP/1.1\r\nHost: lab\r\n\r\n")),
+            response: RawResponse(
+                Bytes(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 46\r\n\r\n"
+                        + "<a href=\"cart\">c</a><img src=\"/img/logo.png\">")))
         _ = await session.store.writer.record(page)
         await session.store.writer.flush()
         let map = await waitForMap(session) { $0.node("https://lab:443/shop/cart") != nil }
