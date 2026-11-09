@@ -49,10 +49,17 @@ public final class RepeaterModel {
     public private(set) var chain: [Exchange] = []
     /// A streamed response as it arrives (REP-016).
     public private(set) var live: [UInt8] = []
+    /// A WebSocket tab's message log for its current session (REP-012).
+    public private(set) var webSocketLog: [RepeaterWSEntry] = []
+    /// Whether the selected WebSocket tab is connected.
+    public private(set) var webSocketConnected = false
+    /// Why the last WebSocket connect or send failed.
+    public private(set) var webSocketError: String?
 
     @ObservationIgnored private let session: ProjectSession
     @ObservationIgnored private var loading = false
     @ObservationIgnored private var listener: Task<Void, Never>?
+    @ObservationIgnored private var webSocketWatch: Task<Void, Never>?
 
     /// The Repeater of `session`.
     public init(session: ProjectSession) {
@@ -93,6 +100,78 @@ public final class RepeaterModel {
             selectedID = id
         } else if selectedID == nil || selected == nil {
             selectedID = tabs.first?.id
+        }
+    }
+
+    /// A blank WebSocket tab (REP-012).
+    public func newWebSocketTab() {
+        let request = RawRequest(
+            Bytes(
+                "GET / HTTP/1.1\r\nHost: example.com\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                    + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"))
+        let target = HTTPTarget(scheme: .https, host: "example.com", port: 443)
+        var options = RepeaterOptions()
+        options.isWebSocket = true
+        Task {
+            let tab = await session.repeater.openTab(
+                request: request, target: target, title: "WS", options: options)
+            await reload(select: tab.id)
+        }
+    }
+
+    /// The selected WebSocket tab's message editor (saved with the tab).
+    public var webSocketMessage: String {
+        get { options.webSocketMessage }
+        set {
+            var changed = options
+            changed.webSocketMessage = newValue
+            options = changed
+        }
+    }
+
+    /// Connect (or reconnect) the selected WebSocket tab: its request is the upgrade.
+    public func connectWebSocket() {
+        guard let id = selectedID else { return }
+        commitTarget()
+        guard targetError == nil else { return }
+        webSocketError = nil
+        webSocketLog = []
+        webSocketWatch?.cancel()
+        let repeater = session.repeater
+        webSocketWatch = Task { [weak self] in
+            do {
+                let entries = try await repeater.connectWebSocket(id)
+                self?.webSocketConnected = true
+                self?.history = await repeater.history(id)
+                for await entry in entries where self?.selectedID == id {
+                    self?.webSocketLog.append(entry)
+                }
+            } catch {
+                self?.webSocketError = ProjectSession.describe(error)
+            }
+            if self?.selectedID == id { self?.webSocketConnected = false }
+        }
+    }
+
+    /// Close the selected WebSocket tab's session.
+    public func disconnectWebSocket() {
+        guard let id = selectedID else { return }
+        let repeater = session.repeater
+        Task { await repeater.disconnectWebSocket(id) }
+    }
+
+    /// Send the message editor's text on the selected WebSocket tab.
+    public func sendWebSocketMessage(binary: Bool = false) {
+        guard let id = selectedID else { return }
+        let payload = Array(webSocketMessage.utf8)
+        let repeater = session.repeater
+        Task {
+            do {
+                try await repeater.sendWebSocket(id, binary ? .binary : .text, payload)
+                webSocketError = nil
+            } catch {
+                webSocketError = ProjectSession.describe(error)
+            }
         }
     }
 
@@ -236,6 +315,15 @@ public final class RepeaterModel {
             return
         }
         draft = tab.draft
+        webSocketWatch?.cancel()
+        webSocketWatch = nil
+        webSocketError = nil
+        let selectedTab = tab.id
+        let repeater = session.repeater
+        Task {
+            webSocketLog = await repeater.webSocketLog(selectedTab)
+            webSocketConnected = await repeater.isWebSocketOpen(selectedTab)
+        }
         let standard = tab.target.port == (tab.target.scheme == .https ? 443 : 80)
         let port = standard ? "" : ":\(tab.target.port)"
         targetText = "\(tab.target.scheme.rawValue)://\(tab.target.host)\(port)"
@@ -270,7 +358,15 @@ public struct RepeaterView: View {
         VStack(spacing: 0) {
             tabBar
             Divider()
-            if model.selected != nil {
+            if let tab = model.selected, tab.options.isWebSocket {
+                webSocketControls
+                Divider()
+                HSplitView {
+                    MessageEditor(title: "Upgrade request", bytes: $model.draft, editable: true)
+                        .frame(minWidth: 280)
+                    webSocketSide.frame(minWidth: 320)
+                }
+            } else if model.selected != nil {
                 controls
                 Divider()
                 HSplitView {
@@ -285,6 +381,7 @@ public struct RepeaterView: View {
                     Text("Send a request here from HTTP History (⌘R), or start a blank tab.")
                 } actions: {
                     Button("New Tab") { model.newTab() }
+                    Button("New WebSocket Tab") { model.newWebSocketTab() }
                 }
             }
         }
@@ -314,13 +411,17 @@ public struct RepeaterView: View {
                 }
                 .padding(.horizontal, 4)
             }
-            Button {
-                model.newTab()
+            Menu {
+                Button("New Tab") { model.newTab() }
+                Button("New WebSocket Tab") { model.newWebSocketTab() }
             } label: {
                 Image(systemName: "plus")
+            } primaryAction: {
+                model.newTab()
             }
-            .buttonStyle(.borderless)
-            .help("New tab")
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("New tab (hold for a WebSocket tab)")
             Button {
                 model.reopenClosed()
             } label: {
@@ -463,6 +564,77 @@ public struct RepeaterView: View {
                 options[keyPath: path] = value
                 model.options = options
             })
+    }
+
+    // MARK: WebSocket tabs (REP-012)
+
+    private var webSocketControls: some View {
+        HStack(spacing: 8) {
+            if model.webSocketConnected {
+                Button("Disconnect") { model.disconnectWebSocket() }
+                Button("Reconnect") { model.connectWebSocket() }
+            } else {
+                Button("Connect") { model.connectWebSocket() }
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .buttonStyle(.borderedProminent)
+            }
+            TextField("https://host:port", text: $model.targetText)
+                .textFieldStyle(.roundedBorder)
+                .frame(minWidth: 200, maxWidth: 320)
+                .onSubmit { model.commitTarget() }
+            Circle()
+                .fill(model.webSocketConnected ? Color.green : Color.secondary)
+                .frame(width: 8, height: 8)
+                .help(model.webSocketConnected ? "Connected" : "Not connected")
+            if let error = model.webSocketError {
+                Text(error).foregroundStyle(.red).lineLimit(1)
+            }
+            Spacer()
+        }
+        .controlSize(.small)
+        .padding(6)
+    }
+
+    private var webSocketSide: some View {
+        VSplitView {
+            List(model.webSocketLog) { entry in
+                HStack(alignment: .top) {
+                    Text(entry.direction == .toServer ? "→" : "←").foregroundStyle(.secondary)
+                    Text(Self.opcodeName(entry.opcode)).foregroundStyle(.secondary).frame(
+                        width: 48, alignment: .leading)
+                    Text(String(decoding: entry.payload.prefix(2_000), as: UTF8.self))
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+            }
+            .frame(minHeight: 160)
+            VStack(alignment: .leading, spacing: 4) {
+                TextEditor(text: $model.webSocketMessage)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 80)
+                HStack {
+                    Button("Send") { model.sendWebSocketMessage() }
+                        .keyboardShortcut(.return, modifiers: [.command, .shift])
+                        .disabled(!model.webSocketConnected)
+                    Button("Send as binary") { model.sendWebSocketMessage(binary: true) }
+                        .disabled(!model.webSocketConnected)
+                    Spacer()
+                }
+                .controlSize(.small)
+            }
+            .padding(6)
+        }
+    }
+
+    static func opcodeName(_ opcode: UInt8) -> String {
+        switch opcode {
+        case 1: "text"
+        case 2: "binary"
+        case 8: "close"
+        case 9: "ping"
+        case 10: "pong"
+        default: "op \(opcode)"
+        }
     }
 
     // MARK: response

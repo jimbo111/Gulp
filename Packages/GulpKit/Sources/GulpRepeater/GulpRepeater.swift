@@ -38,9 +38,35 @@ public struct RepeaterOptions: Sendable, Codable, Hashable {
     public var validateCertificates = false
     /// Total timeout in seconds.
     public var timeoutSeconds = 60
+    /// The tab is a WebSocket tab (REP-012): its draft is the upgrade request.
+    public var isWebSocket = false
+    /// A WebSocket tab's message editor contents.
+    public var webSocketMessage = ""
 
     /// Defaults.
     public init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case version, updateContentLength, redirects, maxRedirects, newConnection, validateCertificates
+        case timeoutSeconds, isWebSocket, webSocketMessage
+    }
+
+    /// Decode, defaulting fields that tabs saved by older versions don't have.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = RepeaterOptions()
+        version = try c.decodeIfPresent(Version.self, forKey: .version) ?? defaults.version
+        updateContentLength =
+            try c.decodeIfPresent(Bool.self, forKey: .updateContentLength) ?? defaults.updateContentLength
+        redirects = try c.decodeIfPresent(Redirects.self, forKey: .redirects) ?? defaults.redirects
+        maxRedirects = try c.decodeIfPresent(Int.self, forKey: .maxRedirects) ?? defaults.maxRedirects
+        newConnection = try c.decodeIfPresent(Bool.self, forKey: .newConnection) ?? defaults.newConnection
+        validateCertificates =
+            try c.decodeIfPresent(Bool.self, forKey: .validateCertificates) ?? defaults.validateCertificates
+        timeoutSeconds = try c.decodeIfPresent(Int.self, forKey: .timeoutSeconds) ?? defaults.timeoutSeconds
+        isWebSocket = try c.decodeIfPresent(Bool.self, forKey: .isWebSocket) ?? false
+        webSocketMessage = try c.decodeIfPresent(String.self, forKey: .webSocketMessage) ?? ""
+    }
 
     /// The engine options for a send.
     public var sendOptions: SendOptions {
@@ -126,6 +152,26 @@ public struct RepeaterSendResult: Sendable {
     public var error: GulpNetworkError?
 }
 
+/// One message in a WebSocket tab's log (REP-012).
+public struct RepeaterWSEntry: Sendable, Hashable, Identifiable {
+    /// Position in the log.
+    public var id: Int
+    /// Sent by the tab (`toServer`) or received (`toClient`).
+    public var direction: WSDirection
+    /// Opcode (1 text, 2 binary, 8 close, 9 ping, 10 pong).
+    public var opcode: UInt8
+    /// The payload.
+    public var payload: [UInt8]
+
+    /// An entry.
+    public init(id: Int, direction: WSDirection, opcode: UInt8, payload: [UInt8]) {
+        self.id = id
+        self.direction = direction
+        self.opcode = opcode
+        self.payload = payload
+    }
+}
+
 /// The Repeater of one project.
 public actor RepeaterService {
     /// Delay before a draft edit is written (REP-005 persistence; spec §4: ≈500 ms).
@@ -139,6 +185,9 @@ public actor RepeaterService {
     private var pendingSaves: [Int64: Task<Void, Never>] = [:]
     private var closed: [RepeaterTab] = []
     private var nextLocalID: Int64 = -1
+    private var sockets: [Int64: WebSocketSession] = [:]
+    private var socketLogs: [Int64: [RepeaterWSEntry]] = [:]
+    private var socketWatchers: [Int64: AsyncStream<RepeaterWSEntry>.Continuation] = [:]
 
     /// A Repeater sending through `engine`; tabs persist through `persistence` when given.
     public init(engine: any HTTPEngine, persistence: (any RepeaterPersistence)? = nil) {
@@ -210,6 +259,7 @@ public actor RepeaterService {
     public func close(_ id: Int64) async {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         cancel(id)
+        await disconnectWebSocket(id)
         pendingSaves.removeValue(forKey: id)?.cancel()
         let tab = tabs.remove(at: index)
         closed.append(tab)
@@ -264,6 +314,76 @@ public actor RepeaterService {
     /// Cancel a tab's send in flight (the Stop button, REP-016).
     public func cancel(_ id: Int64) {
         sending.removeValue(forKey: id)?.cancel()
+    }
+
+    // MARK: WebSocket tabs (REP-012)
+
+    /// Open (or re-open) a WebSocket tab's session: its draft is sent as the upgrade request and
+    /// recorded in the tab's history. The returned stream yields every log entry — sent and
+    /// received — until the session ends.
+    public func connectWebSocket(_ id: Int64) async throws -> AsyncStream<RepeaterWSEntry> {
+        guard let tab = tab(id) else { throw GulpError(message: "No such Repeater tab") }
+        await disconnectWebSocket(id)
+        var options = tab.options.sendOptions
+        options.followRedirects = .never
+        let session = try await engine.openWebSocket(
+            RawRequest(Bytes(tab.draft)), to: tab.target, options: options)
+        if session.upgrade.id != 0 {
+            histories[id, default: []].append(session.upgrade.id)
+            try? await persistence?.appendHistory(tab: id, exchange: session.upgrade.id)
+        }
+        sockets[id] = session
+        socketLogs[id] = []
+        let (stream, watcher) = AsyncStream.makeStream(of: RepeaterWSEntry.self)
+        socketWatchers[id] = watcher
+        Task { [weak self] in
+            for await message in session.messages {
+                await self?.log(
+                    id, session: session, direction: .toClient, opcode: message.opcode, message.payload)
+            }
+            await self?.ended(id, session: session)
+        }
+        return stream
+    }
+
+    /// Send a message on a WebSocket tab's open session.
+    public func sendWebSocket(_ id: Int64, _ opcode: WSOpcode, _ payload: [UInt8]) async throws {
+        guard let session = sockets[id], session.isOpen else {
+            throw GulpError(
+                message: "The WebSocket is not connected", recoverySuggestion: "Connect it first.")
+        }
+        try await session.send(opcode, payload)
+        log(id, session: session, direction: .toServer, opcode: opcode.rawValue, payload)
+    }
+
+    /// Close a WebSocket tab's session.
+    public func disconnectWebSocket(_ id: Int64) async {
+        guard let session = sockets.removeValue(forKey: id) else { return }
+        await session.close()
+        socketWatchers.removeValue(forKey: id)?.finish()
+    }
+
+    /// Whether a WebSocket tab's session is open.
+    public func isWebSocketOpen(_ id: Int64) -> Bool { sockets[id]?.isOpen ?? false }
+
+    /// A WebSocket tab's log for its current (or last) session.
+    public func webSocketLog(_ id: Int64) -> [RepeaterWSEntry] { socketLogs[id] ?? [] }
+
+    private func log(
+        _ id: Int64, session: WebSocketSession, direction: WSDirection, opcode: UInt8, _ payload: [UInt8]
+    ) {
+        guard sockets[id] === session else { return }  // a reconnect replaced this session
+        var entries = socketLogs[id] ?? []
+        let entry = RepeaterWSEntry(id: entries.count, direction: direction, opcode: opcode, payload: payload)
+        entries.append(entry)
+        socketLogs[id] = entries
+        socketWatchers[id]?.yield(entry)
+    }
+
+    private func ended(_ id: Int64, session: WebSocketSession) {
+        guard sockets[id] === session else { return }
+        sockets[id] = nil
+        socketWatchers.removeValue(forKey: id)?.finish()
     }
 
     /// Write every pending draft now (before the project closes).

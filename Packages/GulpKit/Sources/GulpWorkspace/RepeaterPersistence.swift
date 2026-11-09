@@ -109,3 +109,31 @@ extension ProjectSession {
         }
     }
 }
+
+extension ProjectSession {
+    /// PRX-035: open a WebSocket Repeater tab (REP-012) for a recorded connection — its draft is
+    /// the connection's upgrade request, and `message` (a recorded message id) prefills the message
+    /// editor. Nil when the connection's upgrade exchange isn't in the project.
+    @discardableResult
+    public func sendWebSocketToRepeater(connection: Int64, message: Int64? = nil) async -> RepeaterTab? {
+        guard let summary = try? await store.webSocketConnections().first(where: { $0.id == connection }),
+            let upgradeID = summary.upgradeExchangeID,
+            let upgrade = try? await store.exchange(id: upgradeID)
+        else { return nil }
+        var options = RepeaterOptions()
+        options.isWebSocket = true
+        if let message,
+            let record = try? await store.webSocketMessages(connection: connection).first(where: {
+                $0.id == message
+            })
+        {
+            options.webSocketMessage = String(decoding: record.payload, as: UTF8.self)
+        }
+        let path = upgrade.request.bytes[upgrade.request.parsed.target].string()
+        let tab = await repeater.openTab(
+            request: upgrade.request, target: upgrade.target, title: "WS \(path)".prefix(40).description,
+            options: options)
+        await events.publish(.repeaterTabOpened(tab.id))
+        return tab
+    }
+}

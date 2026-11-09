@@ -98,12 +98,17 @@ public final class WebSocketHistoryModel {
 public struct WebSocketHistoryView: View {
     let store: ProjectStore
     let events: EventBus
+    /// "Send to Repeater" for a message (PRX-035): connection id and message id.
+    let sendToRepeater: (@MainActor (Int64, Int64) -> Void)?
     @State private var model: WebSocketHistoryModel?
 
     /// WebSockets History over `store`, live-updated from `events`.
-    public init(store: ProjectStore, events: EventBus) {
+    public init(
+        store: ProjectStore, events: EventBus, sendToRepeater: (@MainActor (Int64, Int64) -> Void)? = nil
+    ) {
         self.store = store
         self.events = events
+        self.sendToRepeater = sendToRepeater
     }
 
     public var body: some View {
@@ -148,6 +153,7 @@ public struct WebSocketHistoryView: View {
 
     private func messages(_ model: WebSocketHistoryModel) -> some View {
         let selection = Binding(get: { model.selectedMessage }, set: { model.selectedMessage = $0 })
+        let send = sendToRepeater
         return Table(model.messages, selection: selection) {
             TableColumn("Direction") { message in
                 Text(message.direction == WSDirection.toServer.rawValue ? "→ To server" : "← To client")
@@ -160,6 +166,11 @@ public struct WebSocketHistoryView: View {
                 Text(Self.preview($0)).lineLimit(1).font(.system(.body, design: .monospaced))
             }
             TableColumn("Time") { Text($0.createdAt, format: .dateTime.hour().minute().second()) }.width(80)
+        }
+        .contextMenu(forSelectionType: Int64.self) { ids in
+            if let send, let message = ids.first, let connection = model.selectedConnection {
+                Button("Send to Repeater") { send(connection, message) }
+            }
         }
     }
 
@@ -224,8 +235,10 @@ public struct SessionWebSocketHistoryView: View {
     public var body: some View {
         Group {
             if let store {
-                WebSocketHistoryView(store: store, events: session.events)
-                    .id(ObjectIdentifier(store))
+                WebSocketHistoryView(store: store, events: session.events) { connection, message in
+                    Task { await session.sendWebSocketToRepeater(connection: connection, message: message) }
+                }
+                .id(ObjectIdentifier(store))
             } else {
                 ProgressView()
             }

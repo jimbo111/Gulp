@@ -313,4 +313,26 @@ struct RepeaterProjectTests {
         #expect(announced == tabs.first?.id)
         try await session.close()
     }
+
+    @Test("PRX-035: a recorded WebSocket message opens a WebSocket tab with its upgrade and the message")
+    func test_PRX035_webSocketToRepeater() async throws {
+        let environment = isolatedEnvironment()
+        let session = try await ProjectSession.open(
+            at: projectURL(environment, "ws"), environment: environment)
+        let upgrade = RawRequest(Bytes("GET /chat HTTP/1.1\r\nHost: lab\r\nUpgrade: websocket\r\n\r\n"))
+        let target = HTTPTarget(scheme: .https, host: "lab", port: 443)
+        let exchangeID = await session.store.writer.record(
+            Exchange(source: .proxy, target: target, request: upgrade))
+        let connection = try await session.store.openWebSocket(
+            upgradeExchangeID: exchangeID, url: "wss://lab/chat")
+        let message = try await session.store.recordWebSocketMessage(
+            connection: connection, direction: 0, opcode: 1, payload: Array("{\"op\":\"buy\"}".utf8),
+            frames: [])
+        let tab = try #require(
+            await session.sendWebSocketToRepeater(connection: connection, message: message))
+        #expect(tab.options.isWebSocket && tab.options.webSocketMessage == "{\"op\":\"buy\"}")
+        #expect(tab.draft == upgrade.bytes.rawBytes && tab.target == target && tab.title == "WS /chat")
+        #expect(await session.sendWebSocketToRepeater(connection: 999) == nil)
+        try await session.close()
+    }
 }
