@@ -105,3 +105,38 @@ extension ProjectStore {
         }
     }
 }
+
+extension ProjectStore {
+    /// Site-map entries (F04 TGT-001) for exchanges with id > `after`, oldest first.
+    public func siteMapEntries(after: ExchangeID = 0, limit: Int = 5_000) async throws -> [SiteMapEntry] {
+        try await pool.read { db in
+            try Row.fetchAll(
+                db,
+                sql:
+                    "SELECT id, scheme, host, port, path, in_scope FROM exchanges WHERE id > ? ORDER BY id LIMIT ?",
+                arguments: [after, limit]
+            ).map { row in
+                let scheme: String = row["scheme"] ?? "http"
+                return SiteMapEntry(
+                    id: row["id"],
+                    target: HTTPTarget(
+                        scheme: scheme == "https" ? .https : .http, host: row["host"] ?? "",
+                        port: row["port"] ?? 0),
+                    path: row["path"] ?? "/", inScope: (row["in_scope"] as Int?) == 1)
+            }
+        }
+    }
+
+    /// Ids of the newest exchanges whose responses may hold links (HTML, JSON, JavaScript, XML).
+    public func textualResponseIDs(limit: Int = 2_000) async throws -> [ExchangeID] {
+        try await pool.read { db in
+            try ExchangeID.fetchAll(
+                db,
+                sql: """
+                    SELECT id FROM exchanges WHERE mime LIKE '%html%' OR mime LIKE '%json%' \
+                    OR mime LIKE '%javascript%' OR mime LIKE '%xml%' ORDER BY id DESC LIMIT ?
+                    """,
+                arguments: [limit])
+        }
+    }
+}

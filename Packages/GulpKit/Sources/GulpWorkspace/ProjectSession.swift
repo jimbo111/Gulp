@@ -202,6 +202,8 @@ public actor ProjectSession {
     public nonisolated let repeater: RepeaterService
     /// ScopeGuard (F04 TGT-023): active tools ask it before sending; manual sends ask the user.
     public nonisolated let scopeGuard = ScopeGuard()
+    /// The live site map (F04 TGT-001).
+    public nonisolated let siteMap: SiteMapService
     private let currentStore: CurrentStore
 
     private init(
@@ -230,6 +232,7 @@ public actor ProjectSession {
         let currentStore = CurrentStore(store)
         self.currentStore = currentStore
         self.repeater = RepeaterService(engine: engine, persistence: StoreRepeaterPersistence(currentStore))
+        self.siteMap = SiteMapService { await currentStore.store }
     }
 
     /// Apply the stored intercept settings to the queue (call after opening or changing them).
@@ -298,6 +301,7 @@ public actor ProjectSession {
         await session.applyInterceptSettings()
         try? await session.repeater.load()
         if let scope = try? await store.loadScope() { await session.scopeGuard.set(scope) }
+        await session.startSiteMap()
         return session
     }
 

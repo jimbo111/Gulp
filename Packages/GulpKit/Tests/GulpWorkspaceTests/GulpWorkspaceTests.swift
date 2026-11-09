@@ -364,3 +364,56 @@ struct RepeaterProjectTests {
         try await again.close()
     }
 }
+
+@Suite("GulpWorkspace — site map (F04)", .serialized)
+struct SiteMapServiceTests {
+    /// Waits (bounded) until `check` holds for the session's site map.
+    func waitForMap(
+        _ session: ProjectSession, _ check: @Sendable (SiteMap) -> Bool
+    ) async -> SiteMap {
+        for _ in 0..<200 {
+            let map = await session.siteMap.snapshot
+            if check(map) { return map }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        return await session.siteMap.snapshot
+    }
+
+    @Test("TGT-001/003: the site map grows as exchanges are recorded; links become inferred nodes")
+    func test_TGT001_liveSiteMap() async throws {
+        let environment = isolatedEnvironment()
+        let session = try await open(environment, "sitemap")
+        let target = HTTPTarget(scheme: .https, host: "lab", port: 443)
+        var page = Exchange(
+            source: .proxy, target: target,
+            request: RawRequest(Bytes("GET /shop/index.html HTTP/1.1\r\nHost: lab\r\n\r\n")))
+        page.response = RawResponse(
+            Bytes(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 46\r\n\r\n"
+                    + "<a href=\"cart\">c</a><img src=\"/img/logo.png\">"))
+        _ = await session.store.writer.record(page)
+        await session.store.writer.flush()
+        let map = await waitForMap(session) { $0.node("https://lab:443/shop/cart") != nil }
+        let shop = try #require(map.node("https://lab:443/shop/index.html"))
+        #expect(shop.visited && shop.exchanges.count == 1)
+        let cart = try #require(map.node("https://lab:443/shop/cart"))
+        #expect(!cart.visited)
+        #expect(map.node("https://lab:443/img/logo.png")?.visited == false)
+        #expect(map.hosts.map(\.id) == ["https://lab:443"])
+        try await session.close()
+    }
+
+    @Test("TGT-001/022: changing scope rebuilds the map so in-scope flags follow")
+    func test_TGT001_rebuildOnScope() async throws {
+        let environment = isolatedEnvironment()
+        let session = try await open(environment, "sitemap-scope")
+        await recordSample(session, path: "/app/x")
+        await session.store.writer.flush()
+        var map = await waitForMap(session) { $0.node("http://a:80/app/x") != nil }
+        #expect(map.node("http://a:80/app/x")?.inScope == false)
+        try await session.addToScope(url: "http://a/app")
+        map = await waitForMap(session) { $0.node("http://a:80/app/x")?.inScope == true }
+        #expect(map.node("http://a:80/app/x")?.inScope == true && map.node("http://a:80")?.inScope == true)
+        try await session.close()
+    }
+}
