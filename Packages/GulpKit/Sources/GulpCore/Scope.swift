@@ -57,6 +57,25 @@ public struct ScopeRule: Sendable, Codable, Hashable, Identifiable {
         self.path = path
     }
 
+    enum CodingKeys: String, CodingKey {
+        case id, kind, enabled, scheme, host, hostIsRegex, port, path
+    }
+
+    /// Decode a rule, filling in defaults for anything left out (hand-written scope files, TGT-025):
+    /// a new id, include, enabled, any scheme, an exact host, any port, any path. Only `host` is
+    /// required.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        kind = try c.decodeIfPresent(Kind.self, forKey: .kind) ?? .include
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        scheme = try c.decodeIfPresent(Scheme.self, forKey: .scheme) ?? .any
+        host = try c.decode(String.self, forKey: .host)
+        hostIsRegex = try c.decodeIfPresent(Bool.self, forKey: .hostIsRegex) ?? false
+        port = try c.decodeIfPresent(String.self, forKey: .port) ?? ""
+        path = try c.decodeIfPresent(String.self, forKey: .path) ?? ""
+    }
+
     /// "Add to scope" for a URL (TGT-021 simple mode): the exact host, the URL's scheme, its port
     /// only when it isn't the scheme's default, and its path as a prefix (a bare `/` covers the
     /// whole host). Nil for something that isn't an http(s) URL.
@@ -101,6 +120,54 @@ public struct ScopeRule: Sendable, Codable, Hashable, Identifiable {
             return "Nested quantifiers like (a+)+ can take exponential time; rewrite the pattern."
         }
         return nil
+    }
+}
+
+/// A scope file (TGT-025): `{"format": "gulp-scope", "version": 1, "rules": [...]}`.
+public struct ScopeFile: Sendable, Codable, Hashable {
+    /// Always `gulp-scope`.
+    public var format = "gulp-scope"
+    /// The file format version.
+    public var version = 1
+    /// The rules, in order.
+    public var rules: [ScopeRule]
+
+    /// A file holding `rules`.
+    public init(rules: [ScopeRule]) {
+        self.rules = rules
+    }
+
+    /// `rules` as pretty-printed JSON.
+    public static func export(_ rules: [ScopeRule]) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return try encoder.encode(ScopeFile(rules: rules))
+    }
+
+    /// The rules in `data`: a scope file or a bare array of rules. Throws a readable `GulpError`
+    /// for anything else, or for a rule whose regex can't be used.
+    public static func `import`(_ data: Data) throws -> [ScopeRule] {
+        let decoder = JSONDecoder()
+        let rules: [ScopeRule]
+        if let file = try? decoder.decode(ScopeFile.self, from: data) {
+            guard file.format == "gulp-scope" else {
+                throw GulpError(message: "Not a Gulp scope file (format \"\(file.format)\").")
+            }
+            rules = file.rules
+        } else if let bare = try? decoder.decode([ScopeRule].self, from: data) {
+            rules = bare
+        } else {
+            throw GulpError(
+                message: "Not a scope file: expected {\"rules\": [...]} with a host in every rule.")
+        }
+        for (index, rule) in rules.enumerated() {
+            for pattern in [rule.hostIsRegex ? rule.host : "", rule.path] {
+                if let problem = ScopeRule.problem(with: pattern) {
+                    throw GulpError(message: "Rule \(index + 1): \(problem)")
+                }
+            }
+        }
+        return rules
     }
 }
 

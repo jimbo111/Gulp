@@ -183,6 +183,8 @@ public struct ProxySettings: SettingsGroup, Hashable {
     public var forceHTTP1ToClient = false
     /// PRX-008: never offer HTTP/2 to servers.
     public var forceHTTP1ToServer = false
+    /// TGT-024 / PRX-045: out-of-scope proxy traffic is forwarded but not added to history.
+    public var useScope = false
 
     /// Create proxy settings.
     public init(listeners: [ProxyListenerConfig], passThroughHosts: [String] = []) {
@@ -191,7 +193,7 @@ public struct ProxySettings: SettingsGroup, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case version, listeners, passThroughHosts, forceHTTP1ToClient, forceHTTP1ToServer
+        case version, listeners, passThroughHosts, forceHTTP1ToClient, forceHTTP1ToServer, useScope
     }
 
     /// Interception options for `minter` from these settings.
@@ -209,5 +211,6 @@ public struct ProxySettings: SettingsGroup, Hashable {
         passThroughHosts = try container.decodeIfPresent([String].self, forKey: .passThroughHosts) ?? []
         forceHTTP1ToClient = try container.decodeIfPresent(Bool.self, forKey: .forceHTTP1ToClient) == true
         forceHTTP1ToServer = try container.decodeIfPresent(Bool.self, forKey: .forceHTTP1ToServer) == true
+        useScope = try container.decodeIfPresent(Bool.self, forKey: .useScope) == true
     }
 }

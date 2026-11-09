@@ -13,6 +13,7 @@ extension ProjectSession {
     public func setScope(_ rules: [ScopeRule]) async throws {
         let service = try await store.setScope(rules)
         await scopeGuard.set(service)
+        await applyProxyScope()
     }
 
     /// "Add to scope" (TGT-021): an include rule for `url`'s host and path prefix, appended so it
@@ -35,6 +36,52 @@ extension ProjectSession {
     /// What a manual send (e.g. Repeater) should do for `target`/`path` (TGT-023).
     public func scopeDecision(for target: HTTPTarget, path: String) async -> ScopeDecision {
         await scopeGuard.permits(target, path: path) ? .send : .confirm
+    }
+
+    /// What sending the raw `request` to `target` should do (TGT-023).
+    public func scopeDecision(for target: HTTPTarget, request: [UInt8]) async -> ScopeDecision {
+        await scopeDecision(for: target, path: Self.pathAndQuery(of: request, target: target))
+    }
+
+    /// What sending Repeater tab `id` should do (TGT-023): its target and the path in its draft.
+    public func scopeDecision(forRepeaterTab id: Int64) async -> ScopeDecision {
+        guard let tab = await repeater.tab(id) else { return .send }
+        return await scopeDecision(for: tab.target, request: tab.draft)
+    }
+
+    /// What "Send group" should do (TGT-023): confirm if any member is out of scope.
+    public func scopeDecision(forRepeaterGroup id: Int64) async -> ScopeDecision {
+        for tab in await repeater.members(of: id)
+        where await scopeDecision(for: tab.target, path: Self.pathAndQuery(of: tab.draft, target: tab.target))
+            == .confirm
+        {
+            return .confirm
+        }
+        return .send
+    }
+
+    /// "Send anyway, and don't ask again for this host" (TGT-023), for the rest of the session.
+    public func allowOutOfScopeSends(to host: String) async {
+        await scopeGuard.allowWithoutAsking(host: host)
+    }
+
+    /// Export the scope as JSON (TGT-025).
+    public func exportScope() async throws -> Data {
+        try ScopeFile.export(await scope().rules)
+    }
+
+    /// Replace the scope with the rules in a scope file (TGT-025). Returns how many rules it had.
+    @discardableResult
+    public func importScope(_ data: Data) async throws -> Int {
+        let rules = try ScopeFile.import(data)
+        try await setScope(rules)
+        return rules.count
+    }
+
+    /// The path and query of a raw request (`/` if it has none).
+    static func pathAndQuery(of request: [UInt8], target: HTTPTarget) -> String {
+        let derived = DerivedFields(target: target, request: RawRequest(Bytes(request)), response: nil)
+        return (derived.path ?? "/") + (derived.query.map { "?" + $0 } ?? "")
     }
 }
 

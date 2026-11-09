@@ -105,6 +105,16 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
     private var paused = false
     private var held: [(Exchange, CheckedContinuation<ExchangeID, Never>)] = []
     private var waiting: [CheckedContinuation<Void, Never>] = []
+    /// TGT-024: when set, proxy exchanges out of this scope are not recorded.
+    private var proxyScope: ScopeService?
+
+    /// Drop out-of-scope proxy exchanges (`scope`), or record everything (nil).
+    func setProxyScope(_ scope: ScopeService?) {
+        proxyScope = scope
+    }
+
+    /// The id that stands for "not recorded" (an out-of-scope proxy exchange, TGT-024).
+    static let notRecorded: ExchangeID = 0
 
     init(store: ProjectStore) {
         self.store = store
@@ -112,6 +122,10 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
     }
 
     func record(_ exchange: Exchange) async -> ExchangeID {
+        if exchange.source == .proxy, let proxyScope {
+            let path = (exchange.derived.path ?? "/") + (exchange.derived.query.map { "?" + $0 } ?? "")
+            if !proxyScope.isInScope(exchange.target, path: path) { return Self.notRecorded }
+        }
         if paused {
             return await withCheckedContinuation { held.append((exchange, $0)) }
         }
@@ -119,6 +133,7 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
     }
 
     func update(_ exchange: Exchange) async {
+        guard exchange.id != Self.notRecorded else { return }
         await writer.update(exchange)
     }
 
@@ -152,7 +167,8 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
     }
 
     func webSocketOpened(upgradeExchangeID: ExchangeID?, url: String) async -> Int64? {
-        try? await currentStore().openWebSocket(upgradeExchangeID: upgradeExchangeID, url: url)
+        guard upgradeExchangeID != Self.notRecorded else { return nil }  // its upgrade was out of scope
+        return try? await currentStore().openWebSocket(upgradeExchangeID: upgradeExchangeID, url: url)
     }
 
     func webSocketMessage(
@@ -301,6 +317,7 @@ public actor ProjectSession {
         await session.applyInterceptSettings()
         try? await session.repeater.load()
         if let scope = try? await store.loadScope() { await session.scopeGuard.set(scope) }
+        await session.applyProxyScope()
         await session.startSiteMap()
         return session
     }
@@ -341,9 +358,24 @@ public actor ProjectSession {
         RecentProjects.note(destination, in: environment)
     }
 
+    /// Apply "Use scope for the proxy" (TGT-024) with the current scope.
+    func applyProxyScope() async {
+        let on = settings.get(ProxySettings.self).useScope
+        await recorder.setProxyScope(on ? await scopeGuard.current : nil)
+    }
+
+    /// "Use scope for the proxy" (TGT-024 / PRX-045): store it in the project and apply it now.
+    public func setUseScopeForProxy(_ on: Bool) async throws {
+        var proxySettings = settings.get(ProxySettings.self)
+        proxySettings.useScope = on
+        try await settings.set(proxySettings, scope: .project)
+        await applyProxyScope()
+    }
+
     /// Start every enabled proxy listener from the settings (PRX-001). Returns the bound port per
     /// listener, or the user-facing bind error.
     public func startProxyListeners() async -> [UUID: Result<Int, GulpError>] {
+        await applyProxyScope()
         var results: [UUID: Result<Int, GulpError>] = [:]
         if let minter { await proxy.setTLS(settings.get(ProxySettings.self).tlsOptions(minter: minter)) }
         listenerPorts = []

@@ -442,4 +442,66 @@ struct SiteMapServiceTests {
         #expect(try await reopened.siteMapNotes().count == 1)
         try await reopened.close()
     }
+
+    @Test("TGT-024: with 'use scope for the proxy', out-of-scope proxy traffic is not recorded")
+    func test_TGT024_proxyUsesScope() async throws {
+        let environment = isolatedEnvironment()
+        let session = try await open(environment, "proxy-scope")
+        try await session.addToScope(url: "http://127.0.0.1:1/in")
+        try await session.setUseScopeForProxy(true)
+        var options = SendOptions(recordAs: .proxy)
+        options.timeouts.total = .seconds(5)
+        let refused = HTTPTarget(scheme: .http, host: "127.0.0.1", port: 1)
+        for path in ["/in/a", "/out"] {
+            _ = await session.http.send(
+                RawRequest(Bytes("GET \(path) HTTP/1.1\r\nHost: x\r\n\r\n")), to: refused, options: options)
+        }
+        var repeater = SendOptions(recordAs: .repeater)  // other tools always record
+        repeater.timeouts.total = .seconds(5)
+        _ = await session.http.send(
+            RawRequest(Bytes("GET /out HTTP/1.1\r\n\r\n")), to: refused, options: repeater)
+        await session.store.writer.flush()
+        let rows = try await session.store.summaries(offset: 0, limit: 10)
+        #expect(rows.map { "\($0.source.rawValue) \($0.path ?? "")" } == ["proxy /in/a", "repeater /out"])
+        try await session.setUseScopeForProxy(false)
+        _ = await session.http.send(
+            RawRequest(Bytes("GET /out HTTP/1.1\r\n\r\n")), to: refused, options: options)
+        await session.store.writer.flush()
+        #expect(try await session.store.count() == 3)
+        try await session.close()
+        let reopened = try await open(environment, "proxy-scope")
+        #expect(reopened.settings.get(ProxySettings.self).useScope == false)
+        try await reopened.close()
+    }
+
+    @Test("TGT-023/025: Repeater sends to out-of-scope targets ask first; scope JSON round-trips")
+    func test_TGT023_repeaterDecision() async throws {
+        let environment = isolatedEnvironment()
+        let session = try await open(environment, "repeater-scope")
+        let lab = HTTPTarget(scheme: .https, host: "lab", port: 443)
+        let other = HTTPTarget(scheme: .https, host: "other", port: 443)
+        let inTab = await session.repeater.openTab(
+            request: RawRequest(Bytes("GET /app/x HTTP/1.1\r\n\r\n")), target: lab)
+        let outTab = await session.repeater.openTab(
+            request: RawRequest(Bytes("GET /app/x HTTP/1.1\r\n\r\n")), target: other)
+        #expect(await session.scopeDecision(forRepeaterTab: inTab.id) == .confirm)  // empty scope: nothing in
+        try await session.addToScope(url: "https://lab/app")
+        #expect(await session.scopeDecision(forRepeaterTab: inTab.id) == .send)
+        #expect(await session.scopeDecision(forRepeaterTab: outTab.id) == .confirm)
+        #expect(
+            await session.scopeDecision(for: lab, request: Array("GET /else HTTP/1.1\r\n\r\n".utf8))
+                == .confirm)
+        let group = await session.repeater.createGroup(
+            name: "g", tabs: [inTab.id, outTab.id], mode: .sequential)
+        #expect(await session.scopeDecision(forRepeaterGroup: group.id) == .confirm)
+        await session.allowOutOfScopeSends(to: "OTHER")
+        #expect(await session.scopeDecision(forRepeaterTab: outTab.id) == .send)
+        #expect(await session.scopeDecision(forRepeaterGroup: group.id) == .send)
+
+        let exported = try await session.exportScope()
+        try await session.setScope([])
+        #expect(try await session.importScope(exported) == 1)
+        #expect(await session.scope().rules.first?.host == "lab")
+        try await session.close()
+    }
 }

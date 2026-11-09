@@ -61,6 +61,30 @@ public final class RepeaterModel {
     public var groupResults: [RepeaterGroupResult]?
     /// A group send is in flight.
     public private(set) var sendingGroup = false
+    /// A send waiting on "Target is out of scope. Send anyway?" (TGT-023).
+    public var scopeConfirmation: ScopeConfirmation?
+    /// The selected tab's target is outside the project's scope (a warning badge).
+    public private(set) var targetOutOfScope = false
+
+    /// A send held for the out-of-scope confirmation.
+    public enum ScopeConfirmation: Equatable, Identifiable {
+        /// One tab.
+        case tab(Int64, host: String)
+        /// A group.
+        case group(Int64)
+
+        public var id: String {
+            switch self {
+            case .tab(let id, _): "tab-\(id)"
+            case .group(let id): "group-\(id)"
+            }
+        }
+
+        /// The host named in "don't ask again", for a single tab.
+        public var host: String? {
+            if case .tab(_, let host) = self { host } else { nil }
+        }
+    }
 
     @ObservationIgnored private let session: ProjectSession
     @ObservationIgnored private var loading = false
@@ -268,9 +292,38 @@ public final class RepeaterModel {
         Task { await session.repeater.update(changed) }
     }
 
-    /// "Send group": the selected tab's group goes out in its mode; results show in a sheet.
+    /// "Send group": the selected tab's group goes out in its mode; results show in a sheet. An
+    /// out-of-scope member asks first (TGT-023).
     public func sendGroup() {
         guard let group = selectedGroup, !sendingGroup else { return }
+        Task {
+            if await session.scopeDecision(forRepeaterGroup: group.id) == .confirm {
+                scopeConfirmation = .group(group.id)
+            } else {
+                performGroupSend(group.id)
+            }
+        }
+    }
+
+    /// Answer the out-of-scope confirmation for `pending`: send (optionally never asking again for
+    /// that host) or drop the send. (The alert passes its own copy: SwiftUI may clear
+    /// `scopeConfirmation` before or after the button's action runs.)
+    public func confirmScope(_ pending: ScopeConfirmation, send: Bool, dontAskAgain: Bool = false) {
+        scopeConfirmation = nil
+        guard send else { return }
+        switch pending {
+        case .tab(let id, let host):
+            Task {
+                if dontAskAgain { await session.allowOutOfScopeSends(to: host) }
+                performSend(id)
+            }
+        case .group(let id):
+            performGroupSend(id)
+        }
+    }
+
+    private func performGroupSend(_ groupID: Int64) {
+        guard let group = groups.first(where: { $0.id == groupID }), !sendingGroup else { return }
         sendingGroup = true
         let repeater = session.repeater
         Task {
@@ -295,16 +348,39 @@ public final class RepeaterModel {
         }
         targetError = nil
         if let index = tabs.firstIndex(where: { $0.id == id }) { tabs[index].target = target }
-        Task { await session.repeater.setTarget(id, target) }
+        Task {
+            await session.repeater.setTarget(id, target)
+            await refreshScopeBadge()
+        }
+    }
+
+    /// Recompute the out-of-scope badge for the selected tab.
+    func refreshScopeBadge() async {
+        guard let id = selectedID, let target = selected?.target else { return }
+        let decision = await session.scopeDecision(for: target, request: draft)
+        if selectedID == id { targetOutOfScope = decision == .confirm }
     }
 
     // MARK: sending (REP-002, REP-016)
 
-    /// Send the selected tab (⌘↩).
+    /// Send the selected tab (⌘↩). An out-of-scope target asks first (TGT-023).
     public func send() {
         guard let id = selectedID, !sendingTabs.contains(id) else { return }
         commitTarget()
         guard targetError == nil else { return }
+        guard let target = selected?.target else { return }
+        let request = draft
+        Task {
+            if await session.scopeDecision(for: target, request: request) == .confirm {
+                scopeConfirmation = .tab(id, host: target.host)
+            } else {
+                performSend(id)
+            }
+        }
+    }
+
+    private func performSend(_ id: Int64) {
+        guard !sendingTabs.contains(id) else { return }
         sendingTabs.insert(id)
         live = []
         let repeater = session.repeater
@@ -397,6 +473,7 @@ public final class RepeaterModel {
         shown = nil
         let id = tab.id
         Task {
+            await refreshScopeBadge()
             history = await session.repeater.history(id)
             guard !history.isEmpty, selectedID == id else {
                 historyIndex = nil
@@ -452,6 +529,20 @@ public struct RepeaterView: View {
         }
         .navigationTitle("Repeater")
         .sheet(isPresented: groupResultsShown) { groupResultsSheet }
+        .alert(
+            "Target is out of scope. Send anyway?", isPresented: scopeConfirmationShown,
+            presenting: model.scopeConfirmation
+        ) { pending in
+            Button("Send Anyway") { model.confirmScope(pending, send: true) }
+            if let host = pending.host {
+                Button("Send, and Don't Ask Again for \(host)") {
+                    model.confirmScope(pending, send: true, dontAskAgain: true)
+                }
+            }
+            Button("Cancel", role: .cancel) { model.confirmScope(pending, send: false) }
+        } message: { _ in
+            Text("Change the scope in Target → Scope to stop this question for this host.")
+        }
         .alert("Rename tab", isPresented: renamingBinding) {
             TextField("Title", text: $newTitle)
             Button("Rename") {
@@ -459,6 +550,12 @@ public struct RepeaterView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+    }
+
+    private var scopeConfirmationShown: Binding<Bool> {
+        Binding(
+            get: { model.scopeConfirmation != nil },
+            set: { if !$0 { model.scopeConfirmation = nil } })
     }
 
     private var groupResultsShown: Binding<Bool> {
@@ -632,6 +729,10 @@ public struct RepeaterView: View {
                 .help(model.targetError ?? "Where requests go (the Host header is sent as written)")
             if let error = model.targetError {
                 Image(systemName: "exclamationmark.triangle").foregroundStyle(.yellow).help(error)
+            } else if model.targetOutOfScope {
+                Label("Out of scope", systemImage: "scope")
+                    .font(.caption).foregroundStyle(.orange)
+                    .help("This target is outside the project's scope (Target → Scope).")
             }
             Picker("Version", selection: optionBinding(\.version)) {
                 Text("Auto").tag(RepeaterOptions.Version.auto)

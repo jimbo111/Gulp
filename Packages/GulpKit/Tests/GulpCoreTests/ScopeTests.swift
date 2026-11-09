@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import GulpCore
@@ -95,5 +96,34 @@ struct ScopeTests {
         try await guardian.require(other, path: "/", override: true)
         await guardian.allowWithoutAsking(host: "OTHER.com")
         #expect(await guardian.permits(other, path: "/x"))
+    }
+
+    @Test("TGT-025: scope exports to JSON and imports back; hand-written files get defaults")
+    func test_TGT025_json() throws {
+        let rules = [
+            ScopeRule(host: "lab.test", path: "^/app"),
+            ScopeRule(
+                kind: .exclude, enabled: false, scheme: .https, host: ".*\\.cdn\\.test", hostIsRegex: true,
+                port: "443"),
+        ]
+        let data = try ScopeFile.export(rules)
+        #expect(String(decoding: data, as: UTF8.self).contains("\"format\" : \"gulp-scope\""))
+        #expect(try ScopeFile.import(data) == rules)
+        let handWritten = Data(
+            #"[{"host": "a.test"}, {"host": "a.test", "kind": "exclude", "path": "^/logout"}]"#.utf8)
+        let imported = try ScopeFile.import(handWritten)
+        #expect(
+            imported.count == 2 && imported[0].kind == .include && imported[0].enabled
+                && imported[0].scheme == .any)
+        #expect(
+            ScopeService(rules: imported).isInScope(
+                HTTPTarget(scheme: .https, host: "a.test", port: 443), path: "/x"))
+        #expect(throws: GulpError.self) { try ScopeFile.import(Data(#"{"rules": [{"path": "/x"}]}"#.utf8)) }
+        #expect(throws: GulpError.self) {
+            try ScopeFile.import(Data(#"[{"host": "a", "path": "(a+)+"}]"#.utf8))
+        }
+        #expect(throws: GulpError.self) {
+            try ScopeFile.import(Data(#"{"format": "other", "rules": [{"host": "a"}]}"#.utf8))
+        }
     }
 }
