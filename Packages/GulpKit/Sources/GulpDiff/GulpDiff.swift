@@ -179,12 +179,13 @@ public enum Differ {
         var positionB = rb.lowerBound
         func flushChange() {
             guard !pendingA.isEmpty || !pendingB.isEmpty else { return }
-            let blockA =
-                (pendingA.first?.lowerBound ?? pendingA.last?.upperBound ?? positionA)
-                ..<(pendingA.last?.upperBound ?? positionA)
-            let blockB =
-                (pendingB.first?.lowerBound ?? pendingB.last?.upperBound ?? positionB)
-                ..<(pendingB.last?.upperBound ?? positionB)
+            // Separate bounds: a wrapped `x\n..<y` would parse as two statements.
+            let startA = pendingA.first?.lowerBound ?? positionA
+            let endA = pendingA.last?.upperBound ?? positionA
+            let startB = pendingB.first?.lowerBound ?? positionB
+            let endB = pendingB.last?.upperBound ?? positionB
+            let blockA = startA..<endA
+            let blockB = startB..<endB
             segments += refine(a, blockA, b, blockB, granularity: granularity, options: options)
             pendingA = []
             pendingB = []
@@ -250,19 +251,23 @@ public enum Differ {
         }
         var result: [DiffSegment] = []
         for step in myers(keysA, keysB) {
-            let rangeA =
-                step.a.isEmpty
-                ? (step.a.lowerBound < keptA.count ? keptA[step.a.lowerBound].lowerBound : ra.upperBound)..<(step
-                    .a.lowerBound < keptA.count ? keptA[step.a.lowerBound].lowerBound : ra.upperBound)
-                : keptA[step.a.lowerBound].lowerBound..<keptA[step.a.upperBound - 1].upperBound
-            let rangeB =
-                step.b.isEmpty
-                ? (step.b.lowerBound < keptB.count ? keptB[step.b.lowerBound].lowerBound : rb.upperBound)..<(step
-                    .b.lowerBound < keptB.count ? keptB[step.b.lowerBound].lowerBound : rb.upperBound)
-                : keptB[step.b.lowerBound].lowerBound..<keptB[step.b.upperBound - 1].upperBound
+            let rangeA = span(step.a, in: keptA, end: ra.upperBound)
+            let rangeB = span(step.b, in: keptB, end: rb.upperBound)
             result.append(DiffSegment(operation: step.operation, a: rangeA, b: rangeB))
         }
         return result
+    }
+
+    /// The byte range covered by tokens `indices` (an empty range at the next token, or `end`, when
+    /// there are none).
+    static func span(_ indices: Range<Int>, in tokens: [Range<Int>], end: Int) -> Range<Int> {
+        if indices.isEmpty {
+            let at = indices.lowerBound < tokens.count ? tokens[indices.lowerBound].lowerBound : end
+            return at..<at
+        }
+        let lower = tokens[indices.lowerBound].lowerBound
+        let upper = tokens[indices.upperBound - 1].upperBound
+        return lower..<upper
     }
 
     /// Words (letters, digits, `_` and non-ASCII bytes), runs of whitespace, single punctuation.
