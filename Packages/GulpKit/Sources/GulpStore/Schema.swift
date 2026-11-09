@@ -26,11 +26,21 @@ enum Schema {
                     notes TEXT)
                     """)
         }
+        // F20 PRJ-012: imports look up duplicates by request blob; F21 AUT-023: the audit log of
+        // agent (MCP/automation) actions.
+        migrator.registerMigration("v4_import_index_audit_log") { db in
+            try db.execute(sql: "CREATE INDEX ix_ex_request_blob ON exchanges(request_blob)")
+            try db.execute(
+                sql: """
+                    CREATE TABLE audit_log (id INTEGER PRIMARY KEY, at REAL NOT NULL, actor TEXT NOT NULL,
+                    action TEXT NOT NULL, target TEXT, outcome TEXT NOT NULL, detail TEXT)
+                    """)
+        }
         return migrator
     }
 
     /// The current schema version written to `meta.schema_version`.
-    static let version = 3
+    static let version = 4
 
     /// Schema v1, generated from the SQL block in doc 04 §4 (comments stripped, lines wrapped).
     static let v1 = """

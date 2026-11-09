@@ -51,12 +51,16 @@ public struct SiteMapEntry: Sendable, Hashable {
     public var status: Int?
     /// The response MIME type, if any.
     public var mime: String?
+    /// The request was actually sent (false for imported request-only entries such as OpenAPI
+    /// operations or URL lists, which show as inferred).
+    public var visited: Bool
 
     /// An entry.
     public init(
         id: ExchangeID, target: HTTPTarget, path: String, inScope: Bool, status: Int? = nil,
-        mime: String? = nil
+        mime: String? = nil, visited: Bool = true
     ) {
+        self.visited = visited
         self.id = id
         self.target = target
         self.path = path
@@ -96,7 +100,8 @@ public struct SiteMap: Sendable {
     /// Add a request that was seen (visited).
     public mutating func add(_ entry: SiteMapEntry) {
         insert(
-            target: entry.target, path: entry.path, exchange: entry.id, visited: true, inScope: entry.inScope,
+            target: entry.target, path: entry.path, exchange: entry.id, visited: entry.visited,
+            inScope: entry.inScope,
             found: entry.status != 404, mime: entry.mime)
     }
 

@@ -207,7 +207,9 @@ let package = Package(
         .testTarget(name: "GulpScriptTests", dependencies: ["GulpScript"]),
         .testTarget(name: "GulpUITests", dependencies: ["GulpUI", "GulpCore"]),
         .testTarget(name: "GulpFeaturesTests", dependencies: ["GulpFeatures"]),
-        .testTarget(name: "GulpWorkspaceTests", dependencies: ["GulpWorkspace", "GulpTLS", "GulpRepeater"]),
+        .testTarget(
+            name: "GulpWorkspaceTests",
+            dependencies: ["GulpWorkspace", "GulpTLS", "GulpRepeater", "GulpCodec"]),
         .testTarget(name: "GulpAutomationTests", dependencies: ["GulpAutomation"]),
         .testTarget(name: "IntegrationTests", dependencies: ["GulpWorkspace"]),
     ],

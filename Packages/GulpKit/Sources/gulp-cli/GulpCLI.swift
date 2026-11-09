@@ -28,7 +28,7 @@ struct GulpCommand: AsyncParsableCommand {
         commandName: "gulp-cli", abstract: "Gulp, headless.", version: GulpCLI.version,
         subcommands: [
             Send.self, Group.self, Paste.self, Repeater.self, Proxy.self, History.self, CA.self, CopyAs.self,
-            WS.self, Browser.self, Scope.self, Target.self,
+            WS.self, Browser.self, Scope.self, Target.self, ProjectCommand.self,
         ])
 }
 
