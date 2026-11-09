@@ -85,6 +85,7 @@ let package = Package(
         .target(
             name: "GulpHTTP",
             dependencies: ["GulpCore", "GulpTLS", "CZlib"] + nioHTTP + nioConcurrency + [
+                .product(name: "Crypto", package: "swift-crypto"),
                 .product(name: "NIOTLS", package: "swift-nio"),
                 .product(name: "NIOHPACK", package: "swift-nio-http2"),
                 .product(name: "NIOHTTPCompression", package: "swift-nio-extras"),

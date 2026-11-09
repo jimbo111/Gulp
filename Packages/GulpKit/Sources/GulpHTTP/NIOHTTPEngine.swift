@@ -53,6 +53,8 @@ public final class NIOHTTPEngine: HTTPEngine {
     private let recorder: (any ExchangeRecorder)?
     /// The shared requests-per-second caps every send waits for (HTTP-013).
     public let throttle = Throttle()
+    /// Credentials that answer `401` challenges automatically (HTTP-012).
+    public let platformAuth = PlatformAuth()
 
     /// Create an engine. Hooks run in array order; `recorder` stores every exchange if given.
     public init(
@@ -80,17 +82,34 @@ public final class NIOHTTPEngine: HTTPEngine {
 
     /// Send raw HTTP/1 bytes (HTTP-001). Failures are returned as data in the exchange. With a
     /// redirect policy, each hop is its own (recorded) exchange: the result is the last one, and the
-    /// earlier hops are in `redirectChain` (F06 REP-006).
+    /// earlier hops are in `redirectChain` (F06 REP-006) — as is a `401` answered with a platform
+    /// credential (HTTP-012).
     public func send(
         _ request: RawRequest, to target: HTTPTarget, options: SendOptions
     ) async -> ExchangeResult {
         var result = await send(request, to: target, options: options, pool: pool)
-        guard options.followRedirects.mode != .never else { return result }
         var chain: [Exchange] = []
         var current = (request: request, target: target)
+        // HTTP-012: answer one authentication challenge when there is a credential for the host.
+        if result.error == nil, let response = result.exchange.response,
+            request.headerValue("authorization") == nil,
+            let authorization = await platformAuth.answer(response, to: request, target: target)
+        {
+            chain.append(result.exchange)
+            current.request = request.settingHeader("Authorization", to: authorization)
+            var retry = options
+            retry.originalRequest = nil
+            result = await send(current.request, to: target, options: retry, pool: pool)
+        }
+        guard options.followRedirects.mode != .never else {
+            result.redirectChain = chain
+            return result
+        }
         var hopOptions = options
         hopOptions.originalRequest = nil
-        while chain.count < options.followRedirects.maxHops, result.error == nil, !Task.isCancelled,
+        let authHops = chain.count
+        while chain.count - authHops < options.followRedirects.maxHops, result.error == nil,
+            !Task.isCancelled,
             let response = result.exchange.response,
             let next = Redirects.next(
                 after: response, request: current.request, target: current.target,
