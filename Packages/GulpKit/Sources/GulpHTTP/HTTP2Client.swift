@@ -28,6 +28,8 @@ final class H2Connection: Sendable {
     let id: UInt64
     let tls: TLSInfo?
     private let multiplexer: NIOLoopBound<HTTP2StreamMultiplexer>
+    /// The stream multiplexer, for group sends (GroupSend.swift).
+    var multiplexerForGroups: NIOLoopBound<HTTP2StreamMultiplexer> { multiplexer }
 
     /// Local settings: no server push (HTTP-024), and NIO's defaults otherwise.
     static let settings: [HTTP2Setting] = [

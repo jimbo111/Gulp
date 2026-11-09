@@ -108,6 +108,9 @@ public struct Timing: Sendable, Codable, Equatable {
     /// For a streamed response (HIS-007): when each piece arrived — cumulative bytes received and
     /// milliseconds since the send started.
     public var streamMarks: [StreamMark]?
+    /// For a single-packet group send (HTTP-035): when this request's withheld final bytes were
+    /// written, in ms after the first of its group's final writes (the group's spread is the max).
+    public var finalWriteOffsetMs: Double?
 
     /// Create a timing record that starts at `start`.
     public init(start: Date = Date()) {

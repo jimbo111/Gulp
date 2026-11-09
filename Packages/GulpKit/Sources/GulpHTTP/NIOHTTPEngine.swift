@@ -41,9 +41,9 @@ public final class NIOHTTPEngine: HTTPEngine {
         public init() {}
     }
 
-    private let group: any EventLoopGroup
+    let group: any EventLoopGroup
     private let configuration: Configuration
-    private let pool: ConnectionPool
+    let pool: ConnectionPool
     private let tlsContexts = TLSContextCache()
     private let h2Pool = H2Pool()
     /// The pipeline name of the HTTP/1 handler (removed when a connection switches to HTTP/2).
@@ -114,7 +114,8 @@ public final class NIOHTTPEngine: HTTPEngine {
             connectionID: 0, timing: Timing())
     }
 
-    /// Send a group (HTTP-030…HTTP-032). Single-packet mode arrives in M5.
+    /// Send a group (HTTP-030…HTTP-034): in sequence on one connection, in sequence on separate
+    /// connections, in parallel, or single-packet (GroupSend.swift).
     public func sendGroup(
         _ items: [GroupItem], mode: GroupSendMode, options: SendOptions
     ) async -> [ExchangeResult] {
@@ -153,16 +154,7 @@ public final class NIOHTTPEngine: HTTPEngine {
                 return ordered.compactMap { $0 }
             }
         case .singlePacket:
-            var results: [ExchangeResult] = []
-            for item in items {
-                let outgoing = OutgoingRequest(request: item.request, target: item.target)
-                results.append(
-                    await finish(
-                        outgoing, options: options, wire: nil,
-                        error: .other("Single-packet group sends (HTTP-033/034) are implemented in M5"),
-                        connectionID: 0, timing: Timing()))
-            }
-            return results
+            return await sendSinglePacket(items, options: options)
         }
     }
 
@@ -257,11 +249,11 @@ public final class NIOHTTPEngine: HTTPEngine {
 
     // MARK: send pipeline
 
-    func send(
-        _ request: RawRequest, to target: HTTPTarget, options: SendOptions, pool: ConnectionPool
-    ) async -> ExchangeResult {
-        let start = NIODeadline.now()
-        var timing = Timing(start: Date())
+    /// Request hooks and the opt-in byte rewrites (HTTP-008), as every send applies them. Returns the
+    /// request to send, the options (with the pre-hook original kept, PRX-012) and a hook failure.
+    func prepare(
+        _ request: RawRequest, to target: HTTPTarget, options: SendOptions
+    ) async -> (OutgoingRequest, SendOptions, GulpNetworkError?) {
         var outgoing = OutgoingRequest(request: request, target: target)
         let context = HookContext(source: options.recordAs)
         let beforeHooks = outgoing.request
@@ -274,13 +266,23 @@ public final class NIOHTTPEngine: HTTPEngine {
                 options.originalRequest = beforeHooks  // keep what the tool asked for (PRX-012)
             }
         } catch {
-            return await finish(
-                outgoing, options: options, wire: nil, error: .other("Request hook failed: \(error)"),
-                connectionID: 0, timing: timing)
+            return (outgoing, options, .other("Request hook failed: \(error)"))
         }
-        // The only byte rewrites, both opt-in (HTTP-008).
         if options.normalizeLineEndings { outgoing.request = outgoing.request.normalizingLineEndings() }
         if options.updateContentLength { outgoing.request = outgoing.request.updatingContentLength() }
+        return (outgoing, options, nil)
+    }
+
+    func send(
+        _ request: RawRequest, to target: HTTPTarget, options: SendOptions, pool: ConnectionPool
+    ) async -> ExchangeResult {
+        let start = NIODeadline.now()
+        var timing = Timing(start: Date())
+        var (outgoing, options, hookError) = await prepare(request, to: target, options: options)
+        if let hookError {
+            return await finish(
+                outgoing, options: options, wire: nil, error: hookError, connectionID: 0, timing: timing)
+        }
 
         let route = upstreamRoute(for: outgoing.target, options: options)
         if let refusal = unsupported(outgoing.target, options, route: route) {
@@ -335,7 +337,7 @@ public final class NIOHTTPEngine: HTTPEngine {
         }
     }
 
-    private func unsupported(
+    func unsupported(
         _ target: HTTPTarget, _ options: SendOptions, route: UpstreamProxy?
     ) -> GulpNetworkError? {
         if options.httpVersion == .http2PriorKnowledge, target.scheme == .https {
@@ -480,9 +482,9 @@ public final class NIOHTTPEngine: HTTPEngine {
 
     /// Resolve (with overrides, HTTP-004) and connect (HTTP-005 connect timeout), directly or through
     /// an upstream proxy (HTTP-006): SOCKS5 via NIOSOCKS, or an HTTP proxy's CONNECT tunnel.
-    private func connect(
+    func connect(
         _ target: HTTPTarget, route: UpstreamProxy?, options: SendOptions, deadline: NIODeadline,
-        timing: inout Timing
+        timing: inout Timing, on loop: (any EventLoop)? = nil
     ) async throws -> (any Channel, TLSInfo?) {
         let proxyHost = route.map { configuration.hostOverrides[$0.host.lowercased()] ?? $0.host }
         let host = proxyHost ?? effectiveHost(target)
@@ -507,7 +509,8 @@ public final class NIOHTTPEngine: HTTPEngine {
         // (not behind an HTTP proxy, whose CONNECT reply must reach the HTTP/1 handler).
         let gateReads =
             options.httpVersion == .http2PriorKnowledge && target.scheme == .http && route?.kind != .http
-        let bootstrap = ClientBootstrap(group: group)
+        let bootstrapGroup: any EventLoopGroup = loop.map { $0 as any EventLoopGroup } ?? group
+        let bootstrap = ClientBootstrap(group: bootstrapGroup)
             .connectTimeout(min(configured, remaining))
             .channelOption(ChannelOptions.tcpOption(.tcp_nodelay), value: 1)
             .channelInitializer { [socksTarget] channel in
@@ -689,14 +692,14 @@ public final class NIOHTTPEngine: HTTPEngine {
         }
     }
 
-    private struct WireResult {
+    struct WireResult {
         var wire: WireResponse
         var writeStart: NIODeadline
         var writeEnd: NIODeadline
     }
 
     /// Write the exact request bytes and wait for the framed response.
-    private func exchange(
+    func exchange(
         on channel: any Channel, request: RawRequest, options: SendOptions, totalDeadline: NIODeadline,
         isConnect: Bool = false
     ) async -> WireResult {
@@ -734,7 +737,7 @@ public final class NIOHTTPEngine: HTTPEngine {
     }
 
     /// Build the exchange (response hooks, derived fields), record it, and wrap it as a result.
-    private func finish(
+    func finish(
         _ outgoing: OutgoingRequest, options: SendOptions, wire: WireResponse?, error: GulpNetworkError?,
         connectionID: UInt64, timing: Timing, tls: TLSInfo? = nil, httpVersion: HTTPVersion = .http1_1,
         streamedAs: ExchangeID? = nil

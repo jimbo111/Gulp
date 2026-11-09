@@ -19,6 +19,9 @@ struct RequestCommand: Sendable {
     let promise: EventLoopPromise<WireResponse>
     /// Streaming (PRX-050): every inbound chunk, as it arrives.
     var onBytes: (@Sendable ([UInt8]) -> Void)? = nil
+    /// More bytes of the request already in flight (the withheld final bytes of a last-byte-sync
+    /// group send, HTTP-034): written without flushing; the caller flushes.
+    var continuation = false
 }
 
 /// The bytes and outcome of one request on the wire.
@@ -116,6 +119,14 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
             return
         }
         let command = unwrapOutboundIn(data)
+        if command.continuation {
+            guard pending != nil else {
+                promise?.fail(GulpNetworkError.other("No request in flight to continue"))
+                return
+            }
+            context.write(wrapOutboundOut(command.bytes), promise: promise)
+            return
+        }
         guard pending == nil else {
             command.promise.fail(GulpNetworkError.other("A request is already in flight on this connection"))
             promise?.fail(GulpNetworkError.other("Connection busy"))
