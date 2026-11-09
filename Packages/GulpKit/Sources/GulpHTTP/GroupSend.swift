@@ -402,3 +402,96 @@ extension H2Connection {
         return try? await opened.futureResult.get()
     }
 }
+
+extension NIOHTTPEngine {
+    /// HTTP-011: write `requests` back to back on one HTTP/1.1 connection (one flush) and read the
+    /// responses in order — the Fuzzer's Turbo mode (F07). Each request is recorded as its own
+    /// exchange. If the server closes the connection early, the requests it never answered fail with
+    /// `connectionReset` (re-send them on a new connection).
+    public func sendPipelined(
+        _ requests: [RawRequest], to target: HTTPTarget, options: SendOptions
+    ) async -> [ExchangeResult] {
+        guard !requests.isEmpty else { return [] }
+        let start = NIODeadline.now()
+        let deadline = start + timeAmount(options.timeouts.total)
+        var prepared: [(outgoing: OutgoingRequest, options: SendOptions, failure: GulpNetworkError?)] = []
+        for request in requests {
+            prepared.append(await prepare(request, to: target, options: options))
+            await throttle.acquire(host: target.host)  // HTTP-013
+        }
+        let route = upstreamRoute(for: target, options: options)
+        var connectOptions = options
+        connectOptions.httpVersion = .http1_1
+        var timing = Timing(start: Date())
+        let channel: any Channel
+        let tls: TLSInfo?
+        do {
+            if let refusal = unsupported(target, options, route: route) { throw refusal }
+            (channel, tls) = try await connect(
+                target, route: route, options: connectOptions, deadline: deadline, timing: &timing)
+        } catch {
+            let mapped = (error as? GulpNetworkError) ?? HTTP1ClientHandler.networkError(error)
+            var results: [ExchangeResult] = []
+            for entry in prepared {
+                results.append(
+                    await finish(
+                        entry.outgoing, options: entry.options, wire: nil, error: entry.failure ?? mapped,
+                        connectionID: 0, timing: timing))
+            }
+            return results
+        }
+        let connectionID = await pool.newConnectionID()
+        // Write every request (those a hook rejected are skipped), then flush once.
+        let sendable = prepared.enumerated().filter { $0.element.failure == nil }
+        let commands = sendable.map { index, entry -> (Int, RequestCommand) in
+            let request = entry.outgoing.request
+            var command = RequestCommand(
+                bytes: channel.allocator.buffer(bytes: request.bytes.rawBytes),
+                isHead: request.bytes[request.parsed.method].string() == "HEAD", isConnect: false,
+                maxResponseBytes: entry.options.maxResponseBytes,
+                firstByteTimeout: timeAmount(entry.options.timeouts.firstByte),
+                idleTimeout: timeAmount(entry.options.timeouts.idleBetweenBytes), totalDeadline: deadline,
+                promise: channel.eventLoop.makePromise(of: WireResponse.self))
+            command.pipelined = true
+            return (index, command)
+        }
+        let writeEnd =
+            (try? await channel.eventLoop.submit { () -> NIODeadline in
+                for (_, command) in commands {
+                    let written = channel.eventLoop.makePromise(of: Void.self)
+                    written.futureResult.whenFailure { command.promise.fail($0) }
+                    channel.write(command, promise: written)
+                }
+                channel.flush()
+                return .now()
+            }.get()) ?? .now()
+        var results = [ExchangeResult?](repeating: nil, count: prepared.count)
+        for (index, command) in commands {
+            let wire: WireResponse
+            do {
+                wire = try await command.promise.futureResult.get()
+            } catch {
+                wire = WireResponse(
+                    bytes: [], interim: [], error: HTTP1ClientHandler.networkError(error), firstByteAt: nil,
+                    lastByteAt: nil, reusable: false, receivedAny: false)
+            }
+            var itemTiming = timing
+            if let first = wire.firstByteAt {
+                itemTiming.ttfbMs = milliseconds(from: writeEnd, to: first)
+                if let last = wire.lastByteAt { itemTiming.downloadMs = milliseconds(from: first, to: last) }
+            }
+            itemTiming.totalMs = milliseconds(from: start, to: .now())
+            let entry = prepared[index]
+            results[index] = await finish(
+                entry.outgoing, options: entry.options, wire: wire, error: wire.error,
+                connectionID: connectionID, timing: itemTiming, tls: tls)
+        }
+        channel.close(promise: nil)
+        for (index, entry) in prepared.enumerated() where results[index] == nil {
+            results[index] = await finish(
+                entry.outgoing, options: entry.options, wire: nil, error: entry.failure, connectionID: 0,
+                timing: timing)
+        }
+        return results.compactMap { $0 }
+    }
+}

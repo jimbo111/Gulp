@@ -22,6 +22,9 @@ struct RequestCommand: Sendable {
     /// More bytes of the request already in flight (the withheld final bytes of a last-byte-sync
     /// group send, HTTP-034): written without flushing; the caller flushes.
     var continuation = false
+    /// One of several requests written back to back (HTTP-011): written without flushing (the
+    /// caller flushes once); if a response is still pending, this one queues behind it.
+    var pipelined = false
 }
 
 /// The bytes and outcome of one request on the wire.
@@ -73,7 +76,8 @@ private struct ResponseHead {
     }
 }
 
-/// One request at a time per connection; pipelining (HTTP-011) is a separate mode.
+/// One request at a time per connection, or several back to back when pipelined (HTTP-011): the
+/// responses are then framed in order, each starting where the previous one ended.
 final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
     typealias InboundIn = ByteBuffer
     typealias OutboundIn = RequestCommand
@@ -98,6 +102,8 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
     }
 
     private var pending: Pending?
+    /// Pipelined requests waiting for their turn, with the timeouts to arm when they get it.
+    private var queued: [(pending: Pending, firstByteTimeout: TimeAmount, totalDeadline: NIODeadline)] = []
     private var context: ChannelHandlerContext?
     /// After `101 Switching Protocols` the connection carries another protocol (WebSocket): bytes
     /// pass down the pipeline untouched instead of being parsed as HTTP (PRX-030).
@@ -127,20 +133,37 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
             context.write(wrapOutboundOut(command.bytes), promise: promise)
             return
         }
-        guard pending == nil else {
-            command.promise.fail(GulpNetworkError.other("A request is already in flight on this connection"))
-            promise?.fail(GulpNetworkError.other("Connection busy"))
-            return
-        }
-        pending = Pending(
+        let request = Pending(
             promise: command.promise, isHead: command.isHead, isConnect: command.isConnect,
             maxBytes: command.maxResponseBytes, idleTimeout: command.idleTimeout, onBytes: command.onBytes)
+        if pending != nil {
+            guard command.pipelined else {
+                let busy = GulpNetworkError.other("A request is already in flight on this connection")
+                command.promise.fail(busy)
+                promise?.fail(GulpNetworkError.other("Connection busy"))
+                return
+            }
+            queued.append((request, command.firstByteTimeout, command.totalDeadline))
+            context.write(wrapOutboundOut(command.bytes), promise: promise)
+            return
+        }
+        start(request, firstByteTimeout: command.firstByteTimeout, totalDeadline: command.totalDeadline)
+        if command.pipelined {
+            context.write(wrapOutboundOut(command.bytes), promise: promise)
+        } else {
+            context.writeAndFlush(wrapOutboundOut(command.bytes), promise: promise)
+        }
+    }
+
+    /// Make `request` the one whose response is being read, with its timeouts.
+    private func start(_ request: Pending, firstByteTimeout: TimeAmount, totalDeadline: NIODeadline) {
+        pending = request
+        guard let context else { return }
         let bound = NIOLoopBound(self, eventLoop: context.eventLoop)
-        pending?.totalTimer = context.eventLoop.scheduleTask(deadline: command.totalDeadline) {
+        pending?.totalTimer = context.eventLoop.scheduleTask(deadline: totalDeadline) {
             bound.value.timedOut(.totalTimeout)
         }
-        armPhaseTimer(command.firstByteTimeout, error: .firstByteTimeout)
-        context.writeAndFlush(wrapOutboundOut(command.bytes), promise: promise)
+        armPhaseTimer(firstByteTimeout, error: .firstByteTimeout)
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -175,6 +198,7 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
                 fail(p.buffer.isEmpty ? .connectionReset : .incompleteResponse)
             }
         }
+        failQueued(.connectionReset)
         context.fireChannelInactive()
     }
 
@@ -236,6 +260,17 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
                 bytes: Array(p.buffer[p.start..<end]), interim: p.interim, error: nil,
                 firstByteAt: p.firstByteAt, lastByteAt: .now(), reusable: reusable && !surplus && !switching,
                 receivedAny: true))
+        if !switching, !queued.isEmpty {
+            // HTTP-011: the next pipelined response starts where this one ended.
+            let next = queued.removeFirst()
+            start(next.pending, firstByteTimeout: next.firstByteTimeout, totalDeadline: next.totalDeadline)
+            if surplus {
+                pending?.firstByteAt = .now()
+                pending?.buffer = Array(p.buffer[end...])
+                evaluate()
+            }
+            return
+        }
         guard switching, let context else { return }
         // The first frames may have arrived with the 101: hand them on, then pass everything through.
         passThrough = true
@@ -252,6 +287,19 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
                 bytes: Array(p.buffer[p.start...]), interim: p.interim, error: error,
                 firstByteAt: p.firstByteAt, lastByteAt: p.firstByteAt == nil ? nil : .now(), reusable: false,
                 receivedAny: !p.buffer.isEmpty))
+        failQueued(error)
+    }
+
+    /// The connection is unusable: every pipelined request still waiting fails too.
+    private func failQueued(_ error: GulpNetworkError) {
+        let waiting = queued
+        queued = []
+        for item in waiting {
+            item.pending.promise.succeed(
+                WireResponse(
+                    bytes: [], interim: [], error: error, firstByteAt: nil, lastByteAt: nil, reusable: false,
+                    receivedAny: false))
+        }
     }
 
     private func finish(_ response: WireResponse) {
