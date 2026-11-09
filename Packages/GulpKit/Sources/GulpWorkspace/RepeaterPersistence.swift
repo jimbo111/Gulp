@@ -70,3 +70,42 @@ final class StoreRepeaterPersistence: RepeaterPersistence {
         try await store.exchange(id: id)
     }
 }
+
+extension ProjectSession {
+    /// "Send to Repeater" (F06 REP-001, ⌘R): a tab per exchange, prefilled with its exact request
+    /// bytes and target (an edited request is sent as edited). Announces each tab on `events`.
+    @discardableResult
+    public func sendToRepeater(_ ids: [ExchangeID]) async -> [RepeaterTab] {
+        var opened: [RepeaterTab] = []
+        for id in ids {
+            guard let exchange = try? await store.exchange(id: id) else { continue }
+            let path = exchange.request.bytes[exchange.request.parsed.target].string()
+            let method = exchange.request.bytes[exchange.request.parsed.method].string()
+            let title = "\(method) \(path.split(separator: "?").first.map(String.init) ?? path)"
+            var options = RepeaterOptions()
+            if exchange.httpVersion == .http2 { options.version = .http2 }
+            let tab = await repeater.openTab(
+                request: exchange.request, target: exchange.target, title: String(title.prefix(40)),
+                options: options)
+            opened.append(tab)
+            await events.publish(.repeaterTabOpened(tab.id))
+        }
+        return opened
+    }
+}
+
+extension ProjectSession {
+    /// The ids of tabs "Send to Repeater" opens, as they open (the window switches to the Repeater).
+    public func repeaterTabsOpened() async -> AsyncStream<Int64> {
+        let deliveries = await events.subscribe()
+        return AsyncStream { continuation in
+            let task = Task {
+                for await delivery in deliveries {
+                    if case .repeaterTabOpened(let id) = delivery.event { continuation.yield(id) }
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}

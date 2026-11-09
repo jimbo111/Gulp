@@ -287,4 +287,30 @@ struct RepeaterProjectTests {
         #expect(sent?.source == .repeater && sent?.request == request)
         try await reopened.close()
     }
+
+    @Test("REP-001: Send to Repeater opens a tab with the exchange's exact bytes and target, and says so")
+    func test_REP001_sendToRepeater() async throws {
+        let environment = isolatedEnvironment()
+        let session = try await ProjectSession.open(
+            at: projectURL(environment, "send"), environment: environment)
+        let request = RawRequest(
+            Bytes("POST /api/login?next=/home HTTP/1.1\r\nHost: lab\r\nX-A: 1\r\n\r\nu=a"))
+        let target = HTTPTarget(scheme: .https, host: "lab", port: 8443)
+        var exchange = Exchange(source: .proxy, target: target, request: request)
+        exchange.httpVersion = .http2
+        let id = await session.store.writer.record(exchange)
+        await session.store.writer.flush()
+        let events = await session.events.subscribe()
+        let tabs = await session.sendToRepeater([id])
+        #expect(tabs.count == 1)
+        #expect(tabs.first?.draft == request.bytes.rawBytes && tabs.first?.target == target)
+        #expect(tabs.first?.title == "POST /api/login" && tabs.first?.options.version == .http2)
+        var announced: Int64?
+        for await delivery in events {
+            if case .repeaterTabOpened(let tab) = delivery.event { announced = tab }
+            if announced != nil { break }
+        }
+        #expect(announced == tabs.first?.id)
+        try await session.close()
+    }
 }

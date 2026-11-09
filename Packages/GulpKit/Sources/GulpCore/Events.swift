@@ -94,6 +94,8 @@ public enum GulpEvent: Sendable, Hashable {
     case wsMessage(WSMessageID)
     /// A WebSocket connection opened or closed (its row id).
     case wsConnectionChanged(Int64)
+    /// "Send to Repeater" opened a tab (its id): the window shows the Repeater (F06 REP-001).
+    case repeaterTabOpened(Int64)
     case issueFound(IssueID)
     case taskProgress(TaskID, TaskProgress)
     case oastInteraction(OASTInteractionID)

@@ -22,6 +22,8 @@ public final class HistoryModel {
     public private(set) var selected: Exchange?
     /// Ids of the selected rows.
     public private(set) var selectedIDs: [ExchangeID] = []
+    /// "Send to Repeater" (F06 REP-001, ⌘R); set by the view that knows the session.
+    @ObservationIgnored public var sendToRepeater: (@MainActor ([ExchangeID]) -> Void)?
     /// Keep the newest row in view as traffic arrives (HIS-002).
     public var autoScroll = true
     /// Quick filters (HIS-006).

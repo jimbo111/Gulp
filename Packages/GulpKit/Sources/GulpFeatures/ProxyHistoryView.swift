@@ -13,15 +13,19 @@ import SwiftUI
 public struct ProxyHistoryView: View {
     let store: ProjectStore
     let events: EventBus
+    let sendToRepeater: (@MainActor ([ExchangeID]) -> Void)?
     /// Built once when the view appears: `View.init` runs on every parent re-render, and a model
     /// owns an event subscription and runs queries.
     @State private var model: HistoryModel?
     @AppStorage("gulp.history.sideBySide") private var sideBySide = true
 
     /// A History view over `store`, live-updated from `events`.
-    public init(store: ProjectStore, events: EventBus) {
+    public init(
+        store: ProjectStore, events: EventBus, sendToRepeater: (@MainActor ([ExchangeID]) -> Void)? = nil
+    ) {
         self.store = store
         self.events = events
+        self.sendToRepeater = sendToRepeater
     }
 
     public var body: some View {
@@ -39,7 +43,11 @@ public struct ProxyHistoryView: View {
             .navigationTitle("HTTP History")
         } else {
             ProgressView()
-                .task { model = HistoryModel(store: store, events: events) }
+                .task {
+                    let created = HistoryModel(store: store, events: events)
+                    created.sendToRepeater = sendToRepeater
+                    model = created
+                }
         }
     }
 
@@ -59,6 +67,16 @@ public struct ProxyHistoryView: View {
             }
         }
         .toolbar {
+            if let sendToRepeater {
+                Button {
+                    sendToRepeater(model.selectedIDs)
+                } label: {
+                    Label("Send to Repeater", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .keyboardShortcut("r")
+                .disabled(model.selectedIDs.isEmpty)
+                .help("Open the selected requests in Repeater tabs (⌘R)")
+            }
             Toggle(isOn: $sideBySide) {
                 Label("Side by side", systemImage: "rectangle.split.2x1")
             }
@@ -377,8 +395,10 @@ public struct SessionHistoryView: View {
     public var body: some View {
         Group {
             if let store {
-                ProxyHistoryView(store: store, events: session.events)
-                    .id(ObjectIdentifier(store))
+                ProxyHistoryView(store: store, events: session.events) { ids in
+                    Task { await session.sendToRepeater(ids) }
+                }
+                .id(ObjectIdentifier(store))
             } else {
                 ProgressView()
             }

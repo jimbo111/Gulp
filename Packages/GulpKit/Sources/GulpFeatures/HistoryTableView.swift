@@ -282,6 +282,12 @@ struct HistoryTableView: NSViewRepresentable {
             colors.addItem(none)
             highlight.submenu = colors
             menu.addItem(highlight)
+            if model.sendToRepeater != nil {
+                let send = NSMenuItem(
+                    title: "Send to Repeater", action: #selector(sendToRepeater), keyEquivalent: "r")
+                send.target = self
+                menu.addItem(send)
+            }
             addItem("Comment…", #selector(editComment), to: menu)
             addItem("Copy URLs", #selector(copyURLs), to: menu)
             let copyAs = NSMenuItem(title: "Copy as", action: nil, keyEquivalent: "")
@@ -308,6 +314,13 @@ struct HistoryTableView: NSViewRepresentable {
         @objc func setHighlight(_ sender: NSMenuItem) {
             let color = (sender.representedObject as? String).flatMap(Highlight.init(rawValue:))
             Task { model.highlight(await targetIDs(), color) }
+        }
+
+        @objc func sendToRepeater() {
+            Task {
+                let ids = await targetIDs()
+                model.sendToRepeater?(ids)
+            }
         }
 
         @objc func editComment() {

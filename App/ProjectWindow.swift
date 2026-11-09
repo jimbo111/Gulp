@@ -69,6 +69,11 @@ struct ProjectWindow: View {
             }
         }
         .task { await open() }
+        .task(id: session.map { ObjectIdentifier($0) }) {
+            // "Send to Repeater" (⌘R in History) brings the Repeater forward (F06 REP-001).
+            guard let session else { return }
+            for await _ in await session.repeaterTabsOpened() { selection = .repeater }
+        }
         .onDisappear {
             // Temporary projects are kept (recoverable in Caches) until a save/discard prompt lands.
             let session = self.session
@@ -87,6 +92,8 @@ struct ProjectWindow: View {
                     Button("Listeners…") { showListeners = true }
                         .help("Proxy listeners for this project (PRX-001)")
                 }
+        case .repeater:
+            RepeaterView(session: session)
         default:
             ContentUnavailableView(
                 selection?.title ?? "Gulp", systemImage: selection?.symbol ?? "network",
