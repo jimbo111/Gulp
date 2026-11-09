@@ -151,7 +151,7 @@ public enum Differ {
                     operation: .equal, a: (compareLeft.count - suffix)..<compareLeft.count,
                     b: (compareRight.count - suffix)..<compareRight.count))
         }
-        return DiffResult(a: left, b: right, segments: merge(segments))
+        return DiffResult(a: left, b: right, segments: semanticCleanup(merge(segments)))
     }
 
     // MARK: lines
@@ -215,6 +215,7 @@ public enum Differ {
     /// equal at the same index, lines are aligned by position (each differing run is a
     /// substitution); otherwise Myers.
     static func lineSteps(_ a: [Int], _ b: [Int]) -> [Step] {
+        if let local = resyncSteps(a, b) { return local }
         guard a.count == b.count, !a.isEmpty else { return myers(a, b) }
         let same = zip(a, b).reduce(0) { $0 + ($1.0 == $1.1 ? 1 : 0) }
         guard same * 10 >= a.count * 9 else { return myers(a, b) }
@@ -230,6 +231,58 @@ public enum Differ {
                 steps.append(Step(operation: .delete, a: start..<index, b: start..<start))
                 steps.append(Step(operation: .insert, a: index..<index, b: start..<index))
             }
+        }
+        return steps
+    }
+
+    /// Few, small changes (the usual Comparer case): walk both sides together; at a mismatch find
+    /// the nearest point (within `window` lines) where `anchor` consecutive lines match again —
+    /// substitutions (equal skips) before insertions/deletions — and emit that block as one change.
+    /// Nil when a change can't be resynced locally (then Myers decides).
+    static func resyncSteps(_ a: [Int], _ b: [Int], window: Int = 128, anchor: Int = 3) -> [Step]? {
+        var steps: [Step] = []
+        var i = 0
+        var j = 0
+        func matches(_ x: Int, _ y: Int) -> Bool {
+            let count = min(anchor, a.count - x, b.count - y)
+            guard count > 0 || (x == a.count && y == b.count) else { return false }
+            if x == a.count || y == b.count { return x == a.count && y == b.count }
+            for offset in 0..<count where a[x + offset] != b[y + offset] { return false }
+            // Near the end, a shorter run counts only if both sides end there.
+            return count == anchor || (x + count == a.count && y + count == b.count)
+        }
+        while i < a.count || j < b.count {
+            let start = (i, j)
+            while i < a.count, j < b.count, a[i] == b[j] {
+                i += 1
+                j += 1
+            }
+            if i > start.0 { steps.append(Step(operation: .equal, a: start.0..<i, b: start.1..<j)) }
+            if i == a.count && j == b.count { break }
+            var found: (Int, Int)?
+            // Substitutions first, then the smallest unbalanced skip.
+            for d in 1...window where i + d <= a.count && j + d <= b.count && matches(i + d, j + d) {
+                found = (d, d)
+                break
+            }
+            if found == nil {
+                search: for total in 1...(2 * window) {
+                    for di in stride(from: total, through: 0, by: -1) {
+                        let dj = total - di
+                        guard di <= window, dj <= window, di != dj, i + di <= a.count, j + dj <= b.count
+                        else { continue }
+                        if matches(i + di, j + dj) {
+                            found = (di, dj)
+                            break search
+                        }
+                    }
+                }
+            }
+            guard let (di, dj) = found else { return nil }
+            if di > 0 { steps.append(Step(operation: .delete, a: i..<(i + di), b: j..<j)) }
+            if dj > 0 { steps.append(Step(operation: .insert, a: (i + di)..<(i + di), b: j..<(j + dj))) }
+            i += di
+            j += dj
         }
         return steps
     }
@@ -439,6 +492,61 @@ public enum Differ {
                 result[result.count - 1] = last
             } else {
                 result.append(segment)
+            }
+        }
+        return result
+    }
+
+    /// Fold small equalities into the changes around them (after diff-match-patch's semantic cleanup,
+    /// but stricter so words stay fine-grained): an equal run at most half as long as the edit on
+    /// each side becomes part of one delete + insert.
+    /// Myers may otherwise report "insert Xgamma, keep a space, delete gamma" for one substitution.
+    static func semanticCleanup(_ segments: [DiffSegment]) -> [DiffSegment] {
+        var result = segments
+        var changed = true
+        while changed {
+            changed = false
+            var index = 1
+            while index < result.count - 1 {
+                let equal = result[index]
+                guard equal.operation == .equal else {
+                    index += 1
+                    continue
+                }
+                // The runs of changes immediately before and after.
+                var first = index
+                while first > 0, result[first - 1].operation != .equal { first -= 1 }
+                var last = index
+                while last < result.count - 1, result[last + 1].operation != .equal { last += 1 }
+                guard first < index, last > index else {
+                    index += 1
+                    continue
+                }
+                // The larger of the deleted and inserted text on each side.
+                let beforeRun = result[first..<index]
+                let afterRun = result[(index + 1)...last]
+                let before = max(
+                    beforeRun.reduce(0) { $0 + $1.a.count }, beforeRun.reduce(0) { $0 + $1.b.count })
+                let after = max(
+                    afterRun.reduce(0) { $0 + $1.a.count }, afterRun.reduce(0) { $0 + $1.b.count })
+                guard equal.a.count * 2 <= min(before, after) else {
+                    index += 1
+                    continue
+                }
+                let aRange = result[first].a.lowerBound..<result[last].a.upperBound
+                let bRange = result[first].b.lowerBound..<result[last].b.upperBound
+                var replacement: [DiffSegment] = []
+                if !aRange.isEmpty {
+                    replacement.append(
+                        DiffSegment(operation: .delete, a: aRange, b: bRange.lowerBound..<bRange.lowerBound))
+                }
+                if !bRange.isEmpty {
+                    replacement.append(
+                        DiffSegment(operation: .insert, a: aRange.upperBound..<aRange.upperBound, b: bRange))
+                }
+                result.replaceSubrange(first...last, with: replacement)
+                changed = true
+                index = first + 1
             }
         }
         return result

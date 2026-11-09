@@ -135,7 +135,7 @@ definitions, and letting an AI agent read the project and send a request, are da
 - [ ] **MCP server, read surface + `send_request`**: the stdio transport (AUT-020), the tools `list_exchanges`, `get_exchange`, `send_request` and `get_scope` (AUT-021, first part), the site map and exchanges as resources (AUT-022, first part), and agent safety — ScopeGuard, approval mode, audit log (AUT-023). The remaining MCP tools arrive with their features and are completed in M17.
 - **DoD:** Importing VulnLab's `/openapi.json` creates requests for every `/api/*` operation in the site map; a HAR export → import round-trips byte-for-byte (F20 test 6) and the other-proxy fixtures import (F20 test 7); Claude Code connected over MCP (stdio) lists history and sends a request, and an out-of-scope `send_request` is refused with a structured error and audit-logged.
 
-### M7 — Decoder, Comparer and JWT Workbench
+### M7 — Decoder, Comparer and JWT Workbench — implemented; awaiting macOS CI (see PROGRESS)
 - [ ] All P0/P1 of F12 (including Transform Tags in Repeater and the **JWT Workbench**, ADV-010…ADV-013, moved from F23) and F13.
 - **DoD:** A Base64 → URL → Gzip chain decodes correctly; Smart Decode solves the fixture set; Comparer word-diffs two 1 MB responses in < 1 s; forged `alg:none` and RS→HS tokens are accepted by VulnLab `/api/me` and rejected by `/safe/api/me`, and a weak HMAC secret is brute-forced (F12 test 5).
 

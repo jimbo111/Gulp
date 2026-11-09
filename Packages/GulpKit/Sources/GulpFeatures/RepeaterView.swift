@@ -795,6 +795,8 @@ public struct RepeaterView: View {
     private var optionsForm: some View {
         Form {
             Toggle("Update Content-Length", isOn: optionBinding(\.updateContentLength))
+            Toggle("Evaluate Transform Tags («op{…}»)", isOn: optionBinding(\.transformTags))
+                .help("Off sends tags as literal text (F12 DEC-022)")
             Picker("Follow redirects", selection: optionBinding(\.redirects)) {
                 Text("Never").tag(RepeaterOptions.Redirects.never)
                 Text("On-site").tag(RepeaterOptions.Redirects.onSite)

@@ -74,6 +74,13 @@ struct ProjectWindow: View {
             guard let session else { return }
             for await _ in await session.repeaterTabsOpened() { selection = .repeater }
         }
+        .task(id: session.map { ObjectIdentifier($0) }) {
+            // "Send to Comparer / Decoder" brings that tool forward (CMP-001, DEC-004).
+            guard let session else { return }
+            for await tool in await session.inbox.opened() {
+                selection = tool == .comparer ? .comparer : .decoder
+            }
+        }
         .onDisappear {
             // Temporary projects are kept (recoverable in Caches) until a save/discard prompt lands.
             let session = self.session
@@ -96,6 +103,12 @@ struct ProjectWindow: View {
             TargetView(session: session)
         case .repeater:
             RepeaterView(session: session)
+        case .decoder:
+            DecoderView(session: session)
+        case .comparer:
+            ComparerView(session: session)
+        case .jwt:
+            JWTWorkbenchView()
         default:
             ContentUnavailableView(
                 selection?.title ?? "Gulp", systemImage: selection?.symbol ?? "network",

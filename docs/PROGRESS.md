@@ -14,7 +14,7 @@ order; within a milestone, do P0 first.
   launched by the Gulp Browser launcher through the proxy loads `https://localhost:8443` with no
   certificate interstitial (SPKI pin of the Gulp CA) and the request is in history. M1–M4a DoD
   scripts still pass in the same run.
-- **Active milestone**: **M7 — Decoder, Comparer, JWT Workbench** next; M5, M6a and M6b are
+- **Active milestone**: **M8 — Fuzzer (with content discovery)** next; M5, M6a, M6b and M7 are
   implemented and await the macOS CI run (see their status below).
 - **Branching**: `main` holds merged milestones (PRs jimbo111/Gulp#1 M0–M2, #2 review fixes,
   #3 M3a, then M3b + the feature-review adoption). Work happens on
@@ -137,9 +137,28 @@ order; within a milestone, do P0 first.
   `deny` (default) and `in-scope`; the MCP HTTP transport and REST API (M17); History's "export
   selected rows" menu (the service takes ids; the menu exports everything); the import fixtures are
   hand-made in each format's published shape, not captures (doc 06).
+- **M7 status — implementation complete; macOS verification pending** (2026-11-09):
+  - Local gate (clean build): **278/278 tests**, **M1…M7 DoD scripts PASS**, lint clean. The M7 DoD
+    (`Scripts/m7-dod.sh`, also in CI): URL → Base64 → gunzip decodes and the reversed chain
+    re-encodes byte-identically; Smart Decode solves the 8 fixtures with the right chains; a word
+    diff of two 1 MB responses finds exactly the 3 changed bytes in ~150 ms (debug build); an
+    `alg:none` admin token (sent through a Repeater `«var(token)»` tag), an RS→HS256 confusion token
+    and a `kid`→/dev/null token are accepted by VulnLab `/api/me` and rejected by `/safe/api/me`; the
+    weak HMAC secret is cracked from `Wordlists/jwt-secrets.txt` and an admin token signed with it;
+    JWKS verification works; Transform Tags build a Basic header and the toggle sends them literally.
+  - Done in M7: DEC-001…006 (DEC-006 as the Decoder's level panes, not yet the popover), DEC-020…023,
+    CMP-001…005, ADV-010…012, ADV-013 (the Transform Tag side).
+  - **Not verified (no macOS here):** `GulpFeatures/DecoderViews.swift` (Decoder, Comparer, JWT
+    Workbench), History's Send to Comparer/Decoder items, the Repeater tag toggle, `App/ProjectWindow`.
+- **M7 carry-overs**: brotli/zstd operations (no library in the dependency set); the Inspector
+  decoder popover over a selection (DEC-006, UI-021); DEC-024 `js(name)` snippets (F18); the Repeater
+  live tag preview pane and "diff with previous response" (CMP-006) — the service has
+  `previewTags`; CMP-007/008 (P2); a JWT tag op (`«jwt-sign…»`) and the Fuzzer payload processor
+  (ADV-013, M8); variable capture from responses (REP-011) still feeds `var()` by hand.
 - **Next action**: when CI minutes return, run CI on the branch head, fix any macOS compile issues
-  in the new SwiftUI code (M5 Repeater, M6a Target, M6b menus), then open the M5, M6a and M6b PRs and
-  merge. Meanwhile continue with M7 (Decoder, Comparer, JWT Workbench) on the Linux-testable core.
+  in the new SwiftUI code (M5 Repeater, M6a Target, M6b menus, M7 tools), then open the M5, M6a,
+  M6b and M7 PRs and merge. Meanwhile continue with M8 (Fuzzer with content discovery) on the
+  Linux-testable core.
 - **Waiting on the owner**: GitHub Actions minutes (CI is the only macOS build available).
 - Earlier waiting items: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
   **adopted on 2026-11-08** (product decision #7 in `docs/07-decisions.md`) and applied to the specs:
@@ -240,7 +259,7 @@ for behavior.
 - [ ] M5 — Repeater + advanced HTTP engine (HTTP/2 raw, group/race sends, streaming, paste-to-request) — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M6a — Target: site map + scope + ScopeGuard — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M6b — Import/export service, API import, MCP read surface + `send_request` — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
-- [ ] M7 — Decoder + Comparer + JWT Workbench
+- [ ] M7 — Decoder + Comparer + JWT Workbench — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M8 — Fuzzer (with content discovery)
 - [ ] M9 — Logger, GulpQL, search, Notebook, coverage index
 - [ ] **Daily-driver beta** — release gate after M9 (signed + notarized build to real testers)
@@ -466,6 +485,15 @@ for behavior.
   index, `audit_log`); MCP stdio server with ScopeGuard, approval policy and audit log;
   `gulp-cli project import|export|info|audit`, `gulp-cli mcp`, `send --repeat` `{n}`; VulnLab
   `/openapi.json` + `/api/*`; `Scripts/m6b-dod.sh` PASS.
+- 2026-11-09 — **M7 implemented** (local Linux gate; macOS views unverified): GulpCodec transform
+  registry (URL/HTML/Base64/32/58/hex/numbers/escapes/JSON/compression/hashes incl. SHA-3/HMAC/
+  converters), Smart Decode, Transform Tags + TransformTagHook (Repeater/Fuzzer only), project tag
+  variables; GulpDiff (Myers, word/byte, line localisation, positional alignment for same-shape
+  inputs, pre-diff transforms); JWT Workbench core (all JWS algorithms, PEM/JWK/JWKS, attack
+  helpers, cracking); VulnLab JWT lab (`/api/login`, `/api/me`, `/safe/api/me`, key/JWKS);
+  `gulp-cli decode|diff|jwt`, `repeater --var/--no-tags`; ToolInbox; `Scripts/m7-dod.sh` PASS.
+  Fixed on the way: unicode-escape didn't escape backslashes (round-trip test); a formatter-wrapped
+  `..<` parsed as two statements; Myers paired changes far apart in repetitive text.
 
 
 ## How to pick up work (reminder)

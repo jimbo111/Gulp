@@ -90,10 +90,16 @@ struct DiffTests {
             byteDiff.changes.filter { $0.operation == .delete }.map(\.a) == [
                 100_000..<100_001, 500_000..<500_001, 900_000..<900_001,
             ])
-        // Word mode highlights the containing words (bounded, not the whole document).
-        #expect(wordDiff.summary.modifications == 3)
-        #expect(wordDiff.changes.allSatisfy { $0.a.count < 20 && $0.b.count < 20 })
-        #expect(wordDiff.changes.contains { $0.a.contains(100_000) })
+        // Word mode highlights the containing words: every changed byte is inside (or next to) a
+        // change, and every change is near a changed byte (nothing paired far away). One changed
+        // byte may merge two words, so the exact number of segments isn't fixed.
+        let positions = [100_000, 500_000, 900_000]
+        for position in positions {
+            #expect(wordDiff.changes.contains { $0.a.lowerBound <= position && position <= $0.a.upperBound })
+        }
+        #expect(
+            wordDiff.changes.allSatisfy { change in positions.contains { abs(change.a.lowerBound - $0) < 40 }
+            })
     }
 
     @Test("Repetitive text: each changed line pairs with its own old line (no far-apart pairing)")
@@ -107,6 +113,21 @@ struct DiffTests {
         checkTiling(result)
         #expect(result.summary.modifications == 3 && result.summary.added == 0 && result.summary.deleted == 0)
         #expect(result.changes.allSatisfy { $0.a.count < 20 && $0.b.count < 20 })
+    }
+
+    @Test("A changed newline (line counts differ) in repetitive text still pairs each change locally")
+    func test_CMP004_newlineChange() {
+        let line = Array("alpha beta \ngamma \n".utf8)
+        var a: [UInt8] = []
+        for _ in 0..<5_000 { a += line }
+        var b = a
+        let newline = a.indices.first { $0 >= 30_000 && a[$0] == 0x0A }!
+        b[newline] = 0x58  // joins two lines
+        b[60_001] = b[60_001] == 0x58 ? 0x59 : 0x58
+        let result = Differ.diff(a, b)
+        checkTiling(result)
+        #expect(result.summary.modifications == 2 && result.summary.added == 0 && result.summary.deleted == 0)
+        #expect(result.changes.allSatisfy { $0.a.count < 30 && $0.b.count < 30 })
     }
 
     @Test(

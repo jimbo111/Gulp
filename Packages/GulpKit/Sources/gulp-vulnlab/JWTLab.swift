@@ -98,7 +98,8 @@ enum JWTLab {
             if alg.lowercased() == "none" {
                 accepted = true  // VULNERABLE: unsigned tokens
             } else if alg == "HS256" {
-                var secrets: [Data] = [Data(publicPEM.utf8), Data(weakSecret.utf8)]  // VULNERABLE: key confusion, weak secret
+                // VULNERABLE: key confusion (the public key PEM as an HMAC secret) and a weak secret.
+                var secrets: [Data] = [Data(publicPEM.utf8), Data(weakSecret.utf8)]
                 if let kid = header["kid"] as? String, kid.contains("../") {
                     // VULNERABLE: kid is a path; "../…/dev/null" reads an empty key.
                     secrets = kid.hasSuffix("dev/null") ? [Data()] : []

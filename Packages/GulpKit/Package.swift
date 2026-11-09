@@ -147,7 +147,7 @@ let package = Package(
             name: "GulpFeatures",
             dependencies: [
                 "GulpCore", "GulpCodec", "GulpStore", "GulpProxy", "GulpTLS", "GulpWorkspace", "GulpUI",
-                "GulpAI", "GulpHTTP", "GulpRepeater",
+                "GulpAI", "GulpHTTP", "GulpRepeater", "GulpDiff",
             ]),
 
         // ---- Executables ----

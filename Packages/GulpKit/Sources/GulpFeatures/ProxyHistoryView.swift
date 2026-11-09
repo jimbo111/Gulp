@@ -14,6 +14,9 @@ public struct ProxyHistoryView: View {
     let store: ProjectStore
     let events: EventBus
     let sendToRepeater: (@MainActor ([ExchangeID]) -> Void)?
+    /// Send to Comparer / Decoder (CMP-001, DEC-004), when the view knows the session.
+    var sendToComparer: (@MainActor ([ExchangeID]) -> Void)?
+    var sendToDecoder: (@MainActor (ExchangeID) -> Void)?
     /// Built once when the view appears: `View.init` runs on every parent re-render, and a model
     /// owns an event subscription and runs queries.
     @State private var model: HistoryModel?
@@ -46,6 +49,8 @@ public struct ProxyHistoryView: View {
                 .task {
                     let created = HistoryModel(store: store, events: events)
                     created.sendToRepeater = sendToRepeater
+                    created.sendToComparer = sendToComparer
+                    created.sendToDecoder = sendToDecoder
                     model = created
                 }
         }
@@ -392,13 +397,21 @@ public struct SessionHistoryView: View {
         self.generation = generation
     }
 
+    private func proxyHistory(_ store: ProjectStore) -> ProxyHistoryView {
+        let session = self.session
+        var view = ProxyHistoryView(store: store, events: session.events) { ids in
+            Task { await session.sendToRepeater(ids) }
+        }
+        view.sendToComparer = { ids in Task { try? await session.sendToComparer(ids, part: .response) } }
+        view.sendToDecoder = { id in Task { try? await session.sendToDecoder(id, part: .request) } }
+        return view
+    }
+
     public var body: some View {
         Group {
             if let store {
-                ProxyHistoryView(store: store, events: session.events) { ids in
-                    Task { await session.sendToRepeater(ids) }
-                }
-                .id(ObjectIdentifier(store))
+                proxyHistory(store)
+                    .id(ObjectIdentifier(store))
             } else {
                 ProgressView()
             }
