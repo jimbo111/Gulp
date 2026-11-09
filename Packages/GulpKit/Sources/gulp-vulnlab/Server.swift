@@ -198,6 +198,7 @@ final class AppHandler: ChannelInboundHandler {
             let context = bound.value
             var out = context.channel.allocator.buffer(capacity: reply.bytes.count)
             out.writeBytes(reply.bytes)
+            reply.onSend?()
             let written = context.writeAndFlush(NIOAny(out))
             if close { written.whenComplete { _ in bound.value.close(promise: nil) } }
         }
@@ -269,6 +270,18 @@ final class H2AppHandler: ChannelInboundHandler {
             authority: head.first(name: ":authority") ?? "localhost",
             path: head.first(name: ":path") ?? "/", headers: fields, body: body)
         let reply = VulnLab.respond(to: HTTP2Text.request(parts))
+        guard reply.delayMilliseconds > 0 else {
+            write(reply, context)
+            return
+        }
+        let bound = NIOLoopBound((self, context), eventLoop: context.eventLoop)
+        context.eventLoop.scheduleTask(in: .milliseconds(Int64(reply.delayMilliseconds))) {
+            bound.value.0.write(reply, bound.value.1)
+        }
+    }
+
+    private func write(_ reply: VulnReply, _ context: ChannelHandlerContext) {
+        reply.onSend?()
         let response = HTTP2Text.responseParts(RawResponse(Bytes(reply.bytes)))
         var headers = HPACKHeaders([(":status", String(response.status))])
         for header in response.headers { headers.add(name: header.name, value: header.value) }

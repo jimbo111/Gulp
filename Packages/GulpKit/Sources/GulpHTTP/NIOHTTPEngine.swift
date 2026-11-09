@@ -51,6 +51,8 @@ public final class NIOHTTPEngine: HTTPEngine {
     private let requestHooks: [any RequestHook]
     private let responseHooks: [any ResponseHook]
     private let recorder: (any ExchangeRecorder)?
+    /// The shared requests-per-second caps every send waits for (HTTP-013).
+    public let throttle = Throttle()
 
     /// Create an engine. Hooks run in array order; `recorder` stores every exchange if given.
     public init(
@@ -283,6 +285,7 @@ public final class NIOHTTPEngine: HTTPEngine {
             return await finish(
                 outgoing, options: options, wire: nil, error: hookError, connectionID: 0, timing: timing)
         }
+        await throttle.acquire(host: outgoing.target.host)  // HTTP-013
 
         let route = upstreamRoute(for: outgoing.target, options: options)
         if let refusal = unsupported(outgoing.target, options, route: route) {
@@ -512,7 +515,7 @@ public final class NIOHTTPEngine: HTTPEngine {
         let bootstrapGroup: any EventLoopGroup = loop.map { $0 as any EventLoopGroup } ?? group
         let bootstrap = ClientBootstrap(group: bootstrapGroup)
             .connectTimeout(min(configured, remaining))
-            .channelOption(ChannelOptions.tcpOption(.tcp_nodelay), value: 1)
+            .channelOption(ChannelOptions.tcpOption(.tcp_nodelay), value: options.tcpNoDelay ? 1 : 0)
             .channelInitializer { [socksTarget] channel in
                 channel.eventLoop.makeCompletedFuture(withResultOf: {
                     if let socksTarget {

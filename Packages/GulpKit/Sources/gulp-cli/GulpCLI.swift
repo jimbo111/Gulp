@@ -17,7 +17,7 @@ import GulpWorkspace
 /// Version marker for the Gulp command-line tool.
 enum GulpCLI {
     /// Semantic version of the CLI; bumped as the tool gains commands.
-    static let version = "0.4.0"
+    static let version = "0.5.0"
 }
 
 /// The root command. `@main` (in a file not named main.swift) is how ArgumentParser runs an async
@@ -26,7 +26,10 @@ enum GulpCLI {
 struct GulpCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "gulp-cli", abstract: "Gulp, headless.", version: GulpCLI.version,
-        subcommands: [Send.self, Proxy.self, History.self, CA.self, CopyAs.self, WS.self, Browser.self])
+        subcommands: [
+            Send.self, Group.self, Paste.self, Repeater.self, Proxy.self, History.self, CA.self, CopyAs.self,
+            WS.self, Browser.self,
+        ])
 }
 
 /// `gulp-cli send --raw request.txt --target http://host:port` writes the file's bytes exactly as
@@ -542,5 +545,168 @@ struct Browser: AsyncParsableCommand {
         let launched = try launcher.launch(chosen, options: options, output: .standardOutput)
         let status = launcher.wait(launched) ?? 0
         if status != 0 { throw ExitCode(status) }
+    }
+}
+
+/// `gulp-cli group --raw req.txt --target https://localhost:8443 --count 20 --mode single-packet`
+/// sends the request `count` times as one group (F03 HTTP-030…HTTP-035) and prints each result
+/// with its final-write offset, then the status counts and the spread.
+struct Group: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Send a request as a group (race testing).")
+
+    @Option(help: "File holding the exact request bytes.")
+    var raw: String
+
+    @Option(help: "Where to connect, e.g. https://127.0.0.1:8443.")
+    var target: String
+
+    @Option(help: "How many copies to send.")
+    var count = 20
+
+    @Option(help: "single-packet, parallel, sequential (one connection) or separate (a connection each).")
+    var mode = "single-packet"
+
+    @Option(help: "Single-packet warm-up in milliseconds.")
+    var warmUp = 100
+
+    @Flag(help: "Use HTTP/1.1 even if the server offers HTTP/2.")
+    var http1 = false
+
+    func run() async throws {
+        guard let data = FileManager.default.contents(atPath: raw) else {
+            throw ValidationError("Cannot read \(raw)")
+        }
+        guard let destination = HTTPTarget(url: target) else {
+            throw ValidationError("Invalid --target \(target)")
+        }
+        let groupMode: GroupSendMode
+        switch mode {
+        case "single-packet": groupMode = .singlePacket
+        case "parallel": groupMode = .parallel
+        case "sequential": groupMode = .sequentialSingleConnection
+        case "separate": groupMode = .sequentialSeparateConnections
+        default: throw ValidationError("Unknown --mode \(mode)")
+        }
+        var options = SendOptions(recordAs: .automation)
+        options.singlePacketWarmUp = .milliseconds(warmUp)
+        options.httpVersion = http1 ? .http1_1 : .auto
+        options.tls.validateCertificates = false
+        options.timeouts.total = .seconds(30)
+        let request = RawRequest(Bytes([UInt8](data)))
+        let items = (0..<max(1, count)).map { _ in GroupItem(request: request, target: destination) }
+        let engine = NIOHTTPEngine()
+        defer { Task { await engine.shutdown() } }
+        let results = await engine.sendGroup(items, mode: groupMode, options: options)
+        var statuses: [String: Int] = [:]
+        for (index, result) in results.enumerated() {
+            let status =
+                result.exchange.response.map { String($0.parsed.statusCode) } ?? (result.error?.code ?? "-")
+            statuses[status, default: 0] += 1
+            let offset = result.exchange.timing.finalWriteOffsetMs.map { String(format: "%.2f", $0) } ?? "-"
+            let version = result.exchange.httpVersion.rawValue
+            print("\(index + 1)\t\(status)\t\(version)\tfinal+\(offset) ms")
+        }
+        print(
+            "statuses: "
+                + statuses.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))
+        let offsets = results.compactMap(\.exchange.timing.finalWriteOffsetMs)
+        if let spread = offsets.max() { print(String(format: "final-write spread: %.2f ms", spread)) }
+    }
+}
+
+/// `gulp-cli paste < snippet.txt` parses a pasted cURL command, `fetch(...)` call or raw request
+/// (F06 REP-017) and prints the request it becomes; `--send` sends it and prints the response.
+struct Paste: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Turn a pasted cURL/fetch/raw request into a request.")
+
+    @Option(help: "Read the paste from this file instead of standard input.")
+    var file: String?
+
+    @Flag(help: "Send the request and print the response.")
+    var send = false
+
+    func run() async throws {
+        let data: Data
+        if let file {
+            guard let contents = FileManager.default.contents(atPath: file) else {
+                throw ValidationError("Cannot read \(file)")
+            }
+            data = contents
+        } else {
+            data = FileHandle.standardInput.readDataToEndOfFile()
+        }
+        let imported = try RequestImport.parse(String(decoding: data, as: UTF8.self))
+        let target = imported.target
+        print(
+            "target: \(target.scheme.rawValue)://\(target.host):\(target.port)\(imported.prefersHTTP2 ? " (HTTP/2)" : "")"
+        )
+        for item in imported.ignored { print("ignored: \(item)") }
+        print("--- request ---")
+        print(imported.request.bytes.string())
+        guard send else { return }
+        var options = SendOptions(recordAs: .automation)
+        options.tls.validateCertificates = !imported.insecure
+        options.httpVersion = imported.prefersHTTP2 ? .http2 : .auto
+        if imported.followRedirects { options.followRedirects = RedirectPolicy(mode: .always) }
+        let engine = NIOHTTPEngine()
+        defer { Task { await engine.shutdown() } }
+        let result = await engine.send(imported.request, to: target, options: options)
+        print("--- response ---")
+        print(
+            result.exchange.response?.wireBytes.string() ?? "(none: \(result.error?.userDescription ?? "?"))")
+        if result.error != nil { throw ExitCode(2) }
+    }
+}
+
+/// `gulp-cli repeater --project p.gulp --raw req.txt --target http://127.0.0.1:8088` sends through a
+/// Repeater tab stored in the project (F06), printing a streamed response as it arrives (REP-016).
+struct Repeater: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Send a request from a Repeater tab in a project.")
+
+    @Option(help: "Project file (created if missing).")
+    var project: String
+
+    @Option(help: "File holding the exact request bytes.")
+    var raw: String
+
+    @Option(help: "Where to connect.")
+    var target: String
+
+    @Option(help: "Tab title.")
+    var title = "cli"
+
+    @Flag(help: "Print each piece of the response as it arrives, with its time.")
+    var stream = false
+
+    func run() async throws {
+        guard let data = FileManager.default.contents(atPath: raw) else {
+            throw ValidationError("Cannot read \(raw)")
+        }
+        guard let destination = HTTPTarget(url: target) else {
+            throw ValidationError("Invalid --target \(target)")
+        }
+        let session = try await ProjectSession.open(at: URL(fileURLWithPath: project))
+        let tab = await session.repeater.openTab(
+            request: RawRequest(Bytes([UInt8](data))), target: destination, title: title)
+        let printer = stream ? Self.chunkPrinter(since: .now) : nil
+        let result = await session.repeater.send(tab.id, onBytes: printer)
+        if !stream { print(result?.exchange.response?.wireBytes.string() ?? "(no response)") }
+        let history = await session.repeater.history(tab.id)
+        print("tab \(tab.id) '\(tab.title)': \(history.count) send(s); last exchange #\(history.last ?? 0)")
+        try await session.close()
+        if result?.error != nil { throw ExitCode(2) }
+    }
+
+    /// Prints each received piece on one line with its arrival time.
+    static func chunkPrinter(since started: ContinuousClock.Instant) -> @Sendable ([UInt8]) -> Void {
+        { bytes in
+            let elapsed = ContinuousClock.now - started
+            let ms =
+                Double(elapsed.components.seconds) * 1_000 + Double(elapsed.components.attoseconds) / 1e15
+            let text = String(decoding: bytes, as: UTF8.self).replacingOccurrences(of: "\r", with: "")
+            print(String(format: "[+%.0f ms] ", ms) + text.split(separator: "\n").joined(separator: " | "))
+        }
     }
 }

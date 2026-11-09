@@ -185,6 +185,9 @@ public struct SendOptions: Sendable {
     /// Single-packet group sends (HTTP-033/034): how long to wait between sending everything but
     /// the final bytes and releasing the final bytes together.
     public var singlePacketWarmUp: Duration = .milliseconds(100)
+    /// Disable Nagle's algorithm on new connections (HTTP-036; on by default — turn it off only to
+    /// experiment with how the OS coalesces writes).
+    public var tcpNoDelay = true
     /// Recompute `Content-Length` from the body (HTTP-008). Never touched when false.
     public var updateContentLength = false
     /// Rewrite header-block line endings to CRLF before sending.

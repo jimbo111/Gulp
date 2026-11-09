@@ -4,11 +4,55 @@
 
 import Foundation
 import GulpCore
+import NIOConcurrencyHelpers
 
 /// The bytes to write back, optionally after a delay.
 struct VulnReply: Sendable {
     var bytes: [UInt8]
     var delayMilliseconds = 0
+    /// Runs when the reply is written (after the delay): the "act" of a check-then-act route.
+    var onSend: (@Sendable () -> Void)? = nil
+}
+
+/// `/race/*` (doc 06 §3, M5): a coupon that can be redeemed once — checked on arrival, marked
+/// redeemed only when the 200 goes out 50 ms later. Requests that arrive inside that window all
+/// pass the check: the race the single-packet group send (F03 HTTP-033/034) is built to expose.
+enum Race {
+    static let window = 50
+    private struct State {
+        var redeemed: Set<String> = []
+        var successes: [String: Int] = [:]
+    }
+    private static let state = NIOLockedValueBox(State())
+
+    static func redeem(_ code: String) -> VulnReply {
+        let already = state.withLockedValue { $0.redeemed.contains(code) }
+        guard !already else {
+            let body = Array("coupon \(code) already redeemed\n".utf8)
+            return VulnReply(bytes: VulnLab.response(409, body: body))
+        }
+        let body = Array("coupon \(code) redeemed: 10% off\n".utf8)
+        return VulnReply(bytes: VulnLab.response(200, body: body), delayMilliseconds: window) {
+            state.withLockedValue { state in
+                state.redeemed.insert(code)
+                state.successes[code, default: 0] += 1
+            }
+        }
+    }
+
+    static func status(_ code: String) -> VulnReply {
+        let count = state.withLockedValue { $0.successes[code] ?? 0 }
+        let body = Array("coupon \(code) redemptions=\(count)\n".utf8)
+        return VulnReply(bytes: VulnLab.response(200, body: body))
+    }
+
+    static func reset(_ code: String) -> VulnReply {
+        state.withLockedValue { state in
+            state.redeemed.remove(code)
+            state.successes[code] = nil
+        }
+        return VulnReply(bytes: VulnLab.response(200, body: Array("coupon \(code) reset\n".utf8)))
+    }
 }
 
 enum VulnLab {
@@ -41,6 +85,9 @@ enum VulnLab {
         case "/gzip":
             let headers = ["Content-Encoding: gzip"]
             return VulnReply(bytes: response(200, body: gzipBody, type: "text/plain", headers: headers))
+        case "/race/redeem": return Race.redeem(query["code"] ?? "GULP10")
+        case "/race/status": return Race.status(query["code"] ?? "GULP10")
+        case "/race/reset": return Race.reset(query["code"] ?? "GULP10")
         case "/slow":
             let delay = min(max(Int(query["ms"] ?? "") ?? 1_000, 0), 60_000)
             let body = Array("slow \(delay) ms\n".utf8)

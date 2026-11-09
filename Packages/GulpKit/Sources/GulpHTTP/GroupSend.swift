@@ -185,6 +185,7 @@ extension NIOHTTPEngine {
             prepared.append((outgoing, itemOptions))
         }
         let target = items[0].target
+        for _ in items { await throttle.acquire(host: target.host) }  // HTTP-013: one slot per request
         let route = upstreamRoute(for: target, options: options)
         if unsupported(target, options, route: route) != nil { return nil }
         var connectOptions = options
@@ -276,6 +277,7 @@ extension NIOHTTPEngine {
                     timing: timing)
                 continue
             }
+            await throttle.acquire(host: outgoing.target.host)  // HTTP-013
             var connectOptions = itemOptions
             connectOptions.httpVersion = .http1_1
             let channel: any Channel
