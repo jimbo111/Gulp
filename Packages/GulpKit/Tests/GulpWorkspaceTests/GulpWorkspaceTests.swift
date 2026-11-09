@@ -484,7 +484,7 @@ struct SiteMapServiceTests {
             request: RawRequest(Bytes("GET /app/x HTTP/1.1\r\n\r\n")), target: lab)
         let outTab = await session.repeater.openTab(
             request: RawRequest(Bytes("GET /app/x HTTP/1.1\r\n\r\n")), target: other)
-        #expect(await session.scopeDecision(forRepeaterTab: inTab.id) == .confirm)  // empty scope: nothing in
+        #expect(await session.scopeDecision(forRepeaterTab: outTab.id) == .send)  // no scope yet: don't ask
         try await session.addToScope(url: "https://lab/app")
         #expect(await session.scopeDecision(forRepeaterTab: inTab.id) == .send)
         #expect(await session.scopeDecision(forRepeaterTab: outTab.id) == .confirm)

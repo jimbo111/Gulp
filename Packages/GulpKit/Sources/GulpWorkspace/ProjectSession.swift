@@ -206,6 +206,9 @@ public actor ProjectSession {
     public private(set) var isTemporary: Bool
     /// Ports of the listeners started by `startProxyListeners`, in settings order.
     public private(set) var listenerPorts: [Int] = []
+    /// Long-running work tied to the session (the site map's listener); cancelled and awaited by
+    /// `close()` so nothing reads the store while it closes.
+    var backgroundTasks: [Task<Void, Never>] = []
     private let recorder: ProjectRecorder
     /// Mints leaves for TLS interception; nil when the CA could not be loaded (CONNECT then fails
     /// with a clear page instead of the project failing to open).
@@ -402,6 +405,10 @@ public actor ProjectSession {
     /// Stop the proxy, flush everything and close the file. A temporary project is deleted unless
     /// `keepTemporary` (PRJ-001: "prompt to save on close (or discard)").
     public func close(keepTemporary: Bool = false) async throws {
+        let tasks = backgroundTasks
+        backgroundTasks = []
+        for task in tasks { task.cancel() }
+        for task in tasks { await task.value }
         await repeater.flush()
         await proxy.stopAll()
         await http.shutdown()

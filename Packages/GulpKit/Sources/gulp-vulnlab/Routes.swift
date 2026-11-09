@@ -66,12 +66,37 @@ enum VulnLab {
         0xD0, 0x48, 0xAF, 0xCA, 0x2C, 0xD0, 0xE4, 0x02, 0x00, 0x03, 0x30, 0xE4, 0xED, 0x1F, 0x00, 0x00, 0x00,
     ]
 
+    /// The `/` page.
+    static let homePage = """
+        <!doctype html>
+        <html><head><title>Gulp VulnLab</title><script src="/static/app.js"></script></head>
+        <body><h1>Gulp VulnLab</h1><p>A deliberately vulnerable app. Local use only.</p>
+        <ul>
+        <li><a href="/echo">Echo</a></li>
+        <li><a href="/redirect?to=/echo">Redirect</a></li>
+        <li><a href="/login">Login</a></li>
+        <li><a href="/api/orders/1">Order 1</a> <a href="/api/orders/2">Order 2</a></li>
+        <li><a href="/xss/html?q=hello">Reflected XSS</a></li>
+        <li><a href="/file?name=readme.txt">Files</a></li>
+        <li><a href="/go?next=/">Go</a></li>
+        <li><a href="/race/status?code=GULP10">Coupon status</a></li>
+        </ul>
+        <form action="/guestbook" method="post"><input name="message"></form>
+        </body></html>
+
+        """
+
     /// Route one request.
     static func respond(to request: RawRequest) -> VulnReply {
         let requestTarget = request.bytes[request.parsed.target].string()
         let path = String(requestTarget.split(separator: "?", maxSplits: 1).first ?? "")
         let query = queryItems(requestTarget)
         switch path {
+        case "/":
+            // The home page: links to the labs, so a proxied visit gives the site map inferred nodes
+            // (F04 TGT-003). `/admin` is deliberately not linked (content discovery finds it, M8).
+            return VulnReply(
+                bytes: response(200, body: Array(homePage.utf8), type: "text/html; charset=utf-8"))
         case "/echo":
             // Reflects the exact request bytes as a readable response.
             return VulnReply(bytes: response(200, body: request.bytes.rawBytes))

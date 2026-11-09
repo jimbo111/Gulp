@@ -17,7 +17,7 @@ import GulpWorkspace
 /// Version marker for the Gulp command-line tool.
 enum GulpCLI {
     /// Semantic version of the CLI; bumped as the tool gains commands.
-    static let version = "0.5.0"
+    static let version = "0.6.0"
 }
 
 /// The root command. `@main` (in a file not named main.swift) is how ArgumentParser runs an async
@@ -28,7 +28,7 @@ struct GulpCommand: AsyncParsableCommand {
         commandName: "gulp-cli", abstract: "Gulp, headless.", version: GulpCLI.version,
         subcommands: [
             Send.self, Group.self, Paste.self, Repeater.self, Proxy.self, History.self, CA.self, CopyAs.self,
-            WS.self, Browser.self,
+            WS.self, Browser.self, Scope.self, Target.self,
         ])
 }
 
@@ -139,10 +139,15 @@ struct Proxy: AsyncParsableCommand {
         help: "Intercept every request and forward it with FROM replaced by TO (\"FROM=>TO\").")
     var interceptReplacements: [String] = []
 
+    @Flag(help: "Use the project's scope for the proxy: out-of-scope traffic is not recorded (TGT-024).")
+    var useScope = false
+
     func run() async throws {
         let session = try await ProjectSession.open(at: URL(fileURLWithPath: project))
         let listener = ProxyListenerConfig(bindAddress: bind, port: port)
-        try await session.settings.set(ProxySettings(listeners: [listener]), scope: .project)
+        var proxySettings = ProxySettings(listeners: [listener])
+        proxySettings.useScope = useScope
+        try await session.settings.set(proxySettings, scope: .project)
         if !addHeaders.isEmpty {
             let added = addHeaders.map { MatchReplaceRule(kind: .requestHeader, match: "", replace: $0) }
             let existing = session.settings.get(MatchReplaceSettings.self).rules
@@ -680,6 +685,9 @@ struct Repeater: AsyncParsableCommand {
     @Flag(help: "Print each piece of the response as it arrives, with its time.")
     var stream = false
 
+    @Flag(help: "Send even if the target is outside the project's scope (the app's \"Send anyway\").")
+    var allowOutOfScope = false
+
     func run() async throws {
         guard let data = FileManager.default.contents(atPath: raw) else {
             throw ValidationError("Cannot read \(raw)")
@@ -688,6 +696,16 @@ struct Repeater: AsyncParsableCommand {
             throw ValidationError("Invalid --target \(target)")
         }
         let session = try await ProjectSession.open(at: URL(fileURLWithPath: project))
+        // TGT-023: a manual send to an out-of-scope target asks first; headless, the answer is the flag.
+        if !allowOutOfScope, await session.scopeDecision(for: destination, request: [UInt8](data)) == .confirm
+        {
+            try await session.close()
+            FileHandle.standardError.write(
+                Data(
+                    "gulp-cli: Target is out of scope. Send anyway? Re-run with --allow-out-of-scope.\n".utf8)
+            )
+            throw ExitCode(3)
+        }
         let tab = await session.repeater.openTab(
             request: RawRequest(Bytes([UInt8](data))), target: destination, title: title)
         let printer = stream ? Self.chunkPrinter(since: .now) : nil

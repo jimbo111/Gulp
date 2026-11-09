@@ -33,9 +33,13 @@ extension ProjectSession {
         return rule
     }
 
-    /// What a manual send (e.g. Repeater) should do for `target`/`path` (TGT-023).
+    /// What a manual send (e.g. Repeater) should do for `target`/`path` (TGT-023). Until the project
+    /// has an enabled scope rule, manual sends never ask (nothing is configured to protect yet); the
+    /// active tools' ScopeGuard still refuses everything then.
     public func scopeDecision(for target: HTTPTarget, path: String) async -> ScopeDecision {
-        await scopeGuard.permits(target, path: path) ? .send : .confirm
+        let scopeGuard = self.scopeGuard
+        guard await scopeGuard.current.rules.contains(where: \.enabled) else { return .send }
+        return await scopeGuard.permits(target, path: path) ? .send : .confirm
     }
 
     /// What sending the raw `request` to `target` should do (TGT-023).

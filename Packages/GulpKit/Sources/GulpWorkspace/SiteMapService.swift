@@ -47,12 +47,15 @@ public actor SiteMapService {
         let store = await storeProvider()
         var fresh = SiteMap(groupsParameterizedSegments: map.groupsParameterizedSegments)
         var after: ExchangeID = 0
-        while let page = try? await store.siteMapEntries(after: after), let last = page.last {
+        while !Task.isCancelled, let page = try? await store.siteMapEntries(after: after),
+            let last = page.last
+        {
             for entry in page { fresh.add(entry) }
             after = last.id
             await Task.yield()
         }
         for id in (try? await store.textualResponseIDs()) ?? [] {
+            if Task.isCancelled { return }
             guard let exchange = try? await store.exchange(id: id) else { continue }
             for url in Self.links(of: exchange) { fresh.addInferred(url: url) }
         }
@@ -65,7 +68,9 @@ public actor SiteMapService {
     public func catchUp() async {
         let store = await storeProvider()
         var changed = false
-        while let page = try? await store.siteMapEntries(after: lastID, limit: 1_000), let last = page.last {
+        while !Task.isCancelled, let page = try? await store.siteMapEntries(after: lastID, limit: 1_000),
+            let last = page.last
+        {
             for entry in page {
                 map.add(entry)
                 if let exchange = try? await store.exchange(id: entry.id) {
@@ -99,9 +104,11 @@ extension ProjectSession {
     func startSiteMap() {
         let siteMap = self.siteMap
         let events = self.events
-        Task {
+        let task = Task {
+            let deliveries = await events.subscribe()  // before the rebuild, so nothing is missed
             await siteMap.rebuild()
-            for await delivery in await events.subscribe() {
+            for await delivery in deliveries {
+                if Task.isCancelled { break }
                 switch delivery.event {
                 case .exchangeRecorded, .exchangeUpdated: await siteMap.catchUp()
                 case .scopeChanged, nil: await siteMap.rebuild()  // nil: missed events, start over
@@ -109,6 +116,7 @@ extension ProjectSession {
                 }
             }
         }
+        backgroundTasks.append(task)
     }
 }
 
