@@ -179,12 +179,24 @@ public final class NIOHTTPEngine: HTTPEngine {
         }
     }
 
-    /// Message-level WebSocket sessions arrive with the Repeater (M5, REP-012); `upgrade(…)` gives
-    /// a raw upgraded connection today.
+    /// Open a message-level WebSocket session (F06 REP-012): the upgrade is sent and recorded like
+    /// any exchange; on `101` the session sends client frames and yields the server's messages.
+    /// Anything but a `101` throws, with the response in the error message.
     public func openWebSocket(
         _ upgrade: RawRequest, to target: HTTPTarget, options: SendOptions
     ) async throws -> WebSocketSession {
-        throw GulpError(message: "WebSocket sessions arrive with the Repeater (M5)", underlying: nil)
+        let (incoming, feed) = AsyncStream.makeStream(of: [UInt8].self)
+        let (result, connection) = await self.upgrade(
+            upgrade, to: target, options: options, onRead: { feed.yield($0) }, onClose: { feed.finish() })
+        guard let connection else {
+            feed.finish()
+            let reason =
+                result.error?.userDescription
+                ?? result.exchange.response.map { "the server answered \($0.parsed.statusCode)" }
+                ?? "no response"
+            throw GulpError(message: "The WebSocket upgrade failed: \(reason).", underlying: result.error)
+        }
+        return WebSocketSession(upgrade: result.exchange, connection: connection, incoming: incoming)
     }
 
     /// Pre-connect for ALPN mirroring (PRX-008): an existing HTTP/2 or pooled HTTP/1 connection
