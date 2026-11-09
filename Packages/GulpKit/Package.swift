@@ -58,7 +58,12 @@ let package = Package(
             ]),
 
         // ---- Services layer ----
-        .target(name: "GulpCodec", dependencies: ["GulpCore"]),
+        .target(
+            name: "GulpCodec",
+            dependencies: [
+                "GulpCore", "CZlib", .product(name: "Crypto", package: "swift-crypto"),
+                .product(name: "_CryptoExtras", package: "swift-crypto"),
+            ]),
         .target(name: "GulpQuery", dependencies: ["GulpCore"]),
         .target(name: "GulpDiff", dependencies: ["GulpCore"]),
         // System zlib: blob compression (GulpStore) and decompression helpers (GulpHTTP, HTTP-007).

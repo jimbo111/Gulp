@@ -1,0 +1,69 @@
+[
+  {
+    "name": "url → base64 → gzip → JSON",
+    "input": "H4sIAAAAAAAC%2F6tWKi1OLVKyUkrMyUxOVdJRKsrPSQVxU3Iz85RqAdrA78IfAAAA",
+    "chain": [
+      "url-decode",
+      "base64-decode",
+      "gunzip"
+    ],
+    "output": "{\"user\":\"alice\",\"role\":\"admin\"}"
+  },
+  {
+    "name": "base64 → base64",
+    "input": "Wkc5MVlteGxJR1Z1WTI5a1pXUWdjMlZqY21WMA==",
+    "chain": [
+      "base64-decode",
+      "base64-decode"
+    ],
+    "output": "double encoded secret"
+  },
+  {
+    "name": "hex → zlib",
+    "input": "789ccb48cdc9c957c848ad50a8cac94c5228cf2fca4901004eff0793",
+    "chain": [
+      "hex-decode",
+      "zlib-decompress"
+    ],
+    "output": "hello hex zlib world"
+  },
+  {
+    "name": "html entities",
+    "input": "&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt;",
+    "chain": [
+      "html-decode"
+    ],
+    "output": "<script>alert('x')</script>"
+  },
+  {
+    "name": "unicode escapes",
+    "input": "\\u0048\\u0065\\u006c\\u006c\\u006f \\u00e9t\\u00e9",
+    "chain": [
+      "unicode-unescape"
+    ],
+    "output": "Hello été"
+  },
+  {
+    "name": "base64url JSON",
+    "input": "eyJhIjoifn4_PiJ9",
+    "chain": [
+      "base64url-decode"
+    ],
+    "output": "{\"a\":\"~~?>\"}"
+  },
+  {
+    "name": "double URL",
+    "input": "a%2520b%2526c%253Dd/%25C3%25A9",
+    "chain": [
+      "url-decode",
+      "url-decode"
+    ],
+    "output": "a b&c=d/é"
+  },
+  {
+    "name": "plain text stays",
+    "input": "just a sentence",
+    "chain": [],
+    "output": "just a sentence"
+  }
+]
