@@ -12,7 +12,7 @@ import GulpWorkspace
 struct ProjectCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "project", abstract: "Import into, export from, or describe a project.",
-        subcommands: [Import.self, Export.self, Info.self])
+        subcommands: [Import.self, Export.self, Info.self, Audit.self])
 
     /// `gulp-cli project import --project p.gulp traffic.har` (HAR, Postman, OpenAPI, XML proxy
     /// history, Caido, sitemap.xml, URL list, or another .gulp).
@@ -143,6 +143,32 @@ struct ProjectCommand: AsyncParsableCommand {
             inScope.inScopeOnly = true
             print("in scope: \(try await store.count(filter: inScope))")
             print("scope rules: \(try await store.scopeRules().count)")
+            try await store.close()
+        }
+    }
+
+    /// `gulp-cli project audit --project p.gulp`: the agent audit log (AUT-023).
+    struct Audit: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Print the audit log of agent (MCP) actions.")
+
+        @Option(help: "Project file.")
+        var project: String
+
+        @Option(help: "How many of the newest entries.")
+        var last = 50
+
+        func run() async throws {
+            guard FileManager.default.fileExists(atPath: project) else {
+                throw ValidationError("No project at \(project)")
+            }
+            let store = try ProjectStore.open(at: URL(fileURLWithPath: project))
+            for entry in try await store.auditLog(limit: last) {
+                let time = ISO8601DateFormatter().string(from: entry.at)
+                print(
+                    "\(time)\t\(entry.actor)\t\(entry.action)\t\(entry.outcome)\t\(entry.target ?? "-")\t\(entry.detail ?? "")"
+                )
+            }
             try await store.close()
         }
     }

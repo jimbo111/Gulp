@@ -127,7 +127,7 @@ Split from the original M3 after the 2026-11-07 feature review (docs/FEATURE-REV
 - [ ] All P0/P1 of F04 §2.1–§2.2 (site map, scope, ScopeGuard).
 - **DoD:** The site map tree fills from proxy traffic; scope rules hide out-of-scope items; ScopeGuard blocks out-of-scope Repeater sends (with a confirmation dialog).
 
-### M6b — Import/export and the MCP read surface
+### M6b — Import/export and the MCP read surface — implemented; awaiting macOS CI (see PROGRESS)
 Pulled forward from M16/M17/M19 by the 2026-11-08 feature review: importing existing traffic and API
 definitions, and letting an AI agent read the project and send a request, are daily-driver needs.
 - [ ] The **import/export service** (PRJ-012) and its entry points: History export/import (HIS-044), Project → Import/merge (PRJ-008), site-map import (TGT-009), Postman/HAR import (ADV-051); **other-proxy history import** (PRJ-013).

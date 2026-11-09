@@ -133,7 +133,8 @@ let package = Package(
         .target(
             name: "GulpAutomation",
             dependencies: [
-                "GulpCore", "GulpWorkspace", .product(name: "Hummingbird", package: "hummingbird"),
+                "GulpCore", "GulpWorkspace", "GulpStore", "GulpHTTP",
+                .product(name: "Hummingbird", package: "hummingbird"),
             ]),
 
         // ---- UI layer (macOS content; empty on Linux) ----
@@ -210,7 +211,8 @@ let package = Package(
         .testTarget(
             name: "GulpWorkspaceTests",
             dependencies: ["GulpWorkspace", "GulpTLS", "GulpRepeater", "GulpCodec"]),
-        .testTarget(name: "GulpAutomationTests", dependencies: ["GulpAutomation"]),
+        .testTarget(
+            name: "GulpAutomationTests", dependencies: ["GulpAutomation", "GulpWorkspace", "GulpStore"]),
         .testTarget(name: "IntegrationTests", dependencies: ["GulpWorkspace"]),
     ],
     swiftLanguageModes: [.v6]

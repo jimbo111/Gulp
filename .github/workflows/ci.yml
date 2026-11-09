@@ -77,6 +77,10 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/m6a-dod.sh
+      - name: M6b Definition of Done (OpenAPI → site map, HAR round trip, other-proxy imports, MCP over stdio)
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/m6b-dod.sh
       - name: Build Beacon
         run: swift build --package-path Beacon -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
       - name: Test Beacon

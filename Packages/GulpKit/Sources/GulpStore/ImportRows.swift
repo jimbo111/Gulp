@@ -26,9 +26,12 @@ public struct AuditEntry: Sendable, Hashable, Codable {
 }
 
 extension ProjectStore {
-    /// Whether an exchange with exactly these bytes, to this target, is already stored (import
-    /// dedup, PRJ-012). Uses the blobs' SHA-256 index and the request-blob index.
-    public func containsExchange(target: HTTPTarget, request: Bytes, response: Bytes?) async throws -> Bool {
+    /// Whether an exchange with exactly these bytes, to this target — and, when `startedAt` is
+    /// given, started then (±1 ms, HAR's precision) — is already stored (import dedup, PRJ-012).
+    /// Uses the blobs' SHA-256 index and the request-blob index.
+    public func containsExchange(target: HTTPTarget, request: Bytes, response: Bytes?, startedAt: Date? = nil)
+        async throws -> Bool
+    {
         let requestDigest = Data(SHA256.hash(data: request.rawBytes))
         let responseDigest = response.map { Data(SHA256.hash(data: $0.rawBytes)) }
         return try await pool.read { db in
@@ -42,13 +45,18 @@ extension ProjectStore {
                     db, sql: "SELECT id FROM blobs WHERE sha256 = ?", arguments: [responseDigest])
                 if responseBlob == nil { return false }
             }
-            let sql = """
+            var sql = """
                 SELECT 1 FROM exchanges WHERE request_blob = ? AND scheme = ? AND host = ? AND port = ? \
-                AND response_blob IS ? LIMIT 1
+                AND response_blob IS ?
                 """
-            return try Int.fetchOne(
-                db, sql: sql,
-                arguments: [requestBlob, target.scheme.rawValue, target.host, target.port, responseBlob])
+            var arguments: [(any DatabaseValueConvertible)?] = [
+                requestBlob, target.scheme.rawValue, target.host, target.port, responseBlob,
+            ]
+            if let startedAt {
+                sql += " AND abs(created_at - ?) < 0.001"
+                arguments.append(startedAt.timeIntervalSince1970)
+            }
+            return try Int.fetchOne(db, sql: sql + " LIMIT 1", arguments: StatementArguments(arguments))
                 != nil
         }
     }

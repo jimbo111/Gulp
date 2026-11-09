@@ -20,7 +20,8 @@ public enum HAR {
                 "version": "1.2", "creator": ["name": "Gulp", "version": creatorVersion], "entries": entries,
             ] as [String: Any]
         ]
-        return try JSONSerialization.data(withJSONObject: log, options: [.prettyPrinted, .sortedKeys])
+        return try JSONSerialization.data(
+            withJSONObject: log, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
     }
 
     static func entry(_ exchange: Exchange) -> [String: Any] {

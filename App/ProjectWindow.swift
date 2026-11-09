@@ -155,13 +155,42 @@ struct ProjectWindow: View {
 
     private var actions: ProjectActions? {
         guard let session else { return nil }
-        return ProjectActions { url in
-            Task {
-                try? await session.saveAs(url)
-                projectName = await session.url.lastPathComponent
-                generation += 1  // the History view reloads from the new file
-            }
-        }
+        return ProjectActions(
+            saveAs: { url in
+                Task {
+                    try? await session.saveAs(url)
+                    projectName = await session.url.lastPathComponent
+                    generation += 1  // the History view reloads from the new file
+                }
+            },
+            importFile: { url in
+                // PRJ-008 / PRJ-012: a .gulp merges; anything else is detected by content. Never sends.
+                Task {
+                    do {
+                        let report: ImportReport
+                        if url.pathExtension == "gulp" {
+                            report = try await session.importExport.importProject(at: url)
+                        } else {
+                            report = try await session.importExport.importFile(try Data(contentsOf: url))
+                        }
+                        let skipped = report.skipped.prefix(3).map { "\($0.item): \($0.reason)" }
+                        browserStatus = ([report.summary] + skipped).joined(separator: " · ")
+                    } catch {
+                        browserStatus = "Import failed: \(ProjectSession.describe(error))"
+                    }
+                }
+            },
+            export: { format, url in
+                // HIS-044: the whole history, as HAR (with Gulp's exact bytes) or CSV.
+                Task {
+                    do {
+                        try await session.importExport.export(as: format).write(to: url)
+                        browserStatus = "Exported history to \(url.lastPathComponent)"
+                    } catch {
+                        browserStatus = "Export failed: \(ProjectSession.describe(error))"
+                    }
+                }
+            })
     }
 
     private func open() async {
@@ -190,6 +219,10 @@ struct ProjectWindow: View {
 struct ProjectActions {
     /// Save the window's project to a file and keep working there.
     let saveAs: @MainActor (URL) -> Void
+    /// Import a traffic file or merge a project (PRJ-012).
+    let importFile: @MainActor (URL) -> Void
+    /// Export the history (HIS-044).
+    let export: @MainActor (ExportFormat, URL) -> Void
 }
 
 struct ProjectActionsKey: FocusedValueKey {
@@ -233,6 +266,29 @@ struct ProjectCommands: Commands {
                 if let actions, let url = ProjectPanels.save(title: "Save Project As") { actions.saveAs(url) }
             }
             .keyboardShortcut("s", modifiers: [.command, .shift])
+            .disabled(actions == nil)
+        }
+        CommandGroup(after: .importExport) {
+            Button("Import…") {
+                // HAR, Postman, OpenAPI/Swagger, XML proxy-history export, Caido, sitemap.xml, URL list, .gulp
+                let panel = NSOpenPanel()
+                panel.title = "Import Traffic or Merge a Project"
+                panel.allowsMultipleSelection = false
+                if let actions, panel.runModal() == .OK, let url = panel.url { actions.importFile(url) }
+            }
+            .keyboardShortcut("i", modifiers: [.command, .shift])
+            .disabled(actions == nil)
+            Menu("Export History") {
+                ForEach(ExportFormat.allCases, id: \.self) { format in
+                    Button(format == .har ? "HAR…" : "CSV…") {
+                        let panel = NSSavePanel()
+                        panel.nameFieldStringValue = "history.\(format.rawValue)"
+                        if let actions, panel.runModal() == .OK, let url = panel.url {
+                            actions.export(format, url)
+                        }
+                    }
+                }
+            }
             .disabled(actions == nil)
         }
     }

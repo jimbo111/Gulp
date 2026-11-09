@@ -17,7 +17,7 @@ import GulpWorkspace
 /// Version marker for the Gulp command-line tool.
 enum GulpCLI {
     /// Semantic version of the CLI; bumped as the tool gains commands.
-    static let version = "0.6.0"
+    static let version = "0.7.0"
 }
 
 /// The root command. `@main` (in a file not named main.swift) is how ArgumentParser runs an async
@@ -28,7 +28,7 @@ struct GulpCommand: AsyncParsableCommand {
         commandName: "gulp-cli", abstract: "Gulp, headless.", version: GulpCLI.version,
         subcommands: [
             Send.self, Group.self, Paste.self, Repeater.self, Proxy.self, History.self, CA.self, CopyAs.self,
-            WS.self, Browser.self, Scope.self, Target.self, ProjectCommand.self,
+            WS.self, Browser.self, Scope.self, Target.self, ProjectCommand.self, MCP.self,
         ])
 }
 
@@ -54,7 +54,9 @@ struct Send: AsyncParsableCommand {
     @Option(help: "Total timeout in seconds.")
     var timeout = 30
 
-    @Option(name: .customLong("repeat"), help: "Send the request this many times and print a summary.")
+    @Option(
+        name: .customLong("repeat"),
+        help: "Send the request this many times and print a summary; `{n}` in the request becomes 1…N.")
     var repeatCount = 1
 
     @Option(help: "With --repeat: how many sends run at once.")
@@ -99,12 +101,20 @@ struct Send: AsyncParsableCommand {
     ) async throws {
         let total = repeatCount
         let lanes = max(1, min(concurrency, total))
+        // `{n}` in the file becomes each send's number; without it the bytes go out unchanged.
+        let template = request.bytes.string()
+        let numbered = template.contains("{n}")
         let succeeded = await withTaskGroup(of: Int.self) { group in
             for lane in 0..<lanes {
                 group.addTask {
                     var ok = 0
-                    for _ in stride(from: lane, to: total, by: lanes) {
-                        let result = await engine.send(request, to: destination, options: options)
+                    for index in stride(from: lane, to: total, by: lanes) {
+                        let outgoing =
+                            numbered
+                            ? RawRequest(
+                                Bytes(template.replacingOccurrences(of: "{n}", with: String(index + 1))))
+                            : request
+                        let result = await engine.send(outgoing, to: destination, options: options)
                         if result.error == nil { ok += 1 }
                     }
                     return ok

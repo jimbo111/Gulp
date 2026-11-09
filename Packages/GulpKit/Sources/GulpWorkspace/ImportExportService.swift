@@ -2,8 +2,10 @@
 // HIS-044, Project → Import/merge PRJ-008, the site map TGT-009, API import ADV-051, the CLI AUT-004
 // and MCP) calls this one service. UI-free.
 //
-// Imports never send traffic. They are dedup-aware (an exchange with the same target and the same
-// request and response bytes as one already stored — or earlier in the same file — is skipped),
+// Imports never send traffic. They are dedup-aware: an exchange with the same target, the same
+// request and response bytes and (when the file records one) the same start time as one already
+// stored — or earlier in the same file — is skipped; identical requests made at different times
+// stay separate rows,
 // tag what they add `imported`, keep the source the file states (default proxy), comments and
 // highlights, and feed the site map through the normal `exchangeRecorded` events (request-only
 // imports such as OpenAPI operations show there as inferred). The report says what was skipped and
@@ -54,7 +56,12 @@ public struct ImportExportService: Sendable {
     public func importFile(
         _ data: Data, format: TrafficFormat? = nil, baseURL: String? = nil, defaultSource: ToolSource = .proxy
     ) async throws -> ImportReport {
-        let batch = try TrafficImport.read(data, as: format, baseURL: baseURL)
+        let batch: ImportBatch
+        do {
+            batch = try TrafficImport.read(data, as: format, baseURL: baseURL)
+        } catch let error as TrafficImportError {
+            throw GulpError(message: error.message)  // one error type for every caller (UI, CLI, MCP)
+        }
         return try await add(
             batch.exchanges, format: batch.format.title, skipped: batch.skipped, defaultSource: defaultSource)
     }
@@ -105,7 +112,8 @@ public struct ImportExportService: Sendable {
                 continue
             }
             if try await store.containsExchange(
-                target: item.target, request: item.request.bytes, response: item.response?.wireBytes)
+                target: item.target, request: item.request.bytes, response: item.response?.wireBytes,
+                startedAt: item.startedAt)
             {
                 report.duplicates += 1
                 continue
@@ -130,12 +138,16 @@ public struct ImportExportService: Sendable {
         var port: Int
         var request: [UInt8]
         var response: [UInt8]?
+        /// Milliseconds since 1970 when the file gives a time (identical requests at different times
+        /// are different history rows; a re-import of the same file has the same times).
+        var startedMs: Int64?
     }
 
     static func dedupKey(_ item: ImportedExchange) -> DedupKey {
         DedupKey(
             scheme: item.target.scheme.rawValue, host: item.target.host, port: item.target.port,
-            request: item.request.bytes.rawBytes, response: item.response?.wireBytes.rawBytes)
+            request: item.request.bytes.rawBytes, response: item.response?.wireBytes.rawBytes,
+            startedMs: item.startedAt.map { Int64(($0.timeIntervalSince1970 * 1_000).rounded()) })
     }
 
     /// Export exchanges (`ids`, or every one matching `filter`) as HAR or CSV (HIS-044).

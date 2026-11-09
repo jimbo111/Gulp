@@ -14,8 +14,8 @@ order; within a milestone, do P0 first.
   launched by the Gulp Browser launcher through the proxy loads `https://localhost:8443` with no
   certificate interstitial (SPKI pin of the Gulp CA) and the request is in history. M1–M4a DoD
   scripts still pass in the same run.
-- **Active milestone**: **M6a — Target: site map, scope, ScopeGuard** (F04 §2.1–2.2), implemented
-  after M5; both await the macOS CI run (see the M5 and M6a status below).
+- **Active milestone**: **M7 — Decoder, Comparer, JWT Workbench** next; M5, M6a and M6b are
+  implemented and await the macOS CI run (see their status below).
 - **Branching**: `main` holds merged milestones (PRs jimbo111/Gulp#1 M0–M2, #2 review fixes,
   #3 M3a, then M3b + the feature-review adoption). Work happens on
   the session branch and is merged by PR once CI is green.
@@ -114,9 +114,32 @@ order; within a milestone, do P0 first.
   "add to scope" menu item and in-scope filter chip (HIS-004/006) are still to add to the History
   UI; F04 acceptance 4 (100k-row recompute without UI freeze) is batched (2,000 rows per write) but
   not benchmarked.
+- **M6b status — implementation complete; macOS verification pending** (2026-11-09):
+  - Local gate (clean build): **260+ tests pass**, **M1…M6a and M6b DoD scripts PASS**, lint clean.
+    The M6b DoD (`Scripts/m6b-dod.sh`, also in CI): VulnLab's `/openapi.json` imports as 4 requests
+    (every `/api/*` operation, bearer placeholder on `/api/me`) shown in the site map as not yet
+    sent; 1,000 proxied exchanges → HAR → a new project byte-for-byte (the `_gulp` raw fields of
+    both exports are identical) and a second import adds nothing; the XML proxy-history, Caido and
+    mitmproxy fixtures import with bytes, comments and highlights; over MCP stdio a scripted client
+    (the JSON-RPC lines Claude Code sends) lists history, sends an in-scope request (recorded as
+    `automation`) and gets a structured `out_of_scope` error for an out-of-scope one — both in the
+    audit log as `mcp:claude-code`.
+  - Done in M6b: PRJ-012 (ImportExportService), PRJ-013, PRJ-008 (exchanges), HIS-044 (HAR/CSV/
+    `.gulp` export, HAR import), TGT-009, ADV-050, ADV-051, ADV-052 (value generation), AUT-004
+    (`project import/export/info/audit`), AUT-020 (stdio), AUT-021 (`list_exchanges`, `get_exchange`,
+    `send_request`, `get_scope`), AUT-022 (site map, scope, exchanges), AUT-023 (ScopeGuard, approval
+    policy, audit log).
+  - **Not verified (no macOS here):** File → Import… / Export History menu items in
+    `App/ProjectWindow.swift`.
+- **M6b carry-overs**: OpenAPI/Swagger **YAML** (JSON only — no YAML parser in the dependency set);
+  PRJ-008 merges exchanges only (issues and Notebook items once those features exist); the approval
+  mode's in-app prompt (toast + dashboard) and Settings → Automation (F21 §3) — headless supports
+  `deny` (default) and `in-scope`; the MCP HTTP transport and REST API (M17); History's "export
+  selected rows" menu (the service takes ids; the menu exports everything); the import fixtures are
+  hand-made in each format's published shape, not captures (doc 06).
 - **Next action**: when CI minutes return, run CI on the branch head, fix any macOS compile issues
-  in the new SwiftUI code (M5 Repeater, M6a Target), then open the M5 and M6a PRs and merge. Meanwhile
-  continue with M6b (import/export service, API import, MCP read surface) on the Linux-testable core.
+  in the new SwiftUI code (M5 Repeater, M6a Target, M6b menus), then open the M5, M6a and M6b PRs and
+  merge. Meanwhile continue with M7 (Decoder, Comparer, JWT Workbench) on the Linux-testable core.
 - **Waiting on the owner**: GitHub Actions minutes (CI is the only macOS build available).
 - Earlier waiting items: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
   **adopted on 2026-11-08** (product decision #7 in `docs/07-decisions.md`) and applied to the specs:
@@ -216,7 +239,7 @@ for behavior.
 - [x] M4b — Streaming responses, WebSockets, Gulp Browser launch — **CI green both platforms + executable DoD PASS (`0b0c6f7`)**
 - [ ] M5 — Repeater + advanced HTTP engine (HTTP/2 raw, group/race sends, streaming, paste-to-request) — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M6a — Target: site map + scope + ScopeGuard — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
-- [ ] M6b — Import/export service, API import, MCP read surface + `send_request`
+- [ ] M6b — Import/export service, API import, MCP read surface + `send_request` — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M7 — Decoder + Comparer + JWT Workbench
 - [ ] M8 — Fuzzer (with content discovery)
 - [ ] M9 — Logger, GulpQL, search, Notebook, coverage index
@@ -436,6 +459,13 @@ for behavior.
   `target`, `proxy --use-scope`, `repeater --allow-out-of-scope`; VulnLab home page `/`;
   `Scripts/m6a-dod.sh` PASS. Fixed: closing a session now cancels and awaits the site map
   listener first (a concurrent read made the close checkpoint fail with "database is locked").
+- 2026-11-09 — **M6b implemented** (local Linux gate; macOS menus unverified): GulpCodec traffic
+  formats (HAR in/out with `_gulp` raw bytes, Postman v2.1, XML proxy history, Caido, sitemap/URL
+  lists, OpenAPI 3.x/Swagger 2.0 JSON with schema-aware values, CSV); ImportExportService (dedup by
+  target + bytes + start time, `imported` tag, `.gulp` merge and export); schema v4 (request-blob
+  index, `audit_log`); MCP stdio server with ScopeGuard, approval policy and audit log;
+  `gulp-cli project import|export|info|audit`, `gulp-cli mcp`, `send --repeat` `{n}`; VulnLab
+  `/openapi.json` + `/api/*`; `Scripts/m6b-dod.sh` PASS.
 
 
 ## How to pick up work (reminder)

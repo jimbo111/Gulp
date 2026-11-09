@@ -55,6 +55,26 @@ struct ImportExportTests {
         try await destination.close()
     }
 
+    @Test(
+        "PRJ-012: identical requests at different times stay separate rows; files without times dedup on bytes"
+    )
+    func test_PRJ012_dedupIdentity() async throws {
+        let environment = isolatedEnvironment()
+        let session = try await open(environment, "dedup")
+        func entry(_ time: String) -> String {
+            #"{"startedDateTime": "\#(time)", "time": 1, "request": {"method": "GET", "url": "http://lab/poll", "httpVersion": "HTTP/1.1", "headers": []}, "response": {"status": 204, "statusText": "No Content", "httpVersion": "HTTP/1.1", "headers": [], "content": {}}}"#
+        }
+        let har =
+            #"{"log": {"version": "1.2", "entries": [\#(entry("2026-11-09T10:00:00.000Z")), \#(entry("2026-11-09T10:00:01.000Z")), \#(entry("2026-11-09T10:00:01.000Z"))]}}"#
+        let first = try await session.importExport.importFile(Data(har.utf8))
+        #expect(first.imported == 2 && first.duplicates == 1)  // the repeated entry (same time) is one event
+        #expect(try await session.importExport.importFile(Data(har.utf8)).imported == 0)
+        let urls = Data("http://lab/a\nhttp://lab/a\n".utf8)
+        #expect(try await session.importExport.importFile(urls).imported == 1)
+        #expect(try await session.importExport.importFile(urls).imported == 0)
+        try await session.close()
+    }
+
     @Test("F20 acceptance 7: the other-proxy fixtures import with their bytes, comments and highlights")
     func test_PRJ013_otherProxies() async throws {
         let environment = isolatedEnvironment()
@@ -113,12 +133,14 @@ struct ImportExportTests {
         try await other.close()
 
         let session = try await open(environment, "merge-into")
-        await recordSample(session, path: "/a")  // same bytes as the other project's /a
+        await recordSample(session, path: "/a")  // same bytes as the other project's /a, at another time
         await session.store.writer.flush()
         let report = try await session.importExport.importProject(at: projectURL(environment, "merge-from"))
-        #expect(report.imported == 1 && report.duplicates == 1)
+        #expect(report.imported == 2 && report.duplicates == 0)  // a different time is a different event
+        let again = try await session.importExport.importProject(at: projectURL(environment, "merge-from"))
+        #expect(again.imported == 0 && again.duplicates == 2)
         let csv = String(decoding: try await session.importExport.export(as: .csv), as: UTF8.self)
-        #expect(csv.split(separator: "\r\n").count == 3)  // header + 2 rows
+        #expect(csv.split(separator: "\r\n").count == 4)  // header + 3 rows
         let items = projectURL(environment, "items")
         #expect(try await session.importExport.exportProject(ids: [1], to: items) == 1)
         await #expect(throws: GulpError.self) { try await session.importExport.exportProject(to: items) }

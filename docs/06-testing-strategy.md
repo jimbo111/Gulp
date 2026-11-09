@@ -79,9 +79,12 @@ tests can measure false positives.
 | Discovery & recon (M8, M19a) | Unlinked content for content discovery (`/admin` is not linked from any page; backup files `/index.html.bak`, `/backup.zip`, `/.old/config.php~`); a hidden parameter (`/api/report` changes its output when an undocumented `debug=1` is sent); `/static/app.min.js`, a minified bundle with `//# sourceMappingURL` pointing to an exposed `app.min.js.map` (with `sourcesContent`), whose code references `/api/internal/*` routes that no page links to; a planted fake API key in that bundle and another in an HTML comment | — (the secret scanner's precision is checked on `/safe/*` pages, which carry none) | F07 ETL-003, F23 (Param Discovery, secret scanner), F27 (JS Recon core) |
 
 **Import fixtures (M6b).** `Tests/Fixtures/import/` holds files captured against VulnLab for the
-import/export service (F20 PRJ-012/013, F23 ADV-050/051): a HAR, a Postman v2.1 collection, an XML
-proxy-history export from the reference suite, a Caido export and a mitmproxy HAR. They are test data,
-not VulnLab routes.
+import/export service (F20 PRJ-012/013, F23 ADV-050/051): a browser HAR, a Postman v2.1 collection, an
+XML proxy-history export, a Caido export, a mitmproxy HAR, a `sitemap.xml` and a URL list. They are
+test data, not VulnLab routes. They are written by hand in each format's published shape with VulnLab
+requests (the other tools aren't available to the build); replace them with real captures when
+convenient. VulnLab's `/openapi.json` (M6b) describes `/api/items`, `/api/orders` (POST),
+`/api/orders/{id}` and `/api/me`.
 
 **M1 endpoint behaviors (so the M1 build isn't guessing).** `/echo` returns `200` with the request's
 method, target, headers and body reflected as `text/plain` (and `Content-Length` set). `/echo-raw`

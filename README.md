@@ -24,6 +24,18 @@ by milestone, following `docs/03-roadmap.md`. Progress is tracked in `docs/PROGR
 | Someone who wants the big picture | [`docs/00-vision.md`](docs/00-vision.md) |
 | Someone setting up a dev machine | [`docs/02-build-and-dev-setup.md`](docs/02-build-and-dev-setup.md) |
 
+## Using Gulp from Claude Code (MCP)
+
+`gulp-cli mcp` serves a project to MCP clients over stdio: tools to list and read the HTTP history,
+read the scope, and send a raw request (in-scope targets only), plus the site map and exchanges as
+resources. Every agent action lands in the project's audit log (`gulp-cli project audit`).
+
+```bash
+claude mcp add gulp -- gulp-cli mcp --project /path/to/engagement.gulp --approval in-scope
+```
+
+Without `--approval in-scope` the agent can read but not send.
+
 ## Tech stack (summary)
 
 - **Swift 6** (strict concurrency), **SwiftUI + AppKit** UI, macOS 14 Sonoma or later
