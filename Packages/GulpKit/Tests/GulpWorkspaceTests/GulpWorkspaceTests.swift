@@ -536,4 +536,34 @@ struct SiteMapServiceTests {
         #expect(await reopened.tagVariables() == ["user": "alice", "pass": "s3cret"])
         try await reopened.close()
     }
+
+    @Test("CMP-001 / DEC-004: Send to Comparer adds requests or responses; Send to Decoder sets its input")
+    func test_CMP001_inbox() async throws {
+        let environment = isolatedEnvironment()
+        let session = try await open(environment, "inbox")
+        let opened = await session.inbox.opened()
+        var iterator = opened.makeAsyncIterator()
+        let request = RawRequest(Bytes("GET /a HTTP/1.1\r\nHost: lab\r\n\r\n"))
+        let response = RawResponse(Bytes("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi"))
+        let first = await session.store.writer.record(
+            Exchange(
+                source: .proxy, target: HTTPTarget(scheme: .http, host: "lab"), request: request,
+                response: response, state: .complete))
+        let second = await session.store.writer.record(
+            Exchange(
+                source: .repeater, target: HTTPTarget(scheme: .http, host: "lab"), request: request,
+                state: .complete))
+        let added = try await session.sendToComparer([first, second], part: .response)
+        #expect(added.map(\.label) == ["#\(first) response"])  // no response, nothing added
+        #expect(await iterator.next() == .comparer)
+        try await session.sendToComparer([second], part: .request)
+        #expect(await session.inbox.comparerItems.map(\.source) == ["proxy", "repeater"])
+        _ = await iterator.next()
+        try await session.sendToDecoder(first, part: .request)
+        #expect(await iterator.next() == .decoder)
+        #expect(await session.inbox.decoderInput == request.bytes.rawBytes)
+        await session.inbox.removeFromComparer([added[0].id])
+        #expect(await session.inbox.comparerItems.count == 1)
+        try await session.close()
+    }
 }

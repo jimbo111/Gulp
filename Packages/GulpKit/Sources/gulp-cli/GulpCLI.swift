@@ -10,6 +10,7 @@ import GulpCodec
 import GulpCore
 import GulpHTTP
 import GulpProxy
+import GulpRepeater
 import GulpStore
 import GulpTLS
 import GulpWorkspace
@@ -17,7 +18,7 @@ import GulpWorkspace
 /// Version marker for the Gulp command-line tool.
 enum GulpCLI {
     /// Semantic version of the CLI; bumped as the tool gains commands.
-    static let version = "0.7.0"
+    static let version = "0.8.0"
 }
 
 /// The root command. `@main` (in a file not named main.swift) is how ArgumentParser runs an async
@@ -28,7 +29,8 @@ struct GulpCommand: AsyncParsableCommand {
         commandName: "gulp-cli", abstract: "Gulp, headless.", version: GulpCLI.version,
         subcommands: [
             Send.self, Group.self, Paste.self, Repeater.self, Proxy.self, History.self, CA.self, CopyAs.self,
-            WS.self, Browser.self, Scope.self, Target.self, ProjectCommand.self, MCP.self,
+            WS.self, Browser.self, Scope.self, Target.self, ProjectCommand.self, MCP.self, Decode.self,
+            Diff.self, JWTCommand.self,
         ])
 }
 
@@ -698,6 +700,13 @@ struct Repeater: AsyncParsableCommand {
     @Flag(help: "Send even if the target is outside the project's scope (the app's \"Send anyway\").")
     var allowOutOfScope = false
 
+    @Option(
+        help: "Set a Transform Tag variable for «var(name)» (name=value; repeatable; saved in the project).")
+    var `var`: [String] = []
+
+    @Flag(help: "Send Transform Tags literally instead of evaluating them.")
+    var noTags = false
+
     func run() async throws {
         guard let data = FileManager.default.contents(atPath: raw) else {
             throw ValidationError("Cannot read \(raw)")
@@ -716,8 +725,19 @@ struct Repeater: AsyncParsableCommand {
             )
             throw ExitCode(3)
         }
+        if !`var`.isEmpty {
+            var values = await session.tagVariables()
+            for pair in `var` {
+                let parts = pair.split(separator: "=", maxSplits: 1)
+                guard parts.count == 2 else { throw ValidationError("--var expects name=value") }
+                values[String(parts[0])] = String(parts[1])
+            }
+            try await session.setTagVariables(values)
+        }
+        var options = RepeaterOptions()
+        options.transformTags = !noTags
         let tab = await session.repeater.openTab(
-            request: RawRequest(Bytes([UInt8](data))), target: destination, title: title)
+            request: RawRequest(Bytes([UInt8](data))), target: destination, title: title, options: options)
         let printer = stream ? Self.chunkPrinter(since: .now) : nil
         let result = await session.repeater.send(tab.id, onBytes: printer)
         if !stream { print(result?.exchange.response?.wireBytes.string() ?? "(no response)") }

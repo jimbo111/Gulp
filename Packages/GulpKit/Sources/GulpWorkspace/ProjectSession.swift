@@ -220,6 +220,8 @@ public actor ProjectSession {
     public nonisolated let matchReplace: MatchReplaceHook
     /// Transform Tag variables and counters (F12 DEC-021), shared by every send of the project.
     public nonisolated let tagState: TagState
+    /// The Comparer's items and the Decoder's input (CMP-001, DEC-004).
+    public nonisolated let inbox = ToolInbox()
     /// The Repeater's tabs and sends (F06), stored in this project.
     public nonisolated let repeater: RepeaterService
     /// ScopeGuard (F04 TGT-023): active tools ask it before sending; manual sends ask the user.

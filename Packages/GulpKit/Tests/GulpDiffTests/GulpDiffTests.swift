@@ -96,6 +96,19 @@ struct DiffTests {
         #expect(wordDiff.changes.contains { $0.a.contains(100_000) })
     }
 
+    @Test("Repetitive text: each changed line pairs with its own old line (no far-apart pairing)")
+    func test_CMP004_repetitive() {
+        let line = Array("HTTP/1.1 200 OK alpha beta <div>delta</div> token=abc\n".utf8)
+        var a: [UInt8] = []
+        for _ in 0..<20_000 { a += line }
+        var b = a
+        for offset in [100_000, 500_000, 900_000] { b[offset] = 0x58 }
+        let result = Differ.diff(a, b)
+        checkTiling(result)
+        #expect(result.summary.modifications == 3 && result.summary.added == 0 && result.summary.deleted == 0)
+        #expect(result.changes.allSatisfy { $0.a.count < 20 && $0.b.count < 20 })
+    }
+
     @Test(
         "F13 acceptance 3 / CMP-005: pretty JSON + ignore whitespace makes reformatted JSON identical; ignore case"
     )

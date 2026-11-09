@@ -190,7 +190,7 @@ public enum Differ {
             pendingA = []
             pendingB = []
         }
-        for step in myers(keysA, keysB) {
+        for step in lineSteps(keysA, keysB) {
             switch step.operation {
             case .equal:
                 flushChange()
@@ -207,6 +207,31 @@ public enum Differ {
         }
         flushChange()
         return segments
+    }
+
+    /// Line alignment. Two versions of the same response usually have the same number of lines and
+    /// differ in a few of them; in repetitive text Myers has many equally short scripts and may pair
+    /// an insertion with a deletion far away. So when the line counts match and ≥ 90 % of lines are
+    /// equal at the same index, lines are aligned by position (each differing run is a
+    /// substitution); otherwise Myers.
+    static func lineSteps(_ a: [Int], _ b: [Int]) -> [Step] {
+        guard a.count == b.count, !a.isEmpty else { return myers(a, b) }
+        let same = zip(a, b).reduce(0) { $0 + ($1.0 == $1.1 ? 1 : 0) }
+        guard same * 10 >= a.count * 9 else { return myers(a, b) }
+        var steps: [Step] = []
+        var index = 0
+        while index < a.count {
+            let start = index
+            let equal = a[index] == b[index]
+            while index < a.count, (a[index] == b[index]) == equal { index += 1 }
+            if equal {
+                steps.append(Step(operation: .equal, a: start..<index, b: start..<index))
+            } else {
+                steps.append(Step(operation: .delete, a: start..<index, b: start..<start))
+                steps.append(Step(operation: .insert, a: index..<index, b: start..<index))
+            }
+        }
+        return steps
     }
 
     /// Line ranges (each including its newline) covering `range`.

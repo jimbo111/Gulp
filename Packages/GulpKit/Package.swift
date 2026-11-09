@@ -155,12 +155,14 @@ let package = Package(
             name: "gulp-cli",
             dependencies: [
                 "GulpWorkspace", "GulpAutomation", "GulpHTTP", "GulpProxy", "GulpStore", "GulpTLS",
-                "GulpCodec", "GulpCore", "GulpBrowser",
+                "GulpCodec", "GulpCore", "GulpBrowser", "GulpDiff", "GulpRepeater",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),
         .executableTarget(
             name: "gulp-vulnlab",
             dependencies: ["GulpCore", "GulpTLS"] + nioCore + nioConcurrency + [
+                .product(name: "Crypto", package: "swift-crypto"),
+                .product(name: "_CryptoExtras", package: "swift-crypto"),
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
                 .product(name: "NIOTLS", package: "swift-nio"),
                 .product(name: "NIOHTTP2", package: "swift-nio-http2"),

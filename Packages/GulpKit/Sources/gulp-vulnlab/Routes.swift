@@ -199,11 +199,15 @@ enum VulnLab {
             guard method == "POST" else { return json(405, #"{"error":"use POST"}"#) }
             let body = request.bytes[request.parsed.body].string()
             return json(201, #"{"id":3,"order":\#(body.isEmpty ? "null" : body)}"#)
-        case "/api/me":
-            guard request.headerValue("authorization") != nil else {
-                return json(401, #"{"error":"missing bearer token"}"#)
-            }
-            return json(200, #"{"user":"alice","role":"user"}"#)
+        case "/api/me", "/safe/api/me":
+            return JWTLab.me(request.headerValue("authorization")?.string(), safe: path.hasPrefix("/safe"))
+        case "/api/login":
+            return JWTLab.login(user: query["user"] ?? "alice", alg: (query["alg"] ?? "RS256").uppercased())
+        case "/api/key.pem":
+            return VulnReply(
+                bytes: response(200, body: Array(JWTLab.publicPEM.utf8), type: "application/x-pem-file"))
+        case "/.well-known/jwks.json":
+            return JWTLab.jwks()
         case "/continue":
             let interim = Array("HTTP/1.1 100 Continue\r\n\r\n".utf8)
             return VulnReply(bytes: interim + response(200, body: Array("continued\n".utf8)))
