@@ -1,0 +1,97 @@
+{
+  "info": {
+    "name": "VulnLab",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base",
+      "value": "http://127.0.0.1:8088"
+    },
+    {
+      "key": "token",
+      "value": "abc123"
+    }
+  ],
+  "item": [
+    {
+      "name": "API",
+      "item": [
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Off",
+                "value": "1",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/me",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create order",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"item\":\"tea\",\"quantity\":1}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base}}/api/orders"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Login form",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "user",
+              "value": "alice"
+            },
+            {
+              "key": "pass",
+              "value": "x"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base}}/echo"
+        }
+      }
+    },
+    {
+      "name": "Unknown host",
+      "request": {
+        "method": "GET",
+        "url": "{{missing}}/x"
+      }
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+# VulnLab pages
+http://127.0.0.1:8088/echo
+https://localhost:8443/api/orders/1
+

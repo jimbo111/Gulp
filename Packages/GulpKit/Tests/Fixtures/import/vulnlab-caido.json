@@ -1,0 +1,37 @@
+{
+  "requests": [
+    {
+      "id": "1",
+      "host": "127.0.0.1",
+      "port": 8088,
+      "is_tls": false,
+      "method": "GET",
+      "path": "/echo",
+      "query": "from=caido",
+      "raw": "R0VUIC9lY2hvP2Zyb209Y2FpZG8gSFRUUC8xLjENCkhvc3Q6IDEyNy4wLjAuMTo4MDg4DQpBY2NlcHQ6ICovKg0KDQo=",
+      "created_at": "2026-11-09T11:59:00.000Z",
+      "comment": "from Caido",
+      "color": "blue",
+      "response": {
+        "status_code": 200,
+        "length": 112,
+        "raw": "SFRUUC8xLjEgMjAwIE9LDQpTZXJ2ZXI6IGd1bHAtdnVsbmxhYi8wLjEuMA0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PXV0Zi04DQpDb250ZW50LUxlbmd0aDogNQ0KDQpoZWxsbw=="
+      }
+    },
+    {
+      "id": "2",
+      "host": "localhost",
+      "port": 8443,
+      "is_tls": true,
+      "method": "GET",
+      "path": "/api/orders/1",
+      "query": "",
+      "raw": "R0VUIC9hcGkvb3JkZXJzLzEgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo4NDQzDQoNCg==",
+      "created_at": "2026-11-09T11:59:02.000Z",
+      "response": {
+        "status_code": 200,
+        "raw": "SFRUUC8xLjEgMjAwIE9LDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL2pzb24NCkNvbnRlbnQtTGVuZ3RoOiAzMw0KDQp7ImlkIjoxLCJvd25lciI6ImFsaWNlIiwidG90YWwiOjEwfQ=="
+      }
+    }
+  ]
+}

@@ -66,6 +66,68 @@ enum VulnLab {
         0xD0, 0x48, 0xAF, 0xCA, 0x2C, 0xD0, 0xE4, 0x02, 0x00, 0x03, 0x30, 0xE4, 0xED, 0x1F, 0x00, 0x00, 0x00,
     ]
 
+    /// A JSON response.
+    static func json(_ code: Int, _ text: String) -> VulnReply {
+        VulnReply(bytes: response(code, body: Array(text.utf8), type: "application/json"))
+    }
+
+    /// `/openapi.json`: the `/api/*` routes (F23 ADV-050, the M6b DoD).
+    static let openAPI = """
+        {
+          "openapi": "3.0.3",
+          "info": {"title": "Gulp VulnLab API", "version": "1.0.0"},
+          "servers": [{"url": "/"}],
+          "components": {
+            "securitySchemes": {"bearer": {"type": "http", "scheme": "bearer"}},
+            "schemas": {
+              "NewOrder": {
+                "type": "object", "required": ["item", "quantity"],
+                "properties": {
+                  "item": {"type": "string", "example": "coffee"},
+                  "quantity": {"type": "integer", "minimum": 1},
+                  "note": {"type": "string"},
+                  "deliverAt": {"type": "string", "format": "date-time"},
+                  "express": {"type": "boolean"}
+                }
+              }
+            }
+          },
+          "paths": {
+            "/api/items": {
+              "get": {
+                "operationId": "listItems", "summary": "List items",
+                "parameters": [
+                  {"name": "q", "in": "query", "schema": {"type": "string"}},
+                  {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "default": 3}}
+                ],
+                "responses": {"200": {"description": "items"}}
+              }
+            },
+            "/api/orders": {
+              "post": {
+                "operationId": "createOrder", "summary": "Create an order",
+                "requestBody": {
+                  "required": true,
+                  "content": {"application/json": {"schema": {"$ref": "#/components/schemas/NewOrder"}}}
+                },
+                "responses": {"201": {"description": "created"}}
+              }
+            },
+            "/api/orders/{id}": {
+              "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "integer", "example": 1}}],
+              "get": {"operationId": "getOrder", "summary": "Get an order", "responses": {"200": {"description": "order"}}}
+            },
+            "/api/me": {
+              "get": {
+                "operationId": "me", "summary": "The current user", "security": [{"bearer": []}],
+                "responses": {"200": {"description": "user"}, "401": {"description": "no token"}}
+              }
+            }
+          }
+        }
+
+        """
+
     /// The `/` page.
     static let homePage = """
         <!doctype html>
@@ -122,10 +184,36 @@ enum VulnLab {
             let block = Array("0123456789abcdef".utf8)
             let body = [UInt8]((0..<(megabytes * 65_536)).flatMap { _ in block })
             return VulnReply(bytes: response(200, body: body, type: "application/octet-stream"))
+        case "/openapi.json":
+            return VulnReply(bytes: response(200, body: Array(openAPI.utf8), type: "application/json"))
+        case "/api/items":
+            let limit = min(max(Int(query["limit"] ?? "") ?? 3, 0), 20)
+            let q = query["q"] ?? ""
+            let items = (1...max(limit, 1)).prefix(limit).map {
+                #"{"id":\#($0),"name":"item \#($0)\#(q.isEmpty ? "" : " " + q)"}"#
+            }
+            return json(200, "[" + items.joined(separator: ",") + "]")
+        case "/api/orders":
+            // POST creates an order (echoes the body back with an id).
+            let method = request.bytes[request.parsed.method].string()
+            guard method == "POST" else { return json(405, #"{"error":"use POST"}"#) }
+            let body = request.bytes[request.parsed.body].string()
+            return json(201, #"{"id":3,"order":\#(body.isEmpty ? "null" : body)}"#)
+        case "/api/me":
+            guard request.headerValue("authorization") != nil else {
+                return json(401, #"{"error":"missing bearer token"}"#)
+            }
+            return json(200, #"{"user":"alice","role":"user"}"#)
         case "/continue":
             let interim = Array("HTTP/1.1 100 Continue\r\n\r\n".utf8)
             return VulnReply(bytes: interim + response(200, body: Array("continued\n".utf8)))
         default:
+            if path.hasPrefix("/api/orders/"), let id = Int(path.dropFirst("/api/orders/".count)) {
+                // IDOR (doc 06 §3): any order by id, no owner check.
+                guard (1...2).contains(id) else { return json(404, #"{"error":"no such order"}"#) }
+                return json(
+                    200, #"{"id":\#(id),"owner":"\#(id == 1 ? "alice" : "bob")","total":\#(id * 10)}"#)
+            }
             if path.hasPrefix("/status/") {
                 return status(Int(path.dropFirst("/status/".count)))
             }

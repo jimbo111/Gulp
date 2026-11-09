@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<!DOCTYPE items [
+<!ELEMENT items (item*)>
+<!ATTLIST items burpVersion CDATA "">
+]>
+<items burpVersion="2026.1" exportTime="Mon Nov 09 12:00:00 UTC 2026">
+  <item>
+    <time>Mon Nov 09 11:58:01 UTC 2026</time>
+    <url><![CDATA[http://127.0.0.1:8088/echo?from=xml]]></url>
+    <host ip="127.0.0.1">127.0.0.1</host>
+    <port>8088</port>
+    <protocol>http</protocol>
+    <method><![CDATA[GET]]></method>
+    <path><![CDATA[/echo?from=xml]]></path>
+    <extension>null</extension>
+    <request base64="true"><![CDATA[R0VUIC9lY2hvP2Zyb209eG1sIEhUVFAvMS4xDQpIb3N0OiAxMjcuMC4wLjE6ODA4OA0KVXNlci1BZ2VudDogTW96aWxsYS81LjANCkFjY2VwdDogKi8qDQoNCg==]]></request>
+    <status>200</status>
+    <responselength>112</responselength>
+    <mimetype>text</mimetype>
+    <response base64="true"><![CDATA[SFRUUC8xLjEgMjAwIE9LDQpTZXJ2ZXI6IGd1bHAtdnVsbmxhYi8wLjEuMA0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PXV0Zi04DQpDb250ZW50LUxlbmd0aDogNQ0KDQpoZWxsbw==]]></response>
+    <comment>login &amp; echo check</comment>
+    <highlight>yellow</highlight>
+  </item>
+  <item>
+    <time>Mon Nov 09 11:58:05 UTC 2026</time>
+    <url><![CDATA[http://127.0.0.1:8088/api/orders]]></url>
+    <host ip="127.0.0.1">127.0.0.1</host>
+    <port>8088</port>
+    <protocol>http</protocol>
+    <method><![CDATA[POST]]></method>
+    <path><![CDATA[/api/orders]]></path>
+    <extension>null</extension>
+    <request base64="true"><![CDATA[UE9TVCAvYXBpL29yZGVycyBIVFRQLzEuMQ0KSG9zdDogMTI3LjAuMC4xOjgwODgNCkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vanNvbg0KQ29udGVudC1MZW5ndGg6IDMwDQoNCnsiaXRlbSI6ImNvZmZlZSIsInF1YW50aXR5IjoyfQ==]]></request>
+    <status>201</status>
+    <responselength>123</responselength>
+    <mimetype>JSON</mimetype>
+    <response base64="true"><![CDATA[SFRUUC8xLjEgMjAxIENyZWF0ZWQNCkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vanNvbg0KQ29udGVudC1MZW5ndGg6IDQ3DQoNCnsiaWQiOjMsIm9yZGVyIjp7Iml0ZW0iOiJjb2ZmZWUiLCJxdWFudGl0eSI6Mn19]]></response>
+    <comment></comment>
+  </item>
+  <item>
+    <time>Mon Nov 09 11:58:09 UTC 2026</time>
+    <url><![CDATA[https://localhost:8443/api/orders/2]]></url>
+    <host ip="127.0.0.1">localhost</host>
+    <port>8443</port>
+    <protocol>https</protocol>
+    <method><![CDATA[GET]]></method>
+    <path><![CDATA[/api/orders/2]]></path>
+    <extension>null</extension>
+    <request base64="true"><![CDATA[R0VUIC9hcGkvb3JkZXJzLzIgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo4NDQzDQoNCg==]]></request>
+    <status>200</status>
+    <responselength>104</responselength>
+    <mimetype>JSON</mimetype>
+    <response base64="true"><![CDATA[SFRUUC8xLjEgMjAwIE9LDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL2pzb24NCkNvbnRlbnQtTGVuZ3RoOiAzMw0KDQp7ImlkIjoyLCJvd25lciI6ImJvYiIsInRvdGFsIjoyMH0=]]></response>
+    <comment>IDOR: bob's order</comment>
+    <highlight>red</highlight>
+  </item>
+</items>
