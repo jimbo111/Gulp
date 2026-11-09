@@ -117,7 +117,7 @@ Split from the original M3 after the 2026-11-07 feature review (docs/FEATURE-REV
 - [x] **Gulp Browser launch** — the zero-setup capture path: discover/download Chromium, launch with the CA SPKI pin and proxy flags, one-click ⌘⇧O, cleanup on quit (BRW-001…BRW-004). CDP automation is M13a.
 - **DoD:** `curl -N` through Gulp to VulnLab `/sse` receives every event as it is sent and the history row goes from "streaming" to complete (F01 test 8); WebSocket messages show up in WS history; one click launches Chromium proxied through Gulp with no certificate warning on `https://localhost:8443`, its traffic is recorded, and quitting Gulp closes it (F16 test 1).
 
-### M5 — Repeater (and the advanced HTTP engine)
+### M5 — Repeater (and the advanced HTTP engine) — implemented; awaiting macOS CI (see PROGRESS)
 - [ ] All P0/P1 of F06 (tabs, groups, history, follow redirects, connection options), including streamed responses in Repeater (REP-016) and **paste to request** from cURL/fetch/raw (REP-017).
 - [ ] F03 HTTP/2 raw mode, the "update Content-Length" option, group send modes including single-packet attack (HTTP-030…HTTP-036).
 - [ ] F03 remaining P1 engine features: HTTP/1 pipelining for Turbo mode, platform auth, and the shared global/per-host throttle (HTTP-011, HTTP-012, HTTP-013). The HTTP-013 limiter is extended with concurrency budgets and backoff in M11a (F03 §3.4, GOV-002/003/007).

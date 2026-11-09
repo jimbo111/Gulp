@@ -68,19 +68,35 @@ order; within a milestone, do P0 first.
   by the launcher unit test, the end-to-end check is headless. HIS-007: live partial-row updates
   stop past 4 MB (the row still completes); SSE event *times* are shown for HTTP/1 bodies without a
   Content-Encoding (HTTP/2 or compressed streams list events without times).
-- **Next action**: M5 — Repeater: tabs/groups/history, follow redirects, connection options,
-  streamed responses (REP-016), paste-to-request (REP-017), WS sessions (REP-012, PRX-035); raw
-  HTTP/2 (HTTP-025); group sends incl. single-packet (HTTP-030…036); pipelining, platform auth and
-  the shared throttle (HTTP-011…013); executable DoD.
-- **Waiting on the owner**: **CI cannot start jobs** (2026-11-08, run 42507366371 and its re-run):
-  both jobs fail in ~3 s with no runner, logs or check output — the pattern of GitHub refusing to
-  start jobs, most often the account's Actions minutes / spending limit (macOS minutes are billed at
-  a multiple on private repos). Please check *Settings → Billing and plans* (Actions usage and the
-  spending limit) or *Actions → General*. Until CI runs, commit `3c091d6` (Repeater service +
-  redirect following) is **unverified** — no new milestone work is stacked on it.
-- **M5 progress**: REP-017 paste-to-request done (CI green, `08ad944`); RepeaterService, project
-  persistence and engine redirect following written in `3c091d6` (awaiting CI). Next: single-packet
-  group sends and the rest of F03's M5 engine work, then the Repeater UI and the M5 DoD.
+- **M5 status — implementation complete; macOS verification pending** (2026-11-09):
+  - GitHub Actions minutes are exhausted (owner confirmed), so CI can't run. The Linux CI job is
+    reproduced locally instead: Docker with the same `swift:6.0-noble` image (Swift 6.0.3) plus
+    SQLite built from Ubuntu's source package with CI's flags (`www.sqlite.org` is blocked by the
+    sandbox proxy), and swift-format 600.0.0 built from source for `lint --strict`.
+  - Local gate at `ecb9c3b`: build OK, **219/219 tests**, **M1, M2, M3a, M3b, M4a, M4b and M5 DoD
+    scripts PASS**, lint clean. The M5 DoD (`Scripts/m5-dod.sh`, also added to CI): a sequential
+    control redeems the coupon once; a single-packet group over HTTP/2 redeems it 20/20 (final-write
+    spread 0.00 ms — one flush); last-byte sync over HTTP/1 20/20 (0.63 ms); a pasted cURL
+    reproduces its request against `/echo`; `/sse` streams through a Repeater tab (~200 ms apart).
+  - **Not verified (no macOS here):** the SwiftUI/AppKit code written since CI stopped —
+    `GulpFeatures/RepeaterView.swift`, the History "Send to Repeater" menu/⌘R button, the
+    WebSockets History menu item and `App/ProjectWindow.swift` changes. The first macOS CI run
+    (`make lint generate test-core build test` + `Scripts/m4b-browser.sh`) must pass before M5 is
+    marked DONE and merged.
+  - Done in M5: REP-001…007, REP-010 (groups + Send group + results), REP-012 (WebSocket tabs),
+    REP-016 (streaming + Stop), REP-017 (paste); PRX-035; HTTP-011 (pipelining), HTTP-012 (Basic +
+    Digest), HTTP-013 (throttle), HTTP-030…036 (group modes, single-packet h2/h1, timing report,
+    TCP_NODELAY); engine redirect following (REP-006).
+- **M5 carry-overs**: HTTP-025 raw HTTP/2 from an `H2RequestSpec` (needs a hand-written frame
+  encoder; not started); HTTP-012 NTLMv2 (MD4 + three-message connection affinity); REP-009
+  structured Inspector edits; REP-011 variable capture (needs Transform Tags, M7); REP-013…015 (P2);
+  single-packet h2 does not yet detect `SETTINGS_MAX_CONCURRENT_STREAMS` < group size (it falls
+  back only when h2 isn't negotiated); the Repeater keeps WebSocket logs per session in memory (not
+  in WebSockets History); the `in-scope` redirect mode behaves as `on-site` until M6a.
+- **Next action**: when CI minutes return, run CI on the branch head, fix any macOS compile issues
+  in the new SwiftUI code, then open the M5 PR and merge. Meanwhile continue with M6a (Target: site
+  map, scope, ScopeGuard) on the Linux-testable core.
+- **Waiting on the owner**: GitHub Actions minutes (CI is the only macOS build available).
 - Earlier waiting items: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
   **adopted on 2026-11-08** (product decision #7 in `docs/07-decisions.md`) and applied to the specs:
   merges, cuts, deferrals, new requirements (incl. F33) and the re-sequenced roadmap with letter-
