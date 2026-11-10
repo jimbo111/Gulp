@@ -1,5 +1,6 @@
 import Foundation
 import GulpCore
+import GulpProxy
 import GulpQuery
 import GulpStore
 import Testing
@@ -80,4 +81,60 @@ struct QueryServiceTests {
         #expect(await session.loggerSettings().query == "resp.status >= 400")
         try await session.close()
     }
+
+    @Test(
+        "F05 acceptance 4 / HIS-027: one expression drives a Logger filter and an intercept rule identically")
+    func test_HIS027_sameExpression() async throws {
+        let session = try await open(isolatedEnvironment(), "same")
+        try await session.setScope([ScopeRule(host: "lab")])
+        let expression =
+            #"req.path startswith "/api" and not req.method == GET and (in_scope or req.query contains "force")"#
+        let requests: [(String, String, String)] = [
+            ("POST", "/api/order", "lab"), ("GET", "/api/order", "lab"), ("PUT", "/api/x?force=1", "other"),
+            ("DELETE", "/api/x", "other"), ("POST", "/home", "lab"), ("PATCH", "/api", "lab"),
+        ]
+        var ids: [ExchangeID] = []
+        for (method, path, host) in requests {
+            ids.append(
+                await session.store.writer.record(
+                    Exchange(
+                        source: .proxy, target: HTTPTarget(scheme: .http, host: host),
+                        request: RawRequest(Bytes("\(method) \(path) HTTP/1.1\r\nHost: \(host)\r\n\r\n")),
+                        state: .complete)))
+        }
+        var logger = LoggerSettings()
+        logger.query = expression
+        try await session.setLoggerSettings(logger)
+        let logged = Set(try await session.loggerIDs())
+
+        var intercept = InterceptSettings()
+        intercept.interceptRequests = true
+        intercept.requestQuery = expression
+        try await session.setInterceptSettings(intercept)
+        var held: Set<ExchangeID> = []
+        for (index, (method, path, host)) in requests.enumerated() {
+            let request = RawRequest(Bytes("\(method) \(path) HTTP/1.1\r\nHost: \(host)\r\n\r\n"))
+            if try await holdsRequest(session.intercept, request, HTTPTarget(scheme: .http, host: host)) {
+                held.insert(ids[index])
+            }
+        }
+        #expect(logged == held && logged == [ids[0], ids[2], ids[5]])
+
+        intercept.requestQuery = "req.method =="
+        await #expect(throws: GulpQLError.self) { try await session.setInterceptSettings(intercept) }
+        try await session.close()
+    }
+}
+
+/// Whether `queue` holds `request` (a held request is forwarded right away).
+func holdsRequest(_ queue: InterceptQueue, _ request: RawRequest, _ target: HTTPTarget) async throws -> Bool {
+    let decision = Task { await queue.holdRequest(request, target: target).held }
+    for _ in 0..<100 {
+        if await !queue.items.isEmpty {
+            await queue.decideAll(.forward(nil))
+            break
+        }
+        try await Task.sleep(for: .milliseconds(2))
+    }
+    return await decision.value
 }

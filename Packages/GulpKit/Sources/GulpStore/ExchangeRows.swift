@@ -187,7 +187,7 @@ enum ExchangeRows {
         var body =
             response.parsed.dechunkedBody?.rawBytes ?? Array(response.bytes.rawBytes[response.parsed.body])
         if let encoding = response.headerValue("content-encoding")?.string(),
-            let plain = ContentDecoding.decode(body, encoding: encoding, limit: 262_144)
+            let plain = SearchDecoding.decode(body, encoding: encoding, limit: 262_144)
         {
             body = plain
         }

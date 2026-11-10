@@ -158,13 +158,17 @@ public struct InterceptSettings: SettingsGroup, Hashable {
     public var interceptWebSockets = false
     /// Conditions on the upgrade request choosing which connections' messages are held.
     public var webSocketRules: [InterceptCondition] = []
+    /// A GulpQL request rule (PRX-015, HIS-027); non-empty replaces `requestRules`.
+    public var requestQuery = ""
+    /// A GulpQL response rule; non-empty replaces `responseRules`.
+    public var responseQuery = ""
 
     /// Default settings.
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
         case interceptRequests, interceptResponses, requestRules, responseRules, interceptWebSockets
-        case webSocketRules
+        case webSocketRules, requestQuery, responseQuery
     }
 
     /// Decode, defaulting fields that older projects don't have.
@@ -179,6 +183,8 @@ public struct InterceptSettings: SettingsGroup, Hashable {
         interceptWebSockets = try container.decodeIfPresent(Bool.self, forKey: .interceptWebSockets) ?? false
         webSocketRules =
             try container.decodeIfPresent([InterceptCondition].self, forKey: .webSocketRules) ?? []
+        requestQuery = try container.decodeIfPresent(String.self, forKey: .requestQuery) ?? ""
+        responseQuery = try container.decodeIfPresent(String.self, forKey: .responseQuery) ?? ""
     }
 }
 

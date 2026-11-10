@@ -161,7 +161,7 @@ extension ProjectStore {
         context.inScope = { _ in inScope }
         context.notes = { _ in notes }
         if context.decodeBody == nil {
-            context.decodeBody = { body, encoding in ContentDecoding.decode(body, encoding: encoding) }
+            context.decodeBody = { body, encoding in SearchDecoding.decode(body, encoding: encoding) }
         }
         return context
     }

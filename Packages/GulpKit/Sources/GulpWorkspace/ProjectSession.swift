@@ -7,6 +7,7 @@ import GulpCodec
 import GulpCore
 import GulpHTTP
 import GulpProxy
+import GulpQuery
 import GulpRepeater
 import GulpStore
 import GulpTLS
@@ -277,16 +278,26 @@ public actor ProjectSession {
         await intercept.setIntercepting(
             requests: stored.interceptRequests, responses: stored.interceptResponses)
         await intercept.setInterceptingWebSockets(stored.interceptWebSockets)
+        // Stored queries were validated when set; one that no longer parses falls back to the rules.
+        await intercept.setQueries(
+            request: stored.requestQuery.isEmpty ? nil : try? GulpQLPredicate(stored.requestQuery),
+            response: stored.responseQuery.isEmpty ? nil : try? GulpQLPredicate(stored.responseQuery))
     }
 
     /// Store and apply Match & Replace rules (PRX-020).
     public func setMatchReplaceRules(_ rules: [MatchReplaceRule]) async throws {
+        for rule in rules where !rule.when.isEmpty {
+            _ = try GulpQLPredicate(rule.when)  // PRX-025: a condition that doesn't parse is refused
+        }
         try await settings.set(MatchReplaceSettings(rules: rules), scope: .project)
         matchReplace.setRules(rules)
     }
 
     /// Store and apply intercept settings (PRX-010…PRX-014).
     public func setInterceptSettings(_ value: InterceptSettings) async throws {
+        for query in [value.requestQuery, value.responseQuery] where !query.isEmpty {
+            _ = try GulpQLPredicate(query)  // a rule that doesn't parse is refused, not stored
+        }
         try await settings.set(value, scope: .project)
         await applyInterceptSettings()
     }
@@ -381,7 +392,11 @@ public actor ProjectSession {
     /// Apply "Use scope for the proxy" (TGT-024) with the current scope.
     func applyProxyScope() async {
         let on = settings.get(ProxySettings.self).useScope
-        await recorder.setProxyScope(on ? await scopeGuard.current : nil)
+        let current = await scopeGuard.current
+        await recorder.setProxyScope(on ? current : nil)
+        // GulpQL rules (HIS-027) see the project's scope whether or not the proxy is limited to it.
+        await intercept.setScope(current)
+        matchReplace.setScope(current)
     }
 
     /// "Use scope for the proxy" (TGT-024 / PRX-045): store it in the project and apply it now.

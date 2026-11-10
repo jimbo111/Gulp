@@ -245,7 +245,7 @@ struct SearchMatcher: Sendable {
     static func texts(_ bytes: Bytes, headerEnd: Int, body: [UInt8]?, encoding: String?) -> (String, String) {
         let headers = bytes[0..<headerEnd].string()
         var raw = body ?? Array(bytes.rawBytes[headerEnd...])
-        if let encoding, let plain = ContentDecoding.decode(raw, encoding: encoding) { raw = plain }
+        if let encoding, let plain = SearchDecoding.decode(raw, encoding: encoding) { raw = plain }
         if raw.count > 2 * 1024 * 1024 { raw = Array(raw[..<(2 * 1024 * 1024)]) }
         return (headers, String(decoding: raw, as: UTF8.self))
     }

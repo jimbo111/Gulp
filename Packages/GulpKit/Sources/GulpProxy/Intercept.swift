@@ -8,6 +8,7 @@
 import Foundation
 import GulpCore
 import GulpHTTP
+import GulpQuery
 
 /// What an intercept condition looks at (PRX-013 requests, PRX-014 responses).
 public enum InterceptField: String, Sendable, Codable, CaseIterable {
@@ -112,6 +113,12 @@ public actor InterceptQueue {
     public private(set) var interceptWebSockets = false
     /// Conditions on the upgrade request that pick which connections' messages are held.
     public private(set) var webSocketRules: [InterceptCondition] = []
+    /// A GulpQL request rule (PRX-015); when set it replaces `requestRules`.
+    public private(set) var requestQuery: GulpQLPredicate?
+    /// A GulpQL response rule (PRX-015); when set it replaces `responseRules`.
+    public private(set) var responseQuery: GulpQLPredicate?
+    /// The scope GulpQL rules see (`in_scope`, `matches_scope`).
+    public private(set) var scope: ScopeService?
 
     private struct Waiter {
         let item: InterceptItem
@@ -161,6 +168,15 @@ public actor InterceptQueue {
         if let webSockets { webSocketRules = webSockets }
     }
 
+    /// Use GulpQL expressions instead of the rule builder (nil returns to the builder's rules).
+    public func setQueries(request: GulpQLPredicate?, response: GulpQLPredicate?) {
+        requestQuery = request
+        responseQuery = response
+    }
+
+    /// The scope GulpQL rules evaluate `in_scope` against.
+    public func setScope(_ scope: ScopeService?) { self.scope = scope }
+
     /// Whether messages of the connection opened by `upgrade` are currently held.
     public func interceptsWebSockets(upgrade: RawRequest, target: HTTPTarget) -> Bool {
         interceptWebSockets && InterceptRules.matches(webSocketRules, request: upgrade, target: target)
@@ -201,8 +217,11 @@ public actor InterceptQueue {
     public func holdRequest(
         _ request: RawRequest, target: HTTPTarget
     ) async -> (InterceptDecision, held: Bool) {
-        let matches = InterceptRules.matches(requestRules, request: request, target: target)
-        guard interceptRequests, matches else { return (.forward(nil), false) }
+        guard interceptRequests else { return (.forward(nil), false) }
+        let matches =
+            requestQuery.map { ProxyQuery.holds($0, request: request, target: target, scope: scope) }
+            ?? InterceptRules.matches(requestRules, request: request, target: target)
+        guard matches else { return (.forward(nil), false) }
         return (await hold(.request, request: request, response: nil, target: target), true)
     }
 
@@ -210,10 +229,15 @@ public actor InterceptQueue {
     public func holdResponse(
         _ response: RawResponse, for request: RawRequest, target: HTTPTarget, requestWasHeld: Bool
     ) async -> (InterceptDecision, held: Bool) {
-        let matches = InterceptRules.matches(
-            responseRules, request: request, target: target, response: response,
-            requestWasHeld: requestWasHeld)
-        guard interceptResponses, matches else { return (.forward(nil), false) }
+        guard interceptResponses else { return (.forward(nil), false) }
+        let matches =
+            responseQuery.map {
+                ProxyQuery.holds($0, request: request, target: target, response: response, scope: scope)
+            }
+            ?? InterceptRules.matches(
+                responseRules, request: request, target: target, response: response,
+                requestWasHeld: requestWasHeld)
+        guard matches else { return (.forward(nil), false) }
         return (await hold(.response, request: request, response: response, target: target), true)
     }
 

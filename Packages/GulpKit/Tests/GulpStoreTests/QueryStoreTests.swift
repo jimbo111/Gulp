@@ -97,7 +97,7 @@ struct QueryStoreTests {
             let viaStore = try await store.matchingIDs(filter: filter)
             let predicate = try GulpQLPredicate(expression)
             let context = GulpQLContext(
-                scope: scope, decodeBody: { ContentDecoding.decode($0, encoding: $1) })
+                scope: scope, decodeBody: { SearchDecoding.decode($0, encoding: $1) })
             let inMemory = all.filter { predicate.evaluate($0, context: context) }.map(\.id)
             #expect(viaStore == inMemory, "\(text): store \(viaStore) vs memory \(inMemory)")
             #expect(try await store.count(matching: filter) == inMemory.count, "\(text)")
@@ -190,10 +190,10 @@ struct QueryStoreTests {
     func test_contentDecoding() {
         let text = Array(String(repeating: "gulp ", count: 1000).utf8)
         let zlib = BlobStore.deflate(text)!
-        #expect(ContentDecoding.decode(zlib, encoding: "deflate") == text)
-        #expect(ContentDecoding.decode(zlib, encoding: "identity, deflate") == text)
-        #expect(ContentDecoding.decode(zlib, encoding: "br") == nil)
-        #expect(ContentDecoding.decode(text, encoding: "gzip") == nil)
-        #expect(ContentDecoding.decode(zlib, encoding: "deflate", limit: 100)?.count == 100)
+        #expect(SearchDecoding.decode(zlib, encoding: "deflate") == text)
+        #expect(SearchDecoding.decode(zlib, encoding: "identity, deflate") == text)
+        #expect(SearchDecoding.decode(zlib, encoding: "br") == nil)
+        #expect(SearchDecoding.decode(text, encoding: "gzip") == nil)
+        #expect(SearchDecoding.decode(zlib, encoding: "deflate", limit: 100)?.count == 100)
     }
 }

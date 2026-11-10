@@ -1,11 +1,13 @@
-// GulpStore — undo HTTP Content-Encoding (gzip, deflate) for search and GulpQL body matching
-// (F05 §5, doc 04 §4 FTS). Raw bytes stay the truth; this only feeds the index and evaluators.
+// GulpStore — undo HTTP Content-Encoding (gzip, deflate) for search and GulpQL body matching. The
+// engine's full decoder is GulpHTTP.ContentDecoding; the store keeps this small zlib-only one so it
+// doesn't link NIO (F05 §5, doc 04 §4 FTS). Raw bytes stay the truth; this only feeds the index
+// and the evaluators.
 
 import CZlib
 import Foundation
 
 /// HTTP content decoding for search.
-public enum ContentDecoding {
+public enum SearchDecoding {
     /// Decode `body` for a `Content-Encoding` value (`gzip`, `x-gzip`, `deflate`; a list is undone
     /// right to left), stopping at `limit` output bytes. Nil for unknown encodings or bad data.
     public static func decode(_ body: [UInt8], encoding: String, limit: Int = 2 * 1024 * 1024) -> [UInt8]? {

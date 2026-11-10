@@ -10,6 +10,7 @@
 import Foundation
 import GulpCore
 import GulpHTTP
+import GulpQuery
 import NIOConcurrencyHelpers
 
 /// What a rule rewrites (PRX-020). The WebSocket kinds rewrite whole message payloads (M4b).
@@ -45,11 +46,14 @@ public struct MatchReplaceRule: Sendable, Codable, Hashable, Identifiable {
     public var comment: String
     /// Also apply to Repeater, Fuzzer, Scanner… (PRX-021); otherwise proxy traffic only.
     public var applyToTools: Bool
+    /// A GulpQL condition (PRX-025), e.g. `req.host ~ "api"`; empty applies always. Request rules
+    /// see the request (`resp.*` fields are missing); response rules see both.
+    public var when: String
 
     /// A rule.
     public init(
         id: UUID = UUID(), enabled: Bool = true, kind: MatchReplaceKind, match: String, replace: String,
-        isRegex: Bool = false, comment: String = "", applyToTools: Bool = false
+        isRegex: Bool = false, comment: String = "", applyToTools: Bool = false, when: String = ""
     ) {
         self.id = id
         self.enabled = enabled
@@ -59,6 +63,25 @@ public struct MatchReplaceRule: Sendable, Codable, Hashable, Identifiable {
         self.isRegex = isRegex
         self.comment = comment
         self.applyToTools = applyToTools
+        self.when = when
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, enabled, kind, match, replace, isRegex, comment, applyToTools, when
+    }
+
+    /// Decode, defaulting fields older projects don't have (`when`).
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        kind = try c.decode(MatchReplaceKind.self, forKey: .kind)
+        match = try c.decode(String.self, forKey: .match)
+        replace = try c.decode(String.self, forKey: .replace)
+        isRegex = try c.decode(Bool.self, forKey: .isRegex)
+        comment = try c.decodeIfPresent(String.self, forKey: .comment) ?? ""
+        applyToTools = try c.decodeIfPresent(Bool.self, forKey: .applyToTools) ?? false
+        when = try c.decodeIfPresent(String.self, forKey: .when) ?? ""
     }
 
     /// Built-in presets, disabled by default (PRX-022).
@@ -97,21 +120,42 @@ public struct MatchReplaceRule: Sendable, Codable, Hashable, Identifiable {
 
 /// Applies Match & Replace rules to raw messages.
 public enum MatchReplace {
-    /// `request` with every enabled request rule applied, in order.
-    public static func apply(_ rules: [MatchReplaceRule], to request: RawRequest) -> RawRequest {
+    /// `request` with every enabled request rule applied, in order. `when` decides conditional
+    /// rules (PRX-025) on the request as it stands at that rule.
+    public static func apply(
+        _ rules: [MatchReplaceRule], to request: RawRequest,
+        when holds: (MatchReplaceRule, RawRequest) -> Bool = { _, _ in true }
+    ) -> RawRequest {
         var bytes = request.bytes.rawBytes
         for rule in rules where rule.enabled && rule.kind.isRequest {
+            if !rule.when.isEmpty,
+                !holds(rule, bytes == request.bytes.rawBytes ? request : RawRequest(Bytes(bytes)))
+            {
+                continue
+            }
             bytes = applyOne(rule, to: bytes, isRequest: true)
         }
         return bytes == request.bytes.rawBytes ? request : RawRequest(Bytes(bytes))
     }
 
-    /// `response` with every enabled response rule applied, in order.
-    public static func apply(_ rules: [MatchReplaceRule], to response: RawResponse) -> RawResponse {
+    /// `response` with every enabled response rule applied, in order; `when` decides conditional
+    /// rules on the response as it stands at that rule.
+    public static func apply(
+        _ rules: [MatchReplaceRule], to response: RawResponse,
+        when holds: (MatchReplaceRule, RawResponse) -> Bool = { _, _ in true }
+    ) -> RawResponse {
         var bytes = response.bytes.rawBytes
         for rule in rules where rule.enabled {
             switch rule.kind {
             case .responseHeader, .responseBody, .responseFirstLine:
+                if !rule.when.isEmpty {
+                    let current =
+                        bytes == response.bytes.rawBytes
+                        ? response
+                        : RawResponse(
+                            Bytes(bytes), interim: response.interim, headRequest: response.isHeadResponse)
+                    if !holds(rule, current) { continue }
+                }
                 bytes = applyOne(rule, to: bytes, isRequest: false)
             default:
                 continue
@@ -327,15 +371,40 @@ enum Latin1 {
 /// `applyToTools`. Rules can be swapped at any time.
 public final class MatchReplaceHook: RequestHook, ResponseHook, Sendable {
     private let rules: NIOLockedValueBox<[MatchReplaceRule]>
+    /// Compiled `when` conditions by rule id; a condition that doesn't compile is absent, and its
+    /// rule never runs (fail closed: the editor rejects invalid conditions before they get here).
+    private let conditions: NIOLockedValueBox<[UUID: GulpQLPredicate]>
+    private let scope: NIOLockedValueBox<ScopeService?>
 
     /// A hook running `rules`.
     public init(rules: [MatchReplaceRule] = []) {
         self.rules = NIOLockedValueBox(rules)
+        conditions = NIOLockedValueBox(Self.compile(rules))
+        scope = NIOLockedValueBox(nil)
     }
 
     /// Replace the rule list.
     public func setRules(_ newRules: [MatchReplaceRule]) {
+        let compiled = Self.compile(newRules)
         rules.withLockedValue { $0 = newRules }
+        conditions.withLockedValue { $0 = compiled }
+    }
+
+    /// The scope conditions see (`in_scope`, `matches_scope`).
+    public func setScope(_ newScope: ScopeService?) {
+        scope.withLockedValue { $0 = newScope }
+    }
+
+    static func compile(_ rules: [MatchReplaceRule]) -> [UUID: GulpQLPredicate] {
+        var compiled: [UUID: GulpQLPredicate] = [:]
+        for rule in rules where !rule.when.isEmpty {
+            compiled[rule.id] = try? GulpQLPredicate(rule.when)
+        }
+        return compiled
+    }
+
+    func condition(_ rule: MatchReplaceRule) -> GulpQLPredicate? {
+        conditions.withLockedValue { $0[rule.id] }
     }
 
     /// This hook's `HookSet` member.
@@ -364,13 +433,25 @@ public final class MatchReplaceHook: RequestHook, ResponseHook, Sendable {
 
     /// Rewrite an outgoing request.
     public func willSend(_ req: inout OutgoingRequest, context: HookContext) async throws {
-        req.request = MatchReplace.apply(active(for: context.source), to: req.request)
+        let target = req.target
+        let scope = scope.withLockedValue { $0 }
+        req.request = MatchReplace.apply(active(for: context.source), to: req.request) { rule, current in
+            guard let predicate = self.condition(rule) else { return false }
+            return ProxyQuery.holds(
+                predicate, request: current, target: target, source: context.source, scope: scope)
+        }
     }
 
     /// Rewrite a received response.
     public func didReceive(
         _ response: inout RawResponse, for request: OutgoingRequest, context: HookContext
     ) async throws {
-        response = MatchReplace.apply(active(for: context.source), to: response)
+        let scope = scope.withLockedValue { $0 }
+        response = MatchReplace.apply(active(for: context.source), to: response) { rule, current in
+            guard let predicate = self.condition(rule) else { return false }
+            return ProxyQuery.holds(
+                predicate, request: request.request, target: request.target, response: current,
+                source: context.source, scope: scope)
+        }
     }
 }
