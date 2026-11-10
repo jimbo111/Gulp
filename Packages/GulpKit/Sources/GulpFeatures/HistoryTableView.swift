@@ -292,6 +292,7 @@ struct HistoryTableView: NSViewRepresentable {
                 addItem("Send to Comparer", #selector(sendToComparer), to: menu)
             }
             if model.sendToDecoder != nil { addItem("Send to Decoder", #selector(sendToDecoder), to: menu) }
+            if model.sendToFuzzer != nil { addItem("Send to Fuzzer", #selector(sendToFuzzer), to: menu) }
             addItem("Comment…", #selector(editComment), to: menu)
             addItem("Copy URLs", #selector(copyURLs), to: menu)
             let copyAs = NSMenuItem(title: "Copy as", action: nil, keyEquivalent: "")
@@ -334,6 +335,12 @@ struct HistoryTableView: NSViewRepresentable {
         @objc func sendToDecoder() {
             Task {
                 if let first = await targetIDs().first { model.sendToDecoder?(first) }
+            }
+        }
+
+        @objc func sendToFuzzer() {
+            Task {
+                if let first = await targetIDs().first { model.sendToFuzzer?(first) }
             }
         }
 

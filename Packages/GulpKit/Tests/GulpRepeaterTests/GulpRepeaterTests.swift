@@ -149,7 +149,12 @@ struct GulpRepeaterTests {
         let savesBefore = await store.saves
         for i in 0..<5 { await repeater.updateDraft(a.id, bytes: Array("draft \(i)".utf8)) }
         #expect(await store.saves == savesBefore)  // debounced
-        try await Task.sleep(for: .milliseconds(800))
+        // Wait for the ≈500 ms debounce; poll rather than sleep a fixed time, so a loaded machine
+        // (the whole suite runs in parallel) can't make the save land just after the check.
+        let deadline = ContinuousClock.now + .seconds(5)
+        while await store.saves == savesBefore, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
         #expect(await store.saves == savesBefore + 1)
         #expect(await store.tabs[a.id]?.draft == Array("draft 4".utf8))
         await repeater.rename(b.id, to: "admin")

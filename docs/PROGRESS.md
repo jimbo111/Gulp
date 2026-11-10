@@ -14,8 +14,8 @@ order; within a milestone, do P0 first.
   launched by the Gulp Browser launcher through the proxy loads `https://localhost:8443` with no
   certificate interstitial (SPKI pin of the Gulp CA) and the request is in history. M1–M4a DoD
   scripts still pass in the same run.
-- **Active milestone**: **M8 — Fuzzer (with content discovery)** next; M5, M6a, M6b and M7 are
-  implemented and await the macOS CI run (see their status below).
+- **Active milestone**: **M9 — Logger, GulpQL, search, Notebook, coverage index** next; M5, M6a,
+  M6b, M7 and M8 are implemented and await the macOS CI run (see their status below).
 - **Branching**: `main` holds merged milestones (PRs jimbo111/Gulp#1 M0–M2, #2 review fixes,
   #3 M3a, then M3b + the feature-review adoption). Work happens on
   the session branch and is merged by PR once CI is green.
@@ -155,10 +155,30 @@ order; within a milestone, do P0 first.
   live tag preview pane and "diff with previous response" (CMP-006) — the service has
   `previewTags`; CMP-007/008 (P2); a JWT tag op (`«jwt-sign…»`) and the Fuzzer payload processor
   (ADV-013, M8); variable capture from responses (REP-011) still feeds `var()` by hand.
+- **M8 status — implementation complete; macOS verification pending** (2026-11-10):
+  - Local gate (clean build): **292/292 tests**, **M1…M8 DoD scripts PASS**, lint clean. The M8 DoD
+    (`Scripts/m8-dod.sh`, also in CI): with no scope the attack sends nothing (9 rows refused,
+    "sent 0 of 9"); after scoping VulnLab, a 2 × 100 cluster bomb sends 10,000 requests at
+    ≈2,500 req/s (debug build; ≥ 1,000 required), every one recorded in History, and a grep column
+    finds the single `a=100&b=100` row; grep-extract pulls 50 unique CSRF tokens from 50 `/login`
+    responses; Discover content finds `/admin` (403), `/index.html.bak`, `/backup.zip`, `/.old/`
+    (403) and `/.old/config.php~` (~9,000 probes in ≈2.5 s) and records them in the site map.
+  - Done in M8: FUZ-001…004, FUZ-010…014 (FUZ-013 without the Snippet processor), FUZ-020…024,
+    FUZ-026, FUZ-030, FUZ-031, ETL-003 (content discovery), FUZ-011 bundled wordlists; Send to
+    Fuzzer from History; `gulp-cli fuzz|discover|wordlists`.
+  - **Not verified (no macOS here):** `GulpFeatures/FuzzerView.swift` (Positions, Payloads,
+    Settings, Results, Discover content), History's Send to Fuzzer item, `App/ProjectWindow`.
+- **M8 carry-overs**: Turbo mode (FUZ-032, P1, "optional, last within the milestone" — HTTP/1
+  pipelining and HTTP/2 multiplexing exist in the engine since M5; the scriptable generator needs
+  Snippets, F18); FUZ-025 OAST column (M11a, needs Beacon); FUZ-033 shared resource pool beyond the
+  engine's per-host throttle (lands with the shared limiter, M11a); the Snippet payload processor
+  (F18); FUZ-015/027/034 (P2: charts etc.); a JWT `«jwt-sign…»` tag op; the dashboard's running-task
+  list; F07 acceptance tests 1–3 (username enumeration, password spray, recursive grep against
+  `/login`) are covered by unit tests with a fake engine and the CLI, not yet by a DoD script.
 - **Next action**: when CI minutes return, run CI on the branch head, fix any macOS compile issues
-  in the new SwiftUI code (M5 Repeater, M6a Target, M6b menus, M7 tools), then open the M5, M6a,
-  M6b and M7 PRs and merge. Meanwhile continue with M8 (Fuzzer with content discovery) on the
-  Linux-testable core.
+  in the new SwiftUI code (M5 Repeater, M6a Target, M6b menus, M7 tools, M8 Fuzzer), then open the
+  M5, M6a, M6b, M7 and M8 PRs and merge. Meanwhile continue with M9 (Logger, GulpQL, search,
+  Notebook, coverage index) on the Linux-testable core.
 - **Waiting on the owner**: GitHub Actions minutes (CI is the only macOS build available).
 - Earlier waiting items: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
   **adopted on 2026-11-08** (product decision #7 in `docs/07-decisions.md`) and applied to the specs:
@@ -260,7 +280,7 @@ for behavior.
 - [ ] M6a — Target: site map + scope + ScopeGuard — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M6b — Import/export service, API import, MCP read surface + `send_request` — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M7 — Decoder + Comparer + JWT Workbench — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
-- [ ] M8 — Fuzzer (with content discovery)
+- [ ] M8 — Fuzzer (with content discovery) — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M9 — Logger, GulpQL, search, Notebook, coverage index
 - [ ] **Daily-driver beta** — release gate after M9 (signed + notarized build to real testers)
 - [ ] M10a — Passive scanner + issue model
@@ -494,6 +514,15 @@ for behavior.
   `gulp-cli decode|diff|jwt`, `repeater --var/--no-tags`; ToolInbox; `Scripts/m7-dod.sh` PASS.
   Fixed on the way: unicode-escape didn't escape backslashes (round-trip test); a formatter-wrapped
   `..<` parsed as two statements; Myers paired changes far apart in repetitive text.
+- 2026-11-10 — **M8 implemented** (local Linux gate; macOS view unverified): GulpFuzzer positions
+  (`§…§`, auto-mark), lazy payload sources (lists, files, numbers, dates, brute force, null, same as
+  base, recursive grep) and processors (incl. Decoder ops and Transform Tags), the four attack
+  types, grep match/extract, reflection, baseline anomalies, the attack runner (lanes, rps cap,
+  delays, retries, stop conditions, pause/resume/cancel, ScopeGuard) with saved attacks (schema
+  tables `fuzzer_attacks`/`fuzzer_results`), content discovery with soft-404 fingerprints, bundled
+  wordlists; VulnLab `/login` (single-use CSRF), `/account`, `/admin`, backup files; Fuzzer view and
+  Send to Fuzzer; `gulp-cli fuzz|discover|wordlists`; `Scripts/m8-dod.sh` PASS. Fixed on the way:
+  ScopeGuard refusals were counted as sent + errors ("sent 9, errors 9") — now `refused`.
 
 
 ## How to pick up work (reminder)

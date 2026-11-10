@@ -8,8 +8,32 @@ import Foundation
 import GulpCore
 import GulpHTTP
 
+/// The HTTP version an attack sends with (FUZ-003, as in the Repeater).
+public enum FuzzHTTPVersion: String, Sendable, Hashable, Codable, CaseIterable {
+    /// Negotiate via ALPN (HTTP/1.1 for plaintext).
+    case auto
+    /// Always HTTP/1.1.
+    case http1_1
+    /// HTTP/2 via ALPN.
+    case http2
+    /// Cleartext HTTP/2 with prior knowledge (h2c).
+    case http2PriorKnowledge
+
+    /// The engine's preference.
+    public var preference: HTTPVersionPreference {
+        switch self {
+        case .auto: .auto
+        case .http1_1: .http1_1
+        case .http2: .http2
+        case .http2PriorKnowledge: .http2PriorKnowledge
+        }
+    }
+}
+
 /// Attack settings (FUZ-030, FUZ-031).
 public struct FuzzSettings: Sendable, Hashable, Codable {
+    /// HTTP version (FUZ-003).
+    public var httpVersion = FuzzHTTPVersion.auto
     /// Parallel requests.
     public var concurrency = 10
     /// Cap on requests per second (nil: none).
@@ -37,6 +61,29 @@ public struct FuzzSettings: Sendable, Hashable, Codable {
 
     /// Defaults.
     public init() {}
+
+    /// Missing keys take their defaults, so attacks saved by an older build still open (FUZ-026).
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = FuzzSettings()
+        httpVersion =
+            try c.decodeIfPresent(FuzzHTTPVersion.self, forKey: .httpVersion) ?? defaults.httpVersion
+        concurrency = try c.decodeIfPresent(Int.self, forKey: .concurrency) ?? defaults.concurrency
+        requestsPerSecond = try c.decodeIfPresent(Double.self, forKey: .requestsPerSecond)
+        delayMs = try c.decodeIfPresent(Int.self, forKey: .delayMs) ?? defaults.delayMs
+        delayJitterMs = try c.decodeIfPresent(Int.self, forKey: .delayJitterMs) ?? defaults.delayJitterMs
+        retries = try c.decodeIfPresent(Int.self, forKey: .retries) ?? defaults.retries
+        stopOnGrepMatch =
+            try c.decodeIfPresent(Bool.self, forKey: .stopOnGrepMatch) ?? defaults.stopOnGrepMatch
+        stopAfterErrors = try c.decodeIfPresent(Int.self, forKey: .stopAfterErrors)
+        updateContentLength =
+            try c.decodeIfPresent(Bool.self, forKey: .updateContentLength) ?? defaults.updateContentLength
+        followRedirects =
+            try c.decodeIfPresent(Bool.self, forKey: .followRedirects) ?? defaults.followRedirects
+        timeoutSeconds = try c.decodeIfPresent(Int.self, forKey: .timeoutSeconds) ?? defaults.timeoutSeconds
+        transformTags = try c.decodeIfPresent(Bool.self, forKey: .transformTags) ?? defaults.transformTags
+        marker = try c.decodeIfPresent(String.self, forKey: .marker) ?? defaults.marker
+    }
 }
 
 /// Everything an attack needs (saved with the project, FUZ-026).
@@ -280,6 +327,7 @@ public actor FuzzAttack {
     nonisolated func lane(_ continuation: AsyncStream<FuzzEvent>.Continuation) async {
         let settings = config.settings
         var options = SendOptions(recordAs: .fuzzer)
+        options.httpVersion = settings.httpVersion.preference
         options.updateContentLength = settings.updateContentLength
         options.timeouts.total = .seconds(settings.timeoutSeconds)
         if settings.followRedirects { options.followRedirects = RedirectPolicy(mode: .onSite) }
@@ -360,4 +408,9 @@ public func fuzzResultsCSV(_ results: [FuzzResult], config: FuzzAttackConfig) ->
         lines.append(fields.map(quote).joined(separator: ","))
     }
     return lines.joined(separator: "\r\n") + "\r\n"
+}
+
+extension FuzzResult: Identifiable {
+    /// The row's sequence number.
+    public var id: Int { seq }
 }

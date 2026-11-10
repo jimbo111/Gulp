@@ -538,7 +538,7 @@ struct SiteMapServiceTests {
         try await reopened.close()
     }
 
-    @Test("CMP-001 / DEC-004: Send to Comparer adds requests or responses; Send to Decoder sets its input")
+    @Test("CMP-001 / DEC-004 / F07: Send to Comparer, Decoder and Fuzzer feed the inbox")
     func test_CMP001_inbox() async throws {
         let environment = isolatedEnvironment()
         let session = try await open(environment, "inbox")
@@ -563,6 +563,11 @@ struct SiteMapServiceTests {
         try await session.sendToDecoder(first, part: .request)
         #expect(await iterator.next() == .decoder)
         #expect(await session.inbox.decoderInput == request.bytes.rawBytes)
+        try await session.sendToFuzzer(first)
+        #expect(await iterator.next() == .fuzzer)
+        let fuzzerInput = await session.inbox.fuzzerInput
+        #expect(fuzzerInput?.request == request.bytes.rawBytes)
+        #expect(fuzzerInput?.target == HTTPTarget(scheme: .http, host: "lab"))
         await session.inbox.removeFromComparer([added[0].id])
         #expect(await session.inbox.comparerItems.count == 1)
         try await session.close()

@@ -13,6 +13,7 @@ final class FakeEngine: HTTPEngine, @unchecked Sendable {
     private let lock = NSLock()
     private var calls = 0
     private var requests: [String] = []
+    private var versions: [HTTPVersionPreference] = []
     let reply: @Sendable (String, Int) -> (status: Int, body: String)?
 
     init(reply: @escaping @Sendable (String, Int) -> (status: Int, body: String)?) {
@@ -21,12 +22,14 @@ final class FakeEngine: HTTPEngine, @unchecked Sendable {
 
     var sendCount: Int { lock.withLock { calls } }
     var sent: [String] { lock.withLock { requests } }
+    var sentVersions: [HTTPVersionPreference] { lock.withLock { versions } }
 
     func send(_ request: RawRequest, to target: HTTPTarget, options: SendOptions) async -> ExchangeResult {
         let text = request.bytes.string()
         let call = lock.withLock {
             calls += 1
             requests.append(text)
+            versions.append(options.httpVersion)
             return calls
         }
         var exchange = Exchange(
@@ -109,6 +112,20 @@ struct FuzzAttackTests {
             hits.count == 1 && hits.first?.payloads == ["alice", "7"]
                 && hits.first?.findings.matches == [false])
         #expect(results.filter { $0.findings.matches == [true] }.count == 99)
+    }
+
+    @Test("FUZ-003: the attack's HTTP version reaches the engine; old saved settings still decode")
+    func test_FUZ003_httpVersion() async throws {
+        let engine = FakeEngine { _, _ in (200, "ok") }
+        var settings = FuzzSettings()
+        settings.httpVersion = .http2
+        let attack = try FuzzAttack(
+            config: config("GET /§a§ HTTP/1.1\r\n\r\n", .sniper, [PayloadSet(.null(count: 3))], settings),
+            engine: engine, inScope: nil)
+        _ = await collect(attack)
+        #expect(engine.sentVersions == [.http2, .http2, .http2])
+        let old = try JSONDecoder().decode(FuzzSettings.self, from: Data(#"{"concurrency": 4}"#.utf8))
+        #expect(old.concurrency == 4 && old.httpVersion == .auto && old.marker == "§")
     }
 
     @Test("FUZ-030: the requests-per-second cap is honoured; delays apply")

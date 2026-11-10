@@ -18,6 +18,7 @@ struct Fuzz: AsyncParsableCommand {
     @Option(help: "Request file with §…§ positions.") var raw: String
     @Option(help: "Where to send, e.g. http://127.0.0.1:8088.") var target: String
     @Option(help: "sniper, battering-ram, pitchfork or cluster-bomb.") var attack = "sniper"
+    @Option(help: "auto, 1.1, 2 or h2c.") var httpVersion = "auto"
     @Option(
         help: """
             A payload set (repeatable, in position order): list:a,b,c | file:PATH | numbers:FROM-TO[:STEP] | \
@@ -63,6 +64,13 @@ struct Fuzz: AsyncParsableCommand {
             sets[index - 1].processors.append(try Self.parseProcessor(parts[1]))
         }
         var settings = FuzzSettings()
+        switch httpVersion {
+        case "auto": settings.httpVersion = .auto
+        case "1.1": settings.httpVersion = .http1_1
+        case "2": settings.httpVersion = .http2
+        case "h2c": settings.httpVersion = .http2PriorKnowledge
+        default: throw ValidationError("Unknown --http-version \(httpVersion)")
+        }
         settings.concurrency = concurrency
         settings.requestsPerSecond = rps
         settings.delayMs = delay

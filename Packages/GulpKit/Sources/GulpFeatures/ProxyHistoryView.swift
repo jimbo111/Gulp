@@ -17,6 +17,8 @@ public struct ProxyHistoryView: View {
     /// Send to Comparer / Decoder (CMP-001, DEC-004), when the view knows the session.
     var sendToComparer: (@MainActor ([ExchangeID]) -> Void)?
     var sendToDecoder: (@MainActor (ExchangeID) -> Void)?
+    /// Send to Fuzzer (F07).
+    var sendToFuzzer: (@MainActor (ExchangeID) -> Void)?
     /// Built once when the view appears: `View.init` runs on every parent re-render, and a model
     /// owns an event subscription and runs queries.
     @State private var model: HistoryModel?
@@ -51,6 +53,7 @@ public struct ProxyHistoryView: View {
                     created.sendToRepeater = sendToRepeater
                     created.sendToComparer = sendToComparer
                     created.sendToDecoder = sendToDecoder
+                    created.sendToFuzzer = sendToFuzzer
                     model = created
                 }
         }
@@ -404,6 +407,7 @@ public struct SessionHistoryView: View {
         }
         view.sendToComparer = { ids in Task { try? await session.sendToComparer(ids, part: .response) } }
         view.sendToDecoder = { id in Task { try? await session.sendToDecoder(id, part: .request) } }
+        view.sendToFuzzer = { id in Task { try? await session.sendToFuzzer(id) } }
         return view
     }
 

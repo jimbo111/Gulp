@@ -28,6 +28,8 @@ public final class HistoryModel {
     @ObservationIgnored public var sendToComparer: (@MainActor ([ExchangeID]) -> Void)?
     /// "Send to Decoder" (F12 DEC-004): the first selected row's request.
     @ObservationIgnored public var sendToDecoder: (@MainActor (ExchangeID) -> Void)?
+    /// "Send to Fuzzer" (F07): the first selected row's request.
+    @ObservationIgnored public var sendToFuzzer: (@MainActor (ExchangeID) -> Void)?
     /// Keep the newest row in view as traffic arrives (HIS-002).
     public var autoScroll = true
     /// Quick filters (HIS-006).

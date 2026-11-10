@@ -139,7 +139,7 @@ definitions, and letting an AI agent read the project and send a request, are da
 - [ ] All P0/P1 of F12 (including Transform Tags in Repeater and the **JWT Workbench**, ADV-010…ADV-013, moved from F23) and F13.
 - **DoD:** A Base64 → URL → Gzip chain decodes correctly; Smart Decode solves the fixture set; Comparer word-diffs two 1 MB responses in < 1 s; forged `alg:none` and RS→HS tokens are accepted by VulnLab `/api/me` and rejected by `/safe/api/me`, and a weak HMAC secret is brute-forced (F12 test 5).
 
-### M8 — Fuzzer (with content discovery)
+### M8 — Fuzzer (with content discovery) — implemented; awaiting macOS CI (see PROGRESS)
 - [ ] All P0/P1 of F07 §2.1–§2.5, including **content discovery** (ETL-003, moved from F17), except Turbo mode (optional, finish it last within this milestone) and except FUZ-025 (the OAST result column), which needs Beacon and is finished in M11a. (§2.6 WebSocket fuzzing is post-1.0, M22.)
 - **DoD:** A Cartesian attack with 2 positions × 100 payloads runs at ≥ 1,000 req/s against VulnLab; grep-extract pulls the CSRF token from every response; "Discover content" finds VulnLab's hidden `/admin` and backup files (F07 test 6).
 

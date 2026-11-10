@@ -40,6 +40,25 @@ public enum InboxTool: Sendable, Equatable {
     case comparer
     /// The Decoder.
     case decoder
+    /// The Fuzzer.
+    case fuzzer
+}
+
+/// A request sent to the Fuzzer (F07): the base request and where it goes.
+public struct FuzzerInput: Sendable, Hashable {
+    /// Distinguishes two sends of the same request.
+    public var id: UUID
+    /// The request bytes (no § markers yet).
+    public var request: [UInt8]
+    /// Where it was sent.
+    public var target: HTTPTarget
+
+    /// An input.
+    public init(id: UUID = UUID(), request: [UInt8], target: HTTPTarget) {
+        self.id = id
+        self.request = request
+        self.target = target
+    }
 }
 
 /// The Comparer's items and the Decoder's input for one project session.
@@ -48,6 +67,8 @@ public actor ToolInbox {
     public private(set) var comparerItems: [ComparerItem] = []
     /// The Decoder's input (the last thing sent to it).
     public private(set) var decoderInput: [UInt8] = []
+    /// The Fuzzer's base request (the last thing sent to it).
+    public private(set) var fuzzerInput: FuzzerInput?
     /// At most this many Comparer items are kept (the oldest drop off).
     public static let maxItems = 100
     private var watchers: [UUID: AsyncStream<InboxTool>.Continuation] = [:]
@@ -89,6 +110,12 @@ public actor ToolInbox {
         announce(.decoder)
     }
 
+    /// Put a request in the Fuzzer.
+    public func sendToFuzzer(_ input: FuzzerInput) {
+        fuzzerInput = input
+        announce(.fuzzer)
+    }
+
     private func announce(_ tool: InboxTool) {
         for watcher in watchers.values { watcher.yield(tool) }
     }
@@ -122,5 +149,12 @@ extension ProjectSession {
         let bytes =
             part == .request ? exchange.request.bytes.rawBytes : exchange.response?.wireBytes.rawBytes ?? []
         await inbox.sendToDecoder(bytes)
+    }
+
+    /// Send an exchange's request to the Fuzzer (F07), where its parameter values can be auto-marked.
+    public func sendToFuzzer(_ id: ExchangeID) async throws {
+        guard let exchange = try await store.exchange(id: id) else { return }
+        await inbox.sendToFuzzer(
+            FuzzerInput(request: exchange.request.bytes.rawBytes, target: exchange.target))
     }
 }
