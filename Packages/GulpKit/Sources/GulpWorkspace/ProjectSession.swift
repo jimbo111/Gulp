@@ -231,6 +231,8 @@ public actor ProjectSession {
     public nonisolated let siteMap: SiteMapService
     /// The coverage index (F04 JRN-001).
     public nonisolated let coverage: CoverageService
+    /// The live passive scanner (F08 §4).
+    public nonisolated let passiveScan: PassiveScanService
     private let currentStore: CurrentStore
 
     private init(
@@ -268,6 +270,9 @@ public actor ProjectSession {
             scope: { await scopeGuard.current })
         self.siteMap = SiteMapService { await currentStore.store }
         self.coverage = CoverageService { await currentStore.store }
+        self.passiveScan = PassiveScanService(
+            store: { await currentStore.store }, config: { settings.get(PassiveScanConfig.self) },
+            scopeIsEmpty: { await scopeGuard.current.rules.isEmpty }, events: events)
     }
 
     /// Apply the stored intercept settings to the queue (call after opening or changing them).
@@ -348,6 +353,7 @@ public actor ProjectSession {
         if let scope = try? await store.loadScope() { await session.scopeGuard.set(scope) }
         await session.applyProxyScope()
         await session.startSiteMap()
+        await session.startPassiveScan()
         return session
     }
 
@@ -444,6 +450,7 @@ public actor ProjectSession {
         await repeater.flush()
         await proxy.stopAll()
         await http.shutdown()
+        await passiveScan.drain()  // headless runs (gulp-cli proxy) finish scanning what they recorded
         try await store.close()
         if isTemporary && !keepTemporary { Self.removeDatabaseFiles(store.url) }
     }

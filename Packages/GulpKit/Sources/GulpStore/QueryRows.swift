@@ -100,6 +100,14 @@ extension ProjectStore {
         }
     }
 
+    /// The highest exchange id (0 when there are none).
+    public func newestExchangeID() async throws -> ExchangeID {
+        await writer.flush()
+        return try await pool.read { db in
+            try ExchangeID.fetchOne(db, sql: "SELECT COALESCE(MAX(id), 0) FROM exchanges") ?? 0
+        }
+    }
+
     /// The number of exchanges matching `filter` (a residual makes this a scan).
     public func count(matching filter: HistoryFilter, context: GulpQLContext = GulpQLContext()) async throws
         -> Int

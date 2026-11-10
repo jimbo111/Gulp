@@ -28,7 +28,7 @@ enum AuthLab {
             <!doctype html><html><head><title>Login</title></head><body>
             <form method="post" action="/login">
             <input type="hidden" name="csrf" value="\(csrf)">
-            <input name="username"><input name="password" type="password"><button>Sign in</button>
+            <input name="username"><input name="password" type="password" autocomplete="current-password"><button>Sign in</button>
             </form></body></html>
 
             """
@@ -61,7 +61,9 @@ enum AuthLab {
         return VulnReply(
             bytes: VulnLab.response(
                 302, body: [],
-                headers: ["Location: /account", "Set-Cookie: session=\(session); Path=/; HttpOnly"]))
+                headers: [
+                    "Location: /account", "Set-Cookie: session=\(session); Path=/; HttpOnly; SameSite=Lax",
+                ]))
     }
 
     static func cookie(_ request: RawRequest, _ name: String) -> String? {
@@ -95,7 +97,8 @@ enum AuthLab {
         switch path {
         case "/index.html":
             return VulnReply(
-                bytes: VulnLab.response(200, body: Array(VulnLab.homePage.utf8), type: "text/html"))
+                bytes: VulnLab.response(
+                    200, body: Array(VulnLab.homePage.utf8), type: "text/html; charset=utf-8"))
         case "/index.html.bak":
             return text(200, "<!-- old home page, 2024 -->\n<a href=\"/admin\">Admin</a>\n")
         case "/backup.zip":

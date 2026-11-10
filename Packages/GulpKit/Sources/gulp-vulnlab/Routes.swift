@@ -216,6 +216,7 @@ enum VulnLab {
             return VulnReply(bytes: interim + response(200, body: Array("continued\n".utf8)))
         default:
             if let found = AuthLab.discovery(path) { return found }
+            if let planted = PassiveLab.respond(path, query, request) { return planted }
             if path.hasPrefix("/xss/") || path.hasPrefix("/safe/xss/"), let page = XSSLab.respond(path, query)
             {
                 return page
@@ -248,12 +249,37 @@ enum VulnLab {
         return VulnReply(bytes: response(code, body: Array("status \(code)\n".utf8)))
     }
 
-    /// A complete response with a correct Content-Length.
+    /// The security baseline every response carries (doc 06 §3, "determinism prerequisites"), so a
+    /// passive issue fires only where a route deliberately leaves something out (`omit`).
+    static let baseline = [
+        "Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; "
+            + "frame-ancestors 'self'",
+        "X-Content-Type-Options: nosniff", "X-Frame-Options: SAMEORIGIN",
+        "Referrer-Policy: strict-origin-when-cross-origin",
+        "Permissions-Policy: camera=(), microphone=(), geolocation=()",
+        "Strict-Transport-Security: max-age=31536000", "Cache-Control: no-store",
+    ]
+
+    /// A complete response with a correct Content-Length and the security baseline. `headers` with
+    /// the same name as a baseline header replace it; `omit` drops baseline headers (lowercased names,
+    /// or `content-type`).
     static func response(
-        _ code: Int, body: [UInt8], type: String = "text/plain; charset=utf-8", headers: [String] = []
+        _ code: Int, body: [UInt8], type: String = "text/plain; charset=utf-8", headers: [String] = [],
+        omit: Set<String> = []
     ) -> [UInt8] {
-        var head = "HTTP/1.1 \(code) \(reason(code))\r\nServer: gulp-vulnlab/\(version)\r\n"
-        if !body.isEmpty { head += "Content-Type: \(type)\r\n" }
+        // No version in the banner: a version is a planted issue (`/headers/version`), not the default.
+        var head = "HTTP/1.1 \(code) \(reason(code))\r\n"
+        func name(_ header: String) -> String {
+            header.split(separator: ":").first.map { $0.lowercased() } ?? ""
+        }
+        let given = Set(headers.map(name))
+        if !given.contains("server") { head += "Server: gulp-vulnlab\r\n" }
+        for header in baseline where !omit.contains(name(header)) && !given.contains(name(header)) {
+            head += "\(header)\r\n"
+        }
+        if !body.isEmpty, !omit.contains("content-type"), !given.contains("content-type") {
+            head += "Content-Type: \(type)\r\n"
+        }
         for header in headers { head += "\(header)\r\n" }
         head += "Content-Length: \(body.count)\r\n\r\n"
         return Array(head.utf8) + body
@@ -266,6 +292,7 @@ enum VulnLab {
         case 200: "OK"
         case 204: "No Content"
         case 302: "Found"
+        case 403: "Forbidden"
         case 304: "Not Modified"
         case 400: "Bad Request"
         case 404: "Not Found"
