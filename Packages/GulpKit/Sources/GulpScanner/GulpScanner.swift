@@ -1,13 +1,9 @@
-// GulpScanner — Passive and active checks, insertion points, issues and recipes.
-// Placeholder for M0 scaffolding. Real types land in later milestones
-// (see docs/03-roadmap.md and the feature specs in docs/features).
+// GulpScanner — the Scanner (F08): issue definitions (Definitions.swift), passive checks over recorded
+// traffic (PassiveMessage.swift, PassiveChecks.swift; M10a). Active checks, insertion points and
+// recipes arrive in M11b/M11c/M15.
 
 /// Namespace and module marker for the `GulpScanner` module.
-///
-/// This is a scaffolding stand-in so the package graph builds on macOS and
-/// Linux from milestone M0 onward. It is replaced by real types as features
-/// are implemented; do not rely on it at runtime.
 public enum GulpScanner {
-    /// The module's name, used only in diagnostics until real types exist.
+    /// The module's name, used in diagnostics.
     public static let moduleName = "GulpScanner"
 }
