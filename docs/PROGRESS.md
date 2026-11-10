@@ -14,9 +14,9 @@ order; within a milestone, do P0 first.
   launched by the Gulp Browser launcher through the proxy loads `https://localhost:8443` with no
   certificate interstitial (SPKI pin of the Gulp CA) and the request is in history. M1–M4a DoD
   scripts still pass in the same run.
-- **Active milestone**: the **daily-driver beta** release gate (after M9), then **M10a — Passive
-  scanner + issue model**; M5, M6a, M6b, M7, M8 and M9 are implemented and await the macOS CI run
-  (see their status below).
+- **Active milestone**: **M10b — gRPC & protobuf** next (the **daily-driver beta** release gate
+  after M9 still needs macOS for its release work); M5…M10a are implemented and await the macOS CI
+  run (see their status below).
 - **Branching**: `main` holds merged milestones (PRs jimbo111/Gulp#1 M0–M2, #2 review fixes,
   #3 M3a, then M3b + the feature-review adoption). Work happens on
   the session branch and is merged by PR once CI is green.
@@ -198,11 +198,28 @@ order; within a milestone, do P0 first.
   insertion points (M11) and Fuzzer result filters (HIS-027's remaining users); HIS-028/045/054
   (P2); NB-005 (M10a), NB-007 (M16a), NB-008/009 (P2); the coverage view (JRN-002, M16b); Compact
   must treat Notebook blobs as live; the Logger keeps the store it opened with across Save As.
+- **M10a status — implementation complete; macOS verification pending** (2026-11-11):
+  - Local gate (clean build): **338/338 tests**, **M1…M10a DoD scripts PASS**, lint clean. The M10a
+    DoD (`Scripts/m10a-dod.sh`, also in CI): curl browses all 63 routes of
+    `Tests/Fixtures/vulnlab-issues.json` (HTTP and, through TLS interception, HTTPS) via
+    `gulp-cli proxy`, whose live passive scanner records the issues; `gulp-cli issues verify` finds
+    exactly the 35 expected (route, type) pairs and nothing else (none on `/safe/*`); a second browse
+    adds no issue, only evidence; the CORS issue's markers highlight the reflected `Origin` in the
+    request and response; the SARIF export carries every issue.
+  - Done in M10a: SCN-001…007 (SCN-005 as the Dashboard view; SCN-007 as JSON + SARIF), the F08
+    §3.1 passive catalog (32 definitions incl. every [P0]), live passive scanning (F08 §4), NB-005
+    (link + promote Notebook items); `gulp-cli issues list|show|set|export|verify|definitions`,
+    `gulp-cli scan passive`.
+  - **Not verified (no macOS here):** `GulpFeatures/IssuesView.swift` (Dashboard tree, detail with
+    highlighted evidence, filters, bulk status, passive-scan menu), `App/ProjectWindow` (Dashboard).
+- **M10a carry-overs**: issue HTML export (F19, M16a); a "known issues" browser UI (SCN-006 — the
+  catalog and `gulp-cli issues definitions` exist); TLS certificate-expiry observations (F02 data
+  doesn't carry certificate dates yet); WebSocket passive checks (post-1.0, §3.6); Notebook ↔ issue
+  promotion in the macOS views (the service exists).
 - **Next action**: when CI minutes return, run CI on the branch head, fix any macOS compile issues
-  in the new SwiftUI code (M5 Repeater, M6a Target, M6b menus, M7 tools, M8 Fuzzer, M9 views), then
-  open the M5…M9 PRs and merge. That completes the code for the **daily-driver beta** gate; its
-  release work (signed + notarized build, real testers) needs macOS. Meanwhile continue with M10a
-  (passive scanner + issue model) on the Linux-testable core.
+  in the new SwiftUI code (M5…M10a views), then open the M5…M10a PRs and merge; the daily-driver
+  beta's release work (signed + notarized build, real testers) needs macOS. Meanwhile continue with
+  M10b (gRPC & protobuf) on the Linux-testable core.
 - **Waiting on the owner**: GitHub Actions minutes (CI is the only macOS build available).
 - Earlier waiting items: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
   **adopted on 2026-11-08** (product decision #7 in `docs/07-decisions.md`) and applied to the specs:
@@ -307,7 +324,7 @@ for behavior.
 - [ ] M8 — Fuzzer (with content discovery) — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M9 — Logger, GulpQL, search, Notebook, coverage index — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] **Daily-driver beta** — release gate after M9 (signed + notarized build to real testers)
-- [ ] M10a — Passive scanner + issue model
+- [ ] M10a — Passive scanner + issue model — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M10b — gRPC & protobuf (F33)
 - [ ] M11a — Crawler (static), Beacon client + dev Beacon, shared limiter + panic stop
 - [ ] M11b — Active scan engine + P0 checks
@@ -558,6 +575,13 @@ for behavior.
   `Scripts/m9-dod.sh` PASS. Fixed on the way: SQLite scanned instead of using `ix_ex_status` for a
   one-sided range (now two-sided); VulnLab's home page linked `/xss/html`, which didn't exist;
   GulpFeatures didn't declare its GulpFuzzer dependency (M8).
+- 2026-11-11 — **M10a implemented** (local Linux gate; macOS view unverified): GulpCore issue model;
+  GulpStore issues (dedup upsert keeping triage, evidence capped, overrides, notes, filters,
+  Notebook links; schema v6); GulpScanner definitions catalog and passive checks; live passive
+  scanning from a persisted cursor; JSON/SARIF export; manifest verification; VulnLab security
+  baseline + PassiveLab planted routes with /safe/ twins + `vulnlab-issues.json`; Dashboard issues
+  view; `gulp-cli issues|scan`; `Scripts/m10a-dod.sh` PASS. Fixed on the way: deleting a History row
+  (or replacing a streaming one) failed on foreign keys from rows without ON DELETE.
 
 
 ## How to pick up work (reminder)

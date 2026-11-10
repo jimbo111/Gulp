@@ -123,6 +123,8 @@ struct ProjectWindow: View {
             RepeaterView(session: session)
         case .fuzzer:
             FuzzerView(session: session)
+        case .dashboard:
+            IssuesDashboard(session: session)
         case .logger:
             LoggerView(session: session)
         case .notebook:

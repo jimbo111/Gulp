@@ -112,4 +112,53 @@ struct PassiveScanTests {
         #expect(try await session.store.issues().count == before)
         try await session.close()
     }
+
+    @Test(
+        "SCN-007 / NB-005: JSON and SARIF exports; a Notebook item promoted to an issue; manifest verification"
+    )
+    func test_SCN007_exportPromoteVerify() async throws {
+        let session = try await open(isolatedEnvironment(), "export")
+        let id = await record(session, "/a")
+        await session.passiveScan.drain()
+        let count = try await session.store.issues().count
+        let json =
+            try JSONSerialization.jsonObject(with: try await session.exportIssues(.json)) as? [String: Any]
+        let entries = json?["issues"] as? [[String: Any]]
+        #expect(entries?.count == count && (entries?.first?["evidence"] as? [Any])?.isEmpty == false)
+        let sarif =
+            try JSONSerialization.jsonObject(with: try await session.exportIssues(.sarif)) as? [String: Any]
+        let run = (sarif?["runs"] as? [[String: Any]])?.first
+        #expect(sarif?["version"] as? String == "2.1.0" && (run?["results"] as? [Any])?.count == count)
+        let rules =
+            ((run?["tool"] as? [String: Any])?["driver"] as? [String: Any])?["rules"] as? [[String: Any]]
+        #expect(
+            rules?.allSatisfy {
+                let properties = $0["properties"] as? [String: Any]
+                return properties?["security-severity"] is String
+                    && properties?["tags"] as? [String] == ["security"]
+            } == true)
+
+        let item = try #require(
+            try await session.addToNotebook(id, title: "IDOR on /a", note: "Other users' data"))
+        let promoted = try #require(try await session.promoteNotebookItem(item.id, severity: .high))
+        let issue = try #require(try await session.store.issue(promoted))
+        #expect(issue.typeID == "manual.finding" && issue.name == "IDOR on /a" && issue.severity == .high)
+        #expect(issue.detail == "Other users' data" && issue.path == "/a")
+        #expect(try await session.store.notebookIssue(item.id) == promoted)
+
+        let manifest = [
+            IssueExpectation(
+                scheme: "http", path: "/a",
+                expect: try await session.store.issues().filter { $0.typeID != "manual.finding" }.map(
+                    \.typeID)
+                    + ["manual.finding"])
+        ]
+        let pass = try await session.verifyIssues(manifest, bases: ["http": "http://lab"])
+        #expect(pass.passed && pass.routes == 1)
+        let fail = try await session.verifyIssues(
+            [IssueExpectation(scheme: "http", path: "/a", expect: ["passive.cors.wildcard"])],
+            bases: ["http": "http://lab"])
+        #expect(fail.missing == ["http://lab:80/a passive.cors.wildcard"] && !fail.unexpected.isEmpty)
+        try await session.close()
+    }
 }

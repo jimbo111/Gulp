@@ -28,7 +28,7 @@ public struct IssueDefinition: Sendable, Hashable, Identifiable {
 /// The catalog (SCN-006).
 public enum IssueDefinitions {
     /// Every built-in definition.
-    public static let all: [IssueDefinition] = headers + cookies + disclosure + input + other
+    public static let all: [IssueDefinition] = headers + cookies + disclosure + input + other + manual
 
     static let byID: [String: IssueDefinition] = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
 
@@ -194,6 +194,13 @@ public enum IssueDefinitions {
             .certain,
             "A password field is submitted over plain HTTP, readable by anyone on the network path.",
             "Serve the form and its target over HTTPS only."),
+    ]
+
+    /// Findings written by a person (a Notebook item promoted to an issue, F14 NB-005).
+    static let manual: [IssueDefinition] = [
+        def(
+            "manual.finding", "Manual finding", "Manual", .medium, .firm,
+            "Found by hand during testing; see the detail and the evidence.", "See the detail.")
     ]
 
     static let other: [IssueDefinition] = [

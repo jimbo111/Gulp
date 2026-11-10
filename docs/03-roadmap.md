@@ -168,7 +168,7 @@ discovery, Logger, GulpQL, search and Notebook.
 
 ## Phase C — Automation (M10a–M13b)
 
-### M10a — Passive scanner and the issue model
+### M10a — Passive scanner and the issue model — implemented; awaiting macOS CI (see PROGRESS)
 - [ ] Issue model, issue UI (dashboard issue list, the issue detail with highlighted evidence), dedup (SCN-001…SCN-007).
 - [ ] Passive checks catalog (F08 §3.1).
 - [ ] Live passive scanning of proxy traffic as a background task.
