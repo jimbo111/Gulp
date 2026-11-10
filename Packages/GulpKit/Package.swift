@@ -72,7 +72,7 @@ let package = Package(
         .target(
             name: "GulpStore",
             dependencies: [
-                "GulpCore", "CZlib", .product(name: "GRDB", package: "GRDB.swift"),
+                "GulpCore", "GulpQuery", "CZlib", .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "Crypto", package: "swift-crypto"),
             ]),
         .target(
@@ -179,7 +179,7 @@ let package = Package(
         .testTarget(name: "GulpCodecTests", dependencies: ["GulpCodec", "GulpCore"]),
         .testTarget(name: "GulpQueryTests", dependencies: ["GulpQuery", "GulpCore"]),
         .testTarget(name: "GulpDiffTests", dependencies: ["GulpDiff"]),
-        .testTarget(name: "GulpStoreTests", dependencies: ["GulpStore"]),
+        .testTarget(name: "GulpStoreTests", dependencies: ["GulpStore", "GulpQuery"]),
         .testTarget(
             name: "GulpTLSTests",
             dependencies: ["GulpTLS"] + nioCore + [
@@ -220,7 +220,9 @@ let package = Package(
         .testTarget(name: "GulpFeaturesTests", dependencies: ["GulpFeatures"]),
         .testTarget(
             name: "GulpWorkspaceTests",
-            dependencies: ["GulpWorkspace", "GulpTLS", "GulpRepeater", "GulpCodec", "GulpFuzzer"]),
+            dependencies: [
+                "GulpWorkspace", "GulpTLS", "GulpRepeater", "GulpCodec", "GulpFuzzer", "GulpQuery",
+            ]),
         .testTarget(
             name: "GulpAutomationTests", dependencies: ["GulpAutomation", "GulpWorkspace", "GulpStore"]),
         .testTarget(name: "IntegrationTests", dependencies: ["GulpWorkspace"]),

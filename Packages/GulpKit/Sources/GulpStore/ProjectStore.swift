@@ -49,6 +49,7 @@ public final class ProjectStore: Sendable {
         var configuration = Configuration()
         configuration.prepareDatabase { db in
             try db.execute(sql: "PRAGMA synchronous = NORMAL")
+            db.add(function: StoreFunctions.regexp)  // GulpQL regex push-down (HIS-024)
         }
         let pool = try DatabasePool(path: url.path, configuration: configuration)
         // A file written by a newer Gulp has migrations this build doesn't know: refuse, don't guess.
@@ -85,6 +86,7 @@ public final class ProjectStore: Sendable {
     /// must not be used afterwards.
     public func close() async throws {
         await writer.flush()
+        try? await updateStatistics()  // so the next open plans GulpQL queries well (HIS-024)
         try await pool.writeWithoutTransaction { db in
             try db.checkpoint(.truncate)
         }

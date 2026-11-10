@@ -36,11 +36,18 @@ enum Schema {
                     action TEXT NOT NULL, target TEXT, outcome TEXT NOT NULL, detail TEXT)
                     """)
         }
+        // F05 M9: hosts are stored lowercase so GulpQL host equality uses the binary index (DNS names
+        // are case-insensitive; the raw bytes keep what was sent); Notebook notes are looked up by
+        // exchange (GulpQL `notes`, F14).
+        migrator.registerMigration("v5_gulpql") { db in
+            try db.execute(sql: "UPDATE exchanges SET host = lower(host) WHERE host != lower(host)")
+            try db.execute(sql: "CREATE INDEX ix_nb_exchange ON notebook_items(exchange_id)")
+        }
         return migrator
     }
 
     /// The current schema version written to `meta.schema_version`.
-    static let version = 4
+    static let version = 5
 
     /// Schema v1, generated from the SQL block in doc 04 §4 (comments stripped, lines wrapped).
     static let v1 = """

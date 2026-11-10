@@ -181,7 +181,13 @@ enum Lowering {
         case .less, .lessOrEqual, .greater, .greaterOrEqual:
             // Text ordering (and number-like text) stays in memory, where it compares numerically.
             guard !text, let b = bind(value) else { return nil }
-            return ("\(c) \(op.rawValue) ?", [b])
+            // Written as a two-sided range (the open side closed at the Int64 limit): without STAT4,
+            // SQLite guesses a one-sided range keeps 1/4 of the rows and prefers scanning in id order
+            // over the index; a two-sided range is guessed at 1/64 and uses `ix_ex_status`.
+            if op == .greater || op == .greaterOrEqual {
+                return ("\(c) \(op.rawValue) ? AND \(c) <= ?", [b, .int(Int64.max)])
+            }
+            return ("\(c) >= ? AND \(c) \(op.rawValue) ?", [.int(Int64.min), b])
         case .contains, .startsWith, .endsWith:
             guard text, let t = value.asText else { return nil }
             let escaped = likeEscape(t)

@@ -50,7 +50,7 @@ extension ProjectStore {
                 AND response_blob IS ?
                 """
             var arguments: [(any DatabaseValueConvertible)?] = [
-                requestBlob, target.scheme.rawValue, target.host, target.port, responseBlob,
+                requestBlob, target.scheme.rawValue, target.host.lowercased(), target.port, responseBlob,
             ]
             if let startedAt {
                 sql += " AND abs(created_at - ?) < 0.001"

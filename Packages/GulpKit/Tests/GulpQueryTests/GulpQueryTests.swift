@@ -149,9 +149,9 @@ struct GulpQLTests {
         #expect(both.residual == nil)
         #expect(
             both.sql
-                == "((exchanges.status IS NOT NULL AND exchanges.status >= ?) AND "
+                == "((exchanges.status IS NOT NULL AND exchanges.status >= ? AND exchanges.status <= ?) AND "
                 + "(exchanges.host IS NOT NULL AND gulpql_regexp(?, exchanges.host, ?)))")
-        #expect(both.bindings == [.int(500), .text("api"), .int(1)])
+        #expect(both.bindings == [.int(500), .int(Int64.max), .text("api"), .int(1)])
 
         let mixed = try GulpQL.parse(#"source == Proxy and resp.body contains "x""#).sqlLowering()
         #expect(mixed.sql == "(exchanges.source IS NOT NULL AND exchanges.source = ?)")

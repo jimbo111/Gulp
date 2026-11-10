@@ -122,7 +122,7 @@ enum ExchangeRows {
         let columns: [(String, (any DatabaseValueConvertible)?)] = [
             ("id", exchange.id), ("source", exchange.source.rawValue),
             ("created_at", exchange.timing.start.timeIntervalSince1970), ("scheme", target.scheme.rawValue),
-            ("host", target.host), ("port", target.port), ("ip", target.ipOverride),
+            ("host", target.host.lowercased()), ("port", target.port), ("ip", target.ipOverride),
             ("sni", target.sniOverride),
             ("http_version", exchange.httpVersion.rawValue), ("method", d.method), ("path", d.path),
             ("query", d.query), ("request_blob", requestBlob), ("response_blob", responseBlob),
@@ -181,8 +181,19 @@ enum ExchangeRows {
         let textual = ["text/", "json", "xml", "javascript", "html", "x-www-form-urlencoded"].contains {
             mime.contains($0)
         }
-        let end = textual ? response.bytes.count : response.parsed.headerBlockEnd
-        return searchText(response.bytes[0..<end])
+        let headers = response.bytes[0..<response.parsed.headerBlockEnd]
+        guard textual else { return searchText(headers) }
+        // Index what a reader sees: dechunked and, for gzip/deflate, decompressed (F05 search).
+        var body =
+            response.parsed.dechunkedBody?.rawBytes ?? Array(response.bytes.rawBytes[response.parsed.body])
+        if let encoding = response.headerValue("content-encoding")?.string(),
+            let plain = ContentDecoding.decode(body, encoding: encoding, limit: 262_144)
+        {
+            body = plain
+        }
+        var text = headers.rawBytes
+        text += body
+        return searchText(Bytes(text))
     }
 
     /// Load a full exchange (bytes included).

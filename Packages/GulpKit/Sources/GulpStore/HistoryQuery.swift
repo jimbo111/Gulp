@@ -3,6 +3,7 @@
 
 import GRDB
 import GulpCore
+import GulpQuery
 
 /// The History quick filters (HIS-006). An empty filter matches everything.
 public struct HistoryFilter: Sendable, Hashable {
@@ -24,6 +25,9 @@ public struct HistoryFilter: Sendable, Hashable {
     public var methods: Set<String> = []
     /// Substring matched against host and path.
     public var text: String?
+    /// A GulpQL expression (HIS-020…024). Its push-down part joins this WHERE clause; a residual
+    /// (bodies, headers…) needs `ProjectStore.matchingIDs`, which evaluates it in memory.
+    public var query: GulpQLExpression?
 
     /// Path extensions treated as static assets.
     public static let staticExtensions = [
@@ -72,6 +76,10 @@ public struct HistoryFilter: Sendable, Hashable {
             clauses.append("(host LIKE ? ESCAPE '\\' OR path LIKE ? ESCAPE '\\')")
             let pattern = Self.likeContains(text).databaseValue
             arguments += [pattern, pattern]
+        }
+        if let lowering = query?.sqlLowering(), let sql = lowering.sql {
+            clauses.append(sql)
+            arguments += lowering.bindings.map(\.databaseValue)
         }
         return (clauses.isEmpty ? "1" : clauses.joined(separator: " AND "), arguments)
     }
