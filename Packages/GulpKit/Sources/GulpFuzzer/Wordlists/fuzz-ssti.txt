@@ -1,0 +1,7 @@
+# Gulp bundled wordlist: template injection probes (F07 FUZ-011).
+{{7*7}}
+${7*7}
+<%= 7*7 %>
+#{7*7}
+{{7*'7'}}
+${{7*7}}

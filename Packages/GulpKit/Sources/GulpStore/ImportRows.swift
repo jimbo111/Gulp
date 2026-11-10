@@ -110,3 +110,19 @@ extension ProjectStore {
         }
     }
 }
+
+extension ProjectStore {
+    // F07 ETL-003
+    /// File extensions already seen on a host (to seed content discovery).
+    public func observedExtensions(host: String, port: Int) async throws -> [String] {
+        try await pool.read { db in
+            try String.fetchAll(
+                db,
+                sql: """
+                    SELECT extension FROM exchanges WHERE host = ? COLLATE NOCASE AND port = ? \
+                    AND extension IS NOT NULL GROUP BY extension ORDER BY COUNT(*) DESC LIMIT 20
+                    """,
+                arguments: [host, port])
+        }
+    }
+}

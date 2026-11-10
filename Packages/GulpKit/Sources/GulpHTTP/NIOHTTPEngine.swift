@@ -331,7 +331,7 @@ public final class NIOHTTPEngine: HTTPEngine {
         // HIS-007: a streamed response is recorded as pending when its first bytes arrive, updated
         // with what arrived so far as it grows, then replaced in place when it completes.
         let streamRecord = StreamRecord(start: start)
-        if let forward = options.onResponseBytes, let recorder {
+        if let forward = options.onResponseBytes, let recorder, options.record {
             var pendingExchange = Exchange(
                 source: options.recordAs, target: outgoing.target, request: outgoing.request,
                 clientAddress: options.clientAddress)
@@ -811,7 +811,7 @@ public final class NIOHTTPEngine: HTTPEngine {
             edited: edited)
         exchange.tls = tls
         exchange.httpVersion = httpVersion
-        if let recorder {
+        if let recorder, options.record {
             if let streamedAs {
                 exchange.id = streamedAs
                 await recorder.update(exchange)

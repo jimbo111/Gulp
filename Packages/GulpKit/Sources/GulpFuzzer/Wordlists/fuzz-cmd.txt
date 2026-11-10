@@ -1,0 +1,9 @@
+# Gulp bundled wordlist: command injection metacharacters (F07 FUZ-011).
+;id
+|id
+`id`
+$(id)
+&& id
+|| id
+; sleep 5
+| sleep 5

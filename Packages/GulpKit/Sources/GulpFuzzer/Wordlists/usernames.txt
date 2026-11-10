@@ -1,0 +1,15 @@
+# Gulp bundled wordlist: common usernames (F07 FUZ-011).
+admin
+administrator
+root
+alice
+bob
+test
+user
+guest
+demo
+support
+info
+dev
+operator
+manager

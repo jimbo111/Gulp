@@ -202,6 +202,9 @@ public struct SendOptions: Sendable {
     public var tls = UpstreamTLSSettings()
     /// Upstream proxy override (HTTP-006).
     public var upstreamProxy: UpstreamProxyOverride = .useRules
+    /// Record the exchange (default). Content discovery probes thousands of paths and records only
+    /// the ones it finds (F07 ETL-003).
+    public var record = true
     /// The project's scope, for the `in-scope` redirect mode (F04 TGT-022); without it, `in-scope`
     /// follows nothing off the current host.
     public var scope: ScopeService?

