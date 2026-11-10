@@ -248,6 +248,17 @@ struct InterceptRulesSheet: View {
                 .foregroundStyle(.secondary)
             ConditionList(title: "Requests", conditions: $settings.requestRules)
             ConditionList(title: "Responses", conditions: $settings.responseRules)
+            // PRX-015 / HIS-027: a GulpQL expression replaces the builder's conditions when set.
+            Text("Or write the rule in GulpQL (replaces the conditions above when not empty)")
+                .font(.subheadline)
+            TextField(#"Requests, e.g. req.method == POST and in_scope"#, text: $settings.requestQuery)
+                .font(.system(.body, design: .monospaced))
+                .textFieldStyle(.roundedBorder)
+            TextField(
+                #"Responses, e.g. resp.status >= 500 or resp.body ~ "error""#, text: $settings.responseQuery
+            )
+            .font(.system(.body, design: .monospaced))
+            .textFieldStyle(.roundedBorder)
             ConditionList(
                 title: "WebSocket connections (conditions on the upgrade request)",
                 conditions: $settings.webSocketRules)

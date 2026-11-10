@@ -158,7 +158,9 @@ extension ProjectStore {
     }
 
     /// Rebuild the search index from the stored exchanges (derived data, doc 04 §1), e.g. after an
-    /// upgrade changed what is indexed. Returns the number of rows indexed.
+    /// upgrade changed what is indexed. Reads only the message blobs, and remembers each blob's text
+    /// within a batch (blobs are content-addressed, so repeated messages share one). Returns the
+    /// number of rows indexed.
     @discardableResult
     public func rebuildSearchIndex() async throws -> Int {
         await writer.flush()
@@ -170,21 +172,39 @@ extension ProjectStore {
         while true {
             let after = last
             let done = try await pool.write { db -> (ExchangeID, Int)? in
-                let ids = try ExchangeID.fetchAll(
-                    db, sql: "SELECT id FROM exchanges WHERE id > ? ORDER BY id LIMIT 500", arguments: [after]
-                )
-                guard let tail = ids.last else { return nil }
-                for id in ids {
-                    guard let exchange = try ExchangeRows.load(id, from: db) else { continue }
+                let rows = try Row.fetchAll(
+                    db,
+                    sql: """
+                        SELECT id, method, request_blob, response_blob FROM exchanges WHERE id > ? \
+                        ORDER BY id LIMIT 2000
+                        """,
+                    arguments: [after])
+                guard let tail: ExchangeID = rows.last?["id"] else { return nil }
+                var requestText: [Int64: String] = [:]
+                var responseText: [String: String] = [:]  // keyed by blob id and HEAD-ness
+                for row in rows {
+                    let requestBlob: Int64 = row["request_blob"]
+                    let responseBlob: Int64? = row["response_blob"]
+                    if requestText[requestBlob] == nil {
+                        requestText[requestBlob] = ExchangeRows.searchText(
+                            Bytes(try BlobStore.load(requestBlob, from: db) ?? []))
+                    }
+                    var response: String?
+                    if let responseBlob {
+                        let isHead = (row["method"] as String?) == "HEAD"
+                        let key = "\(responseBlob):\(isHead)"
+                        if responseText[key] == nil, let bytes = try BlobStore.load(responseBlob, from: db) {
+                            responseText[key] = ExchangeRows.responseText(
+                                RawResponse(wire: Bytes(bytes), headRequest: isHead))
+                        }
+                        response = responseText[key]
+                    }
                     try db.execute(
                         sql:
                             "INSERT INTO fts_exchanges (rowid, request_text, response_text) VALUES (?, ?, ?)",
-                        arguments: [
-                            id, ExchangeRows.searchText(exchange.request.bytes),
-                            exchange.response.map(ExchangeRows.responseText),
-                        ])
+                        arguments: [row["id"] as ExchangeID, requestText[requestBlob], response])
                 }
-                return (tail, ids.count)
+                return (tail, rows.count)
             }
             guard let (tail, count) = done else { return total }
             last = tail

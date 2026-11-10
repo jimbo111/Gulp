@@ -6,6 +6,7 @@ import Crypto
 import Foundation
 import GRDB
 import GulpCore
+import GulpQuery
 
 /// One audited agent action (AUT-023).
 public struct AuditEntry: Sendable, Hashable, Codable {
@@ -74,6 +75,9 @@ extension ProjectStore {
         -> [ExchangeID]
     {
         await writer.flush()
+        if filter.query?.sqlLowering().residual != nil {
+            return Array(try await residualIDs(filter: filter, sort: .idAscending).prefix(max(0, limit)))
+        }
         let (clause, arguments) = filter.sql()
         let sql = "SELECT id FROM exchanges WHERE \(clause) ORDER BY id LIMIT ?"
         return try await pool.read { db in

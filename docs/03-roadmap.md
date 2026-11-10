@@ -143,7 +143,7 @@ definitions, and letting an AI agent read the project and send a request, are da
 - [ ] All P0/P1 of F07 §2.1–§2.5, including **content discovery** (ETL-003, moved from F17), except Turbo mode (optional, finish it last within this milestone) and except FUZ-025 (the OAST result column), which needs Beacon and is finished in M11a. (§2.6 WebSocket fuzzing is post-1.0, M22.)
 - **DoD:** A Cartesian attack with 2 positions × 100 payloads runs at ≥ 1,000 req/s against VulnLab; grep-extract pulls the CSRF token from every response; "Discover content" finds VulnLab's hidden `/admin` and backup files (F07 test 6).
 
-### M9 — Logger, GulpQL, search, Notebook, coverage index
+### M9 — Logger, GulpQL, search, Notebook, coverage index — implemented; awaiting macOS CI (see PROGRESS)
 - [ ] GulpQL parser and evaluator, applied to History, Logger, site map and Fuzzer results (HIS-020…HIS-028).
 - [ ] Logger tool showing every tool's traffic (HIS-040…HIS-045).
 - [ ] Global search with FTS5 (HIS-050…HIS-054).

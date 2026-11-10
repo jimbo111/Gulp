@@ -13,6 +13,8 @@ struct ProjectWindow: View {
     @State private var failure: String?
     @State private var selection: Tool? = .proxy
     @State private var showListeners = false
+    /// Global search (⌘⇧F, HIS-050).
+    @State private var showSearch = false
     /// Listener bind failures from opening the project (PRX-001), shown above the tools.
     @State private var bindErrors: [String] = []
     /// Gulp Browser (BRW-001…004): offer Chrome for Testing when nothing is installed.
@@ -41,7 +43,19 @@ struct ProjectWindow: View {
                 .sheet(isPresented: $showListeners) {
                     ProxyListenersView(session: session)
                 }
+                .sheet(isPresented: $showSearch) {
+                    SearchView(session: session)
+                }
                 .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            showSearch = true
+                        } label: {
+                            Label("Search", systemImage: "magnifyingglass")
+                        }
+                        .keyboardShortcut("f", modifiers: [.command, .shift])
+                        .help("Search every request and response in the project (⌘⇧F)")
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Button {
                             openBrowser(session)
@@ -109,6 +123,10 @@ struct ProjectWindow: View {
             RepeaterView(session: session)
         case .fuzzer:
             FuzzerView(session: session)
+        case .logger:
+            LoggerView(session: session)
+        case .notebook:
+            NotebookView(session: session)
         case .decoder:
             DecoderView(session: session)
         case .comparer:

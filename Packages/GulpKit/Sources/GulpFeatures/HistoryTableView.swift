@@ -293,6 +293,13 @@ struct HistoryTableView: NSViewRepresentable {
             }
             if model.sendToDecoder != nil { addItem("Send to Decoder", #selector(sendToDecoder), to: menu) }
             if model.sendToFuzzer != nil { addItem("Send to Fuzzer", #selector(sendToFuzzer), to: menu) }
+            if model.addToNotebook != nil {
+                let item = NSMenuItem(
+                    title: "Add to Notebook", action: #selector(addToNotebook), keyEquivalent: "N")
+                item.keyEquivalentModifierMask = [.command, .shift]
+                item.target = self
+                menu.addItem(item)
+            }
             addItem("Comment…", #selector(editComment), to: menu)
             addItem("Copy URLs", #selector(copyURLs), to: menu)
             let copyAs = NSMenuItem(title: "Copy as", action: nil, keyEquivalent: "")
@@ -342,6 +349,10 @@ struct HistoryTableView: NSViewRepresentable {
             Task {
                 if let first = await targetIDs().first { model.sendToFuzzer?(first) }
             }
+        }
+
+        @objc func addToNotebook() {
+            Task { model.addToNotebook?(await targetIDs()) }
         }
 
         @objc func editComment() {

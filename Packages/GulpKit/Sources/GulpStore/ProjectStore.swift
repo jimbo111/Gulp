@@ -5,6 +5,7 @@
 import Foundation
 import GRDB
 import GulpCore
+import GulpQuery
 
 /// An open project database.
 public final class ProjectStore: Sendable {
@@ -16,6 +17,10 @@ public final class ProjectStore: Sendable {
     /// Where changes outside the writer (WebSocket rows) are announced.
     let eventBus: EventBus?
     private let lock: ProjectLock
+    /// Committed write transactions (invalidates `results`).
+    let commits = CommitCounter()
+    /// Recent GulpQL residual results, for paging (HIS-024).
+    let results = ResultCache()
 
     private init(url: URL, pool: DatabasePool, writer: StoreWriter, lock: ProjectLock, eventBus: EventBus?) {
         self.url = url
@@ -23,6 +28,7 @@ public final class ProjectStore: Sendable {
         self.writer = writer
         self.lock = lock
         self.eventBus = eventBus
+        pool.add(transactionObserver: commits, extent: .databaseLifetime)
     }
 
     /// Open (creating if needed) the project at `url`, migrating it to the current schema.
@@ -125,6 +131,11 @@ public final class ProjectStore: Sendable {
     public func summaries(
         filter: HistoryFilter = HistoryFilter(), sort: HistorySort = .idAscending, offset: Int, limit: Int
     ) async throws -> [ExchangeSummary] {
+        if filter.query?.sqlLowering().residual != nil {
+            // A GulpQL residual (HIS-024): page through its (cached) ordered result.
+            let ids = try await residualIDs(filter: filter, sort: sort)
+            return try await summaries(inOrder: Array(ids.dropFirst(max(0, offset)).prefix(max(0, limit))))
+        }
         let (clause, arguments) = filter.sql()
         let sql = """
             SELECT \(ExchangeRows.summaryColumns) FROM exchanges WHERE \(clause) ORDER BY \(sort.sql) \
@@ -138,6 +149,9 @@ public final class ProjectStore: Sendable {
 
     /// The number of rows matching `filter`.
     public func count(filter: HistoryFilter = HistoryFilter()) async throws -> Int {
+        if filter.query?.sqlLowering().residual != nil {
+            return try await residualIDs(filter: filter, sort: .idAscending).count
+        }
         let (clause, arguments) = filter.sql()
         let sql = "SELECT COUNT(*) FROM exchanges WHERE \(clause)"
         return try await pool.read { db in

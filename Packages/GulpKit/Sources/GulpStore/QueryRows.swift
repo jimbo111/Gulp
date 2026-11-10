@@ -108,6 +108,16 @@ extension ProjectStore {
         return try await matchingIDs(filter: filter, context: context).count
     }
 
+    /// The ordered ids of a query with a residual, from the cache while nothing was committed since.
+    func residualIDs(filter: HistoryFilter, sort: HistorySort) async throws -> [ExchangeID] {
+        await writer.flush()
+        let key = ResultCache.Key(filter: filter, sort: sort, version: commits.current)
+        if let cached = results.get(key) { return cached }
+        let ids = try await matchingIDs(filter: filter, sort: sort)
+        results.put(key, ids)
+        return ids
+    }
+
     /// History rows for `ids` in the order given (a GulpQL result in its sort order; missing ids
     /// skipped).
     public func summaries(inOrder ids: [ExchangeID]) async throws -> [ExchangeSummary] {

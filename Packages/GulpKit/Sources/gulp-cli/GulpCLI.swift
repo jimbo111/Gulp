@@ -18,7 +18,7 @@ import GulpWorkspace
 /// Version marker for the Gulp command-line tool.
 enum GulpCLI {
     /// Semantic version of the CLI; bumped as the tool gains commands.
-    static let version = "0.9.0"
+    static let version = "0.10.0"
 }
 
 /// The root command. `@main` (in a file not named main.swift) is how ArgumentParser runs an async
@@ -30,7 +30,8 @@ struct GulpCommand: AsyncParsableCommand {
         subcommands: [
             Send.self, Group.self, Paste.self, Repeater.self, Proxy.self, History.self, CA.self, CopyAs.self,
             WS.self, Browser.self, Scope.self, Target.self, ProjectCommand.self, MCP.self, Decode.self,
-            Diff.self, JWTCommand.self, Fuzz.self, Discover.self, Wordlists.self,
+            Diff.self, JWTCommand.self, Fuzz.self, Discover.self, Wordlists.self, Query.self, Search.self,
+            LoggerCommand.self, Filters.self, NotebookCommand.self, Coverage.self, Seed.self,
         ])
 }
 
@@ -252,6 +253,11 @@ struct History: AsyncParsableCommand {
     @Flag(help: "List WebSocket connections and their messages (PRX-031).")
     var websockets = false
 
+    @Flag(
+        name: .customLong("connections"),
+        help: "List connections and how many exchanges each carried (HIS-042).")
+    var connectionView = false
+
     func run() async throws {
         let url = URL(fileURLWithPath: project)
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -260,6 +266,14 @@ struct History: AsyncParsableCommand {
         let store = try ProjectStore.open(at: url)
         let count = try await store.count()
         print("exchanges: \(count)")
+        if connectionView {
+            for connection in try await store.connectionSummaries() {
+                print(
+                    "conn \(connection.id)\t\(connection.origin)\t\(connection.httpVersion)\t"
+                        + "\(connection.alpn ?? "-")\t\(connection.exchanges) exchange(s)\t"
+                        + "#\(connection.firstID)…#\(connection.lastID)")
+            }
+        }
         if last > 0 {
             let rows = try await store.summaries(offset: max(0, count - last), limit: last)
             for row in rows {

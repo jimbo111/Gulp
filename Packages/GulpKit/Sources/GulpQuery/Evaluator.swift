@@ -417,3 +417,28 @@ final class ExchangeView {
         return (values + rawValues).contains { $0.count >= 3 && haystack.contains($0) }
     }
 }
+
+/// A custom column (HIS-043): a GulpQL field whose value is shown per row, e.g.
+/// `resp.header("x-cache")` or `req.param("id")`.
+public struct GulpQLColumn: Sendable, Hashable {
+    /// The field.
+    public let field: GulpQLField
+
+    /// Parse a column; the text must be a single field reference.
+    public init(_ text: String) throws(GulpQLError) {
+        let parsed = try GulpQL.parse(text)
+        guard case .test(let field) = parsed else {
+            throw GulpQLError(
+                "a column is one field, e.g. resp.header(\"x-cache\")", at: 0..<max(1, text.count))
+        }
+        self.field = field
+    }
+
+    /// The column's text for `exchange` (nil when the value is missing).
+    public func value(for exchange: Exchange, context: GulpQLContext = GulpQLContext()) -> String? {
+        switch ExchangeView(exchange, context).value(field) {
+        case .missing: nil
+        case let resolved: resolved.text
+        }
+    }
+}

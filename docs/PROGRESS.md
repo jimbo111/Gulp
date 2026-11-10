@@ -14,8 +14,9 @@ order; within a milestone, do P0 first.
   launched by the Gulp Browser launcher through the proxy loads `https://localhost:8443` with no
   certificate interstitial (SPKI pin of the Gulp CA) and the request is in history. M1–M4a DoD
   scripts still pass in the same run.
-- **Active milestone**: **M9 — Logger, GulpQL, search, Notebook, coverage index** next; M5, M6a,
-  M6b, M7 and M8 are implemented and await the macOS CI run (see their status below).
+- **Active milestone**: the **daily-driver beta** release gate (after M9), then **M10a — Passive
+  scanner + issue model**; M5, M6a, M6b, M7, M8 and M9 are implemented and await the macOS CI run
+  (see their status below).
 - **Branching**: `main` holds merged milestones (PRs jimbo111/Gulp#1 M0–M2, #2 review fixes,
   #3 M3a, then M3b + the feature-review adoption). Work happens on
   the session branch and is merged by PR once CI is green.
@@ -175,10 +176,33 @@ order; within a milestone, do P0 first.
   (F18); FUZ-015/027/034 (P2: charts etc.); a JWT `«jwt-sign…»` tag op; the dashboard's running-task
   list; F07 acceptance tests 1–3 (username enumeration, password spray, recursive grep against
   `/login`) are covered by unit tests with a fake engine and the CLI, not yet by a DoD script.
+- **M9 status — implementation complete; macOS verification pending** (2026-11-10):
+  - Local gate (clean build): **321/321 tests**, **M1…M9 DoD scripts PASS**, lint clean. The M9 DoD
+    (`Scripts/m9-dod.sh`, also in CI): `resp.status >= 500 and req.host ~ "api"` matches exactly
+    50,000 of 1,000,000 seeded rows in ≈750 ms (debug build; < 2 s required), fully pushed down and
+    planned through `ix_ex_status`, and an equivalent spelling agrees; `reflected("q")` flags exactly
+    the VulnLab `/xss/html?q=` row; the coverage index shows `/xss/html` observed (proxy only),
+    `/echo` tested (fuzzer×3) and `/account` tested (repeater), and a Notebook item marks its
+    endpoint tested; a Notebook item keeps status/tags and its filter finds it after reopening;
+    search finds a planted token in a request and its response among 100k rows in a few ms.
+  - Done in M9: HIS-020…027 (HIS-025 without syntax coloring in the field), HIS-040…044,
+    HIS-050…053 (find-references as a store/CLI call), NB-001…004, NB-006, JRN-001; GulpQL in
+    intercept rules (PRX-015) and Match & Replace conditions (PRX-025); `gulp-cli query|search|
+    logger|filters|notebook|coverage|seed`, `history --connections`, `query --column`.
+  - **Not verified (no macOS here):** `GulpFeatures/QueryViews.swift` (GulpQL field, Logger,
+    search sheet), `NotebookView.swift`, the History filter bar/menu changes, the intercept and M&R
+    rule fields, `App/ProjectWindow` (Logger, Notebook, ⌘⇧F).
+- **M9 carry-overs**: syntax coloring inside the GulpQL field (HIS-025; a SwiftUI `TextField` can't
+  color — needs an `NSTextView`); custom-column and connection-view *UI* (HIS-042/043; store, GulpQL
+  column type and CLI exist); a "Find references" context-menu entry (HIS-053); GulpQL for scanner
+  insertion points (M11) and Fuzzer result filters (HIS-027's remaining users); HIS-028/045/054
+  (P2); NB-005 (M10a), NB-007 (M16a), NB-008/009 (P2); the coverage view (JRN-002, M16b); Compact
+  must treat Notebook blobs as live; the Logger keeps the store it opened with across Save As.
 - **Next action**: when CI minutes return, run CI on the branch head, fix any macOS compile issues
-  in the new SwiftUI code (M5 Repeater, M6a Target, M6b menus, M7 tools, M8 Fuzzer), then open the
-  M5, M6a, M6b, M7 and M8 PRs and merge. Meanwhile continue with M9 (Logger, GulpQL, search,
-  Notebook, coverage index) on the Linux-testable core.
+  in the new SwiftUI code (M5 Repeater, M6a Target, M6b menus, M7 tools, M8 Fuzzer, M9 views), then
+  open the M5…M9 PRs and merge. That completes the code for the **daily-driver beta** gate; its
+  release work (signed + notarized build, real testers) needs macOS. Meanwhile continue with M10a
+  (passive scanner + issue model) on the Linux-testable core.
 - **Waiting on the owner**: GitHub Actions minutes (CI is the only macOS build available).
 - Earlier waiting items: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
   **adopted on 2026-11-08** (product decision #7 in `docs/07-decisions.md`) and applied to the specs:
@@ -281,7 +305,7 @@ for behavior.
 - [ ] M6b — Import/export service, API import, MCP read surface + `send_request` — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M7 — Decoder + Comparer + JWT Workbench — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M8 — Fuzzer (with content discovery) — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
-- [ ] M9 — Logger, GulpQL, search, Notebook, coverage index
+- [ ] M9 — Logger, GulpQL, search, Notebook, coverage index — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] **Daily-driver beta** — release gate after M9 (signed + notarized build to real testers)
 - [ ] M10a — Passive scanner + issue model
 - [ ] M10b — gRPC & protobuf (F33)
@@ -523,6 +547,17 @@ for behavior.
   wordlists; VulnLab `/login` (single-use CSRF), `/account`, `/admin`, backup files; Fuzzer view and
   Send to Fuzzer; `gulp-cli fuzz|discover|wordlists`; `Scripts/m8-dod.sh` PASS. Fixed on the way:
   ScopeGuard refusals were counted as sent + errors ("sent 9, errors 9") — now `refused`.
+- 2026-11-10 — **M9 implemented** (local Linux gate; macOS views unverified): GulpQuery (GulpQL lexer,
+  parser, Codable AST, field catalog, evaluator, SQL lowering with never-NULL comparisons and
+  two-sided ranges); GulpStore query layer (push-down + residual, `gulpql_regexp`, cached residual
+  paging, planner statistics), search (trigram prefilter + verification, decoded bodies, regex
+  prefilter, short-query scan, reindex), Notebook rows (blob snapshots), coverage rows, connection
+  view, synthetic seeder; schema v5 (lowercase hosts, Notebook index and `truncated`); workspace
+  queries, saved filters, Logger settings, Notebook service, CoverageService; GulpQL in intercept
+  rules and M&R conditions; VulnLab reflected-XSS lab; Logger/search/Notebook views; CLI commands;
+  `Scripts/m9-dod.sh` PASS. Fixed on the way: SQLite scanned instead of using `ix_ex_status` for a
+  one-sided range (now two-sided); VulnLab's home page linked `/xss/html`, which didn't exist;
+  GulpFeatures didn't declare its GulpFuzzer dependency (M8).
 
 
 ## How to pick up work (reminder)

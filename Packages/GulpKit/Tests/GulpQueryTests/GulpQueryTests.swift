@@ -183,4 +183,13 @@ struct GulpQLTests {
         let kinds = GulpQL.highlights(#"resp.status >= 500 and req.host ~ /api/"#).map(\.kind)
         #expect(kinds == [.field, .operator, .number, .keyword, .field, .operator, .regex])
     }
+
+    @Test("HIS-043: a custom column is one GulpQL field evaluated per row")
+    func test_HIS043_column() throws {
+        #expect(try GulpQLColumn(#"resp.header("set-cookie")"#).value(for: search) == "session=zzz; HttpOnly")
+        #expect(try GulpQLColumn(#"req.param("q")"#).value(for: search) == "gulpfish")
+        #expect(try GulpQLColumn("resp.status").value(for: search) == "503")
+        #expect(try GulpQLColumn(#"req.cookie("nope")"#).value(for: search) == nil)
+        #expect(throws: GulpQLError.self) { try GulpQLColumn("resp.status == 1") }
+    }
 }

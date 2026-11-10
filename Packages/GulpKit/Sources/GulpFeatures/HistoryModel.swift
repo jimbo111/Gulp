@@ -30,6 +30,13 @@ public final class HistoryModel {
     @ObservationIgnored public var sendToDecoder: (@MainActor (ExchangeID) -> Void)?
     /// "Send to Fuzzer" (F07): the first selected row's request.
     @ObservationIgnored public var sendToFuzzer: (@MainActor (ExchangeID) -> Void)?
+    /// "Add to Notebook" (F14 NB-001, ⌘⇧N): the selected rows.
+    @ObservationIgnored public var addToNotebook: (@MainActor ([ExchangeID]) -> Void)?
+    /// Live updates (the Logger's capture toggle, HIS-041): when off, new traffic doesn't refresh
+    /// the table; turning it back on catches up.
+    public var live = true {
+        didSet { if live && !oldValue { reset() } }
+    }
     /// Keep the newest row in view as traffic arrives (HIS-002).
     public var autoScroll = true
     /// Quick filters (HIS-006).
@@ -169,7 +176,7 @@ public final class HistoryModel {
     }
 
     private func scheduleRefresh() {
-        guard pendingRefresh == nil else { return }
+        guard live, pendingRefresh == nil else { return }
         pendingRefresh = Task {
             try? await Task.sleep(for: .milliseconds(100))
             self.pendingRefresh = nil

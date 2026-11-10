@@ -5,6 +5,7 @@
 import AppKit
 import GulpCore
 import GulpProxy
+import GulpQuery
 import GulpStore
 import GulpWorkspace
 import SwiftUI
@@ -19,6 +20,10 @@ public struct ProxyHistoryView: View {
     var sendToDecoder: (@MainActor (ExchangeID) -> Void)?
     /// Send to Fuzzer (F07).
     var sendToFuzzer: (@MainActor (ExchangeID) -> Void)?
+    /// Add to Notebook (F14 NB-001).
+    var addToNotebook: (@MainActor ([ExchangeID]) -> Void)?
+    /// Saved and recent GulpQL filters (HIS-026).
+    var library: GulpQLLibrary?
     /// Built once when the view appears: `View.init` runs on every parent re-render, and a model
     /// owns an event subscription and runs queries.
     @State private var model: HistoryModel?
@@ -37,7 +42,7 @@ public struct ProxyHistoryView: View {
         if let model {
             VSplitView {
                 VStack(spacing: 0) {
-                    HistoryFilterBar(model: model)
+                    HistoryFilterBar(model: model, library: library)
                     Divider()
                     HistoryTableView(model: model)
                 }
@@ -54,6 +59,7 @@ public struct ProxyHistoryView: View {
                     created.sendToComparer = sendToComparer
                     created.sendToDecoder = sendToDecoder
                     created.sendToFuzzer = sendToFuzzer
+                    created.addToNotebook = addToNotebook
                     model = created
                 }
         }
@@ -191,12 +197,15 @@ struct ChunkTimeline: View {
 /// Quick-filter chips and the search field (HIS-006).
 struct HistoryFilterBar: View {
     @Bindable var model: HistoryModel
+    var library: GulpQLLibrary?
 
     var body: some View {
         HStack(spacing: 8) {
             TextField("Filter host or path", text: textBinding)
                 .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 260)
+                .frame(maxWidth: 200)
+            GulpQLFilterField(expression: $model.filter.query, library: library)
+                .frame(minWidth: 220, maxWidth: 420)
             Toggle("Hide assets", isOn: $model.filter.hideStaticAssets)
             Toggle("Has params", isOn: $model.filter.onlyWithParams)
             Toggle("Annotated", isOn: $model.filter.onlyAnnotated)
@@ -408,6 +417,10 @@ public struct SessionHistoryView: View {
         view.sendToComparer = { ids in Task { try? await session.sendToComparer(ids, part: .response) } }
         view.sendToDecoder = { id in Task { try? await session.sendToDecoder(id, part: .request) } }
         view.sendToFuzzer = { id in Task { try? await session.sendToFuzzer(id) } }
+        view.addToNotebook = { ids in
+            Task { for id in ids { _ = try? await session.addToNotebook(id) } }
+        }
+        view.library = GulpQLLibrary(session: session)
         return view
     }
 

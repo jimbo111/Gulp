@@ -216,6 +216,10 @@ enum VulnLab {
             return VulnReply(bytes: interim + response(200, body: Array("continued\n".utf8)))
         default:
             if let found = AuthLab.discovery(path) { return found }
+            if path.hasPrefix("/xss/") || path.hasPrefix("/safe/xss/"), let page = XSSLab.respond(path, query)
+            {
+                return page
+            }
             if path.hasPrefix("/api/orders/"), let id = Int(path.dropFirst("/api/orders/".count)) {
                 // IDOR (doc 06 §3): any order by id, no owner check.
                 guard (1...2).contains(id) else { return json(404, #"{"error":"no such order"}"#) }

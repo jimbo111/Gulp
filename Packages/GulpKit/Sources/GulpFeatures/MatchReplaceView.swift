@@ -59,7 +59,13 @@ public struct MatchReplaceView: View {
                         Toggle("Regex", isOn: $rule.isRegex)
                         Toggle("Tools", isOn: $rule.applyToTools)
                             .help("Also apply to Repeater, Fuzzer, Scanner… (PRX-021)")
-                        TextField("Comment", text: $rule.comment).frame(width: 200)
+                        TextField("When (GulpQL)", text: $rule.when)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(width: 200)
+                            .help(
+                                #"PRX-025: apply only when this GulpQL condition holds, e.g. req.host ~ "api""#
+                            )
+                        TextField("Comment", text: $rule.comment).frame(width: 160)
                     }
                     .tag(rule.id)
                 }

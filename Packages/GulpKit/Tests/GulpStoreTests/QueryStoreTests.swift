@@ -129,6 +129,30 @@ struct QueryStoreTests {
         try await store.close()
     }
 
+    @Test("HIS-002 + HIS-024: History pages and counts work for a query with a residual; commits refresh it")
+    func test_HIS024_residualPaging() async throws {
+        let (store, ids) = try await seeded()
+        var filter = HistoryFilter()
+        filter.query = try GulpQL.parse(#"resp.body contains "e" and req.host contains "lab""#)
+        #expect(filter.query?.sqlLowering().residual != nil)
+        let all = try await store.matchingIDs(filter: filter)
+        #expect(try await store.count(filter: filter) == all.count)
+        let firstPage = try await store.summaries(filter: filter, offset: 0, limit: 2)
+        let secondPage = try await store.summaries(filter: filter, offset: 2, limit: 2)
+        #expect((firstPage + secondPage).map(\.id) == Array(all.prefix(4)))
+        let descending = try await store.summaries(
+            filter: filter, sort: HistorySort(column: .id, ascending: false), offset: 0, limit: 1)
+        #expect(descending.first?.id == all.last)
+        #expect(try await store.exchangeIDs(filter: filter) == all)
+        // A new matching row is visible on the next read (the cache is keyed by commits).
+        let added = await store.writer.record(
+            make("x.lab.test", "GET /new HTTP/1.1\r\nHost: x.lab.test\r\n\r\n", ok("fresh")))
+        #expect(try await store.count(filter: filter) == all.count + 1)
+        #expect(try await store.exchangeIDs(filter: filter).last == added)
+        _ = ids
+        try await store.close()
+    }
+
     @Test("HIS-050/051: indexed search finds a token in requests and responses; part and section select")
     func test_HIS050_search() async throws {
         let (store, ids) = try await seeded()
@@ -195,5 +219,21 @@ struct QueryStoreTests {
         #expect(SearchDecoding.decode(zlib, encoding: "br") == nil)
         #expect(SearchDecoding.decode(text, encoding: "gzip") == nil)
         #expect(SearchDecoding.decode(zlib, encoding: "deflate", limit: 100)?.count == 100)
+    }
+
+    @Test("HIS-042: exchanges grouped by the connection that carried them")
+    func test_HIS042_connections() async throws {
+        let store = try ProjectStore.open(at: temporaryProject())
+        for (connection, path) in [(7, "/a"), (7, "/b"), (9, "/c")] {
+            var exchange = make("lab", "GET \(path) HTTP/1.1\r\nHost: lab\r\n\r\n", ok("x"))
+            exchange.connectionID = UInt64(connection)
+            exchange.tls = TLSInfo(version: "TLSv1.3", cipherSuite: "TLS_AES_128_GCM_SHA256", alpn: "h2")
+            _ = await store.writer.record(exchange)
+        }
+        _ = await store.writer.record(make("lab", "GET /none HTTP/1.1\r\nHost: lab\r\n\r\n", ok("x")))
+        let connections = try await store.connectionSummaries()
+        #expect(connections.map(\.id) == [9, 7] && connections.map(\.exchanges) == [1, 2])
+        #expect(connections[1].alpn == "h2" && connections[1].origin == "http://lab:80")
+        try await store.close()
     }
 }

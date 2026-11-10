@@ -43,6 +43,15 @@ public actor StoreWriter {
         return id
     }
 
+    /// Take `count` consecutive ids for rows written outside the queue (the synthetic-data seeder),
+    /// so later recordings can't collide with them.
+    func reserveIDs(_ count: Int) async -> Range<ExchangeID> {
+        await flush()
+        let first = nextID
+        nextID += ExchangeID(max(0, count))
+        return first..<nextID
+    }
+
     /// Replace an exchange recorded earlier (same id) — a streaming response that has finished
     /// (HIS-007). Published as `exchangeUpdated`.
     public func update(_ exchange: Exchange) async {
