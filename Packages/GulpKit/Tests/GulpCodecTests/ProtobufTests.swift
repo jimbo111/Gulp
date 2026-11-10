@@ -71,9 +71,10 @@ struct ProtobufTests {
 
     @Test("Malformed input is rejected with an offset; groups decode")
     func test_GRP002_malformed() throws {
-        #expect(throws: ProtoDecodeError.self) { try Protobuf.decode([0x0A, 0x09, 0x01]) }  // length past end
-        #expect(throws: ProtoDecodeError.self) { try Protobuf.decode([0x08]) }  // truncated varint
-        #expect(throws: ProtoDecodeError.self) { try Protobuf.decode([0x07, 0x00]) }  // wire type 7
+        // A length past the end, a truncated varint, wire type 7.
+        #expect(throws: ProtoDecodeError.self) { try Protobuf.decode([0x0A, 0x09, 0x01]) }
+        #expect(throws: ProtoDecodeError.self) { try Protobuf.decode([0x08]) }
+        #expect(throws: ProtoDecodeError.self) { try Protobuf.decode([0x07, 0x00]) }
         let group: [UInt8] = [0x0B, 0x10, 0x01, 0x0C]  // 1 (group) { 2: 1 }
         let message = try Protobuf.decode(group)
         #expect(message.field(1)?.value == .group([ProtoField(2, .varint(1), raw: [0x10, 0x01])]))
