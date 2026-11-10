@@ -410,7 +410,7 @@ enum XMLText {
             // The tag name must end here (so `<item` doesn't match `<items`).
             guard open.upperBound < text.endIndex else { break }
             let next = text[open.upperBound]
-            guard next == ">" || next == " " || next == "\t" || next == "\n" || next == "\r" || next == "/"
+            guard next == ">" || next == " " || next == "\t" || next.isNewline || next == "/"
             else {
                 cursor = open.upperBound
                 continue

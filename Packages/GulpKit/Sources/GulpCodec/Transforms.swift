@@ -394,7 +394,7 @@ enum Hex {
     static func decode(_ input: [UInt8]) throws -> [UInt8] {
         var text = String(decoding: input, as: UTF8.self).replacingOccurrences(of: "0x", with: "")
             .replacingOccurrences(of: "\\x", with: "")
-        text.removeAll { $0 == " " || $0 == ":" || $0 == "\n" || $0 == "\r" || $0 == "\t" || $0 == "-" }
+        text.removeAll { $0 == " " || $0 == ":" || $0.isNewline || $0 == "\t" || $0 == "-" }
         let digits = Array(text.utf8)
         guard digits.count.isMultiple(of: 2) else { throw CodecError("odd number of hex digits") }
         var output: [UInt8] = []

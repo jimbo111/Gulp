@@ -387,7 +387,7 @@ public actor FuzzAttack {
 /// CSV of results (FUZ-026): #, payloads, status, length, ms, error, grep columns, extracts, reflection.
 public func fuzzResultsCSV(_ results: [FuzzResult], config: FuzzAttackConfig) -> String {
     func quote(_ text: String) -> String {
-        text.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" })
+        text.contains(where: { $0 == "," || $0 == "\"" || $0.isNewline })
             ? "\"" + text.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : text
     }
     var header = ["#", "payloads", "status", "length", "ms", "error"]
