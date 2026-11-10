@@ -1,13 +1,9 @@
-// GulpQuery — GulpQL lexer, parser, evaluator and SQL lowering.
-// Placeholder for M0 scaffolding. Real types land in later milestones
-// (see docs/03-roadmap.md and the feature specs in docs/features).
+// GulpQuery — GulpQL (F05 §2.2): lexer and parser (Parser.swift), the syntax tree (AST.swift), the
+// field catalog (Fields.swift), in-memory evaluation (Evaluator.swift) and SQL push-down
+// (SQLLowering.swift). Pure Swift over GulpCore; no storage types (GulpStore maps `SQLBinding`).
 
 /// Namespace and module marker for the `GulpQuery` module.
-///
-/// This is a scaffolding stand-in so the package graph builds on macOS and
-/// Linux from milestone M0 onward. It is replaced by real types as features
-/// are implemented; do not rely on it at runtime.
 public enum GulpQuery {
-    /// The module's name, used only in diagnostics until real types exist.
+    /// The module's name, used in diagnostics.
     public static let moduleName = "GulpQuery"
 }

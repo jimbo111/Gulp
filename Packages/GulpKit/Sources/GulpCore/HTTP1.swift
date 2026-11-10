@@ -130,6 +130,10 @@ public struct RawRequest: Sendable, Hashable {
     public func headerValue(_ name: String) -> Bytes? {
         HTTP1.lastHeaderValue(name, parsed.headers, bytes)
     }
+    /// The value bytes of every header with this (case-insensitive) name, in order.
+    public func headerValues(_ name: String) -> [Bytes] {
+        HTTP1.headerValues(name, parsed.headers, bytes.rawBytes).map { bytes[$0] }
+    }
     /// True if any `name` header lists `token` (comma-separated, case-insensitive), e.g.
     /// `Connection: close`.
     public func hasHeaderToken(_ name: String, _ token: String) -> Bool {
@@ -200,6 +204,10 @@ public struct RawResponse: Sendable, Hashable {
     /// The value bytes of the last header with this (case-insensitive) name, if any.
     public func headerValue(_ name: String) -> Bytes? {
         HTTP1.lastHeaderValue(name, parsed.headers, bytes)
+    }
+    /// The value bytes of every header with this (case-insensitive) name, in order.
+    public func headerValues(_ name: String) -> [Bytes] {
+        HTTP1.headerValues(name, parsed.headers, bytes.rawBytes).map { bytes[$0] }
     }
     /// True if any `name` header lists `token` (comma-separated, case-insensitive), e.g.
     /// `Connection: close`.
