@@ -228,6 +228,8 @@ public actor ProjectSession {
     public nonisolated let scopeGuard: ScopeGuard
     /// The live site map (F04 TGT-001).
     public nonisolated let siteMap: SiteMapService
+    /// The coverage index (F04 JRN-001).
+    public nonisolated let coverage: CoverageService
     private let currentStore: CurrentStore
 
     private init(
@@ -264,6 +266,7 @@ public actor ProjectSession {
             engine: engine, persistence: StoreRepeaterPersistence(currentStore),
             scope: { await scopeGuard.current })
         self.siteMap = SiteMapService { await currentStore.store }
+        self.coverage = CoverageService { await currentStore.store }
     }
 
     /// Apply the stored intercept settings to the queue (call after opening or changing them).
@@ -366,6 +369,7 @@ public actor ProjectSession {
         settings.switchStore(newStore)
         store = newStore
         await currentStore.set(newStore)
+        await coverage.invalidate()
         await recorder.resume(with: newStore)
         await siteMap.idle()  // a site-map read still on the old file would make close fail
         try await oldStore.close()

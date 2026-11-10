@@ -14,6 +14,7 @@ extension ProjectSession {
         let service = try await store.setScope(rules)
         await scopeGuard.set(service)
         await applyProxyScope()
+        await coverage.invalidate()  // in-scope flags changed (JRN-001)
     }
 
     /// "Add to scope" (TGT-021): an include rule for `url`'s host and path prefix, appended so it

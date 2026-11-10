@@ -42,6 +42,8 @@ enum Schema {
         migrator.registerMigration("v5_gulpql") { db in
             try db.execute(sql: "UPDATE exchanges SET host = lower(host) WHERE host != lower(host)")
             try db.execute(sql: "CREATE INDEX ix_nb_exchange ON notebook_items(exchange_id)")
+            // F14 §5: a snapshot larger than the cap is stored cut, and says so.
+            try db.execute(sql: "ALTER TABLE notebook_items ADD COLUMN truncated INTEGER NOT NULL DEFAULT 0")
         }
         return migrator
     }
