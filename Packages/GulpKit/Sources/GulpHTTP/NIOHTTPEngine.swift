@@ -229,7 +229,7 @@ public final class NIOHTTPEngine: HTTPEngine {
             return tls?.alpn ?? "http/1.1"
         }
         do {
-            await h2Pool.add(try await H2Connection.start(on: channel, id: id, tls: tls), for: key)
+            _ = await h2Pool.adopt(try await H2Connection.start(on: channel, id: id, tls: tls), for: key)
             return "h2"
         } catch {
             channel.close(promise: nil)
@@ -457,14 +457,14 @@ public final class NIOHTTPEngine: HTTPEngine {
                 }
                 if negotiatedH2 || priorKnowledge {
                     await pool.releaseSlot(key)
-                    let h2: H2Connection
+                    var h2: H2Connection
                     do {
                         h2 = try await H2Connection.start(on: channel, id: connectionID, tls: tls)
                     } catch {
                         channel.close(promise: nil)
                         return Attempt(error: HTTP1ClientHandler.networkError(error), tls: tls)
                     }
-                    if options.connection == .reuse { await h2Pool.add(h2, for: key) }
+                    if options.connection == .reuse { h2 = await h2Pool.adopt(h2, for: key) }
                     let attempt = await sendH2(
                         outgoing, on: h2, key: key, options: options, deadline: totalDeadline)
                     if options.connection != .reuse { channel.close(promise: nil) }

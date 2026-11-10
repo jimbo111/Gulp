@@ -146,6 +146,35 @@ struct HTTP2EngineTests {
         await server.stop()
     }
 
+    @Test("HTTP-023: a cold burst (nothing pooled yet) completes; later sends reuse one connection")
+    func test_HTTP023_coldBurst() async throws {
+        // Regression: every sender of a cold burst dialed its own connection, and pooling each one
+        // closed the one pooled before it — with that sender's stream still in flight.
+        let server = try await Self.tlsServer()
+        let engine = NIOHTTPEngine()
+        let target = HTTPTarget(scheme: .https, host: "localhost", port: server.port)
+        let options = self.options()
+        func burst() async -> [Int?] {
+            await withTaskGroup(of: Int?.self) { group in
+                for index in 1...20 {
+                    group.addTask {
+                        let request = RawRequest(Bytes("GET /\(index) HTTP/1.1\r\nHost: localhost\r\n\r\n"))
+                        return await engine.send(request, to: target, options: options).exchange.response?
+                            .parsed
+                            .statusCode
+                    }
+                }
+                return await group.reduce(into: []) { $0.append($1) }
+            }
+        }
+        #expect(await burst().allSatisfy { $0 == 200 })
+        let dialed = server.connections
+        #expect(await burst().allSatisfy { $0 == 200 })
+        #expect(server.connections == dialed)  // the second burst dialed nothing
+        await engine.shutdown()
+        await server.stop()
+    }
+
     @Test("HTTP-027: trailers are kept and come back out as trailers")
     func test_HTTP027_trailers() async throws {
         let server = try await Self.tlsServer()

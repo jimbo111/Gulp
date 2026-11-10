@@ -205,9 +205,17 @@ actor H2Pool {
         return nil
     }
 
-    func add(_ connection: H2Connection, for key: PoolKey) {
-        connections[key]?.channel.close(promise: nil)
+    /// Pool `connection` for `key` and return the connection to send on. When concurrent sends all
+    /// missed the pool and each dialed, the first one pooled wins: a later one is closed (it has no
+    /// streams yet) and the pooled one is returned, so a connection with streams in flight is never
+    /// closed from under them (HTTP-023: one connection per key, multiplexed).
+    func adopt(_ connection: H2Connection, for key: PoolKey) -> H2Connection {
+        if let existing = connections[key], existing.isUsable, existing.id != connection.id {
+            connection.channel.close(promise: nil)
+            return existing
+        }
         connections[key] = connection
+        return connection
     }
 
     /// Forget `connection` (it failed or was told to go away).
