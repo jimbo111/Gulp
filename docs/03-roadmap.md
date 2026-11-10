@@ -175,8 +175,9 @@ discovery, Logger, GulpQL, search and Notebook.
 - **DoD:** Browsing VulnLab produces the expected passive issues (fixture list in doc 06 §3) and no duplicates.
 
 ### M10b — gRPC and protobuf
-- [ ] All P0/P1 of F33 except the Scanner half of GRP-005 (later: M11c): RPC recognition and framing with trailers (GRP-001), schema-less decode (GRP-002), `.proto`/descriptor/reflection schemas (GRP-003), edit and re-send in Repeater (GRP-004), Fuzzer positions inside protobuf fields (GRP-005). (FEATURE-REVIEW A2; supersedes ADV-053.)
+- [x] All P0/P1 of F33 except the Scanner half of GRP-005 (later: M11c): RPC recognition and framing with trailers (GRP-001), schema-less decode (GRP-002), `.proto`/descriptor/reflection schemas (GRP-003), edit and re-send in Repeater (GRP-004), Fuzzer positions inside protobuf fields (GRP-005). (FEATURE-REVIEW A2; supersedes ADV-053.)
 - **DoD:** A gRPC unary call to VulnLab's `vulnlab.Echo/Say` through the proxy decodes without a schema and shows `grpc-status` from the HTTP/2 trailers; reflection names the fields; an edited message re-sent from Repeater returns the edited echo; gRPC-Web text and Connect calls decode (F33 tests 1–3).
+- *Implemented 2026-11-10 (local Linux gate; `Scripts/m10b-dod.sh` PASS, which also covers F33 test 4's Fuzzer half); the macOS views await CI. Carry-overs in PROGRESS.*
 
 ### M11a — Crawler (static), Beacon client, shared limiter and panic stop
 - [ ] Crawler, **static mode only**: the static-mode P0s CRL-001…CRL-010. The browser-backed P0s (CRL-030/031) are M13a. Build CRL-006's re-authentication **hook point** now; its session-rule/macro wiring is completed in M12a — until then the crawler runs unauthenticated.

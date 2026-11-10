@@ -14,9 +14,9 @@ order; within a milestone, do P0 first.
   launched by the Gulp Browser launcher through the proxy loads `https://localhost:8443` with no
   certificate interstitial (SPKI pin of the Gulp CA) and the request is in history. M1–M4a DoD
   scripts still pass in the same run.
-- **Active milestone**: **M10b — gRPC & protobuf** next (the **daily-driver beta** release gate
-  after M9 still needs macOS for its release work); M5…M10a are implemented and await the macOS CI
-  run (see their status below).
+- **Active milestone**: **M11a — Crawler (static), Beacon client, shared limiter and panic stop**
+  next (the **daily-driver beta** release gate after M9 still needs macOS for its release work);
+  M5…M10b are implemented and await the macOS CI run (see their status below).
 - **Branching**: `main` holds merged milestones (PRs jimbo111/Gulp#1 M0–M2, #2 review fixes,
   #3 M3a, then M3b + the feature-review adoption). Work happens on
   the session branch and is merged by PR once CI is green.
@@ -216,10 +216,37 @@ order; within a milestone, do P0 first.
   catalog and `gulp-cli issues definitions` exist); TLS certificate-expiry observations (F02 data
   doesn't carry certificate dates yet); WebSocket passive checks (post-1.0, §3.6); Notebook ↔ issue
   promotion in the macOS views (the service exists).
+- **M10b status — implementation complete; macOS verification pending** (2026-11-10):
+  - Local gate (clean build): **366/366 tests**, **M1…M10b DoD scripts PASS**, lint clean. The M10b
+    DoD (`Scripts/m10b-dod.sh`, also in CI) runs F33 tests 1–4 against VulnLab: curl sends gRPC over
+    HTTP/2 through `gulp-cli proxy` to `vulnlab.Echo/Say`, and `gulp-cli grpc show` decodes it
+    schema-less with `grpc-status: 0` from the HTTP/2 trailers; `grpc schemas fetch` (reflection)
+    and, separately, `grpc schemas import --proto` name the fields; `grpc call --set
+    message=edited-in-gulp` re-sends from a Repeater tab over HTTP/2 and gets the edited echo with an
+    18-byte length prefix and the trailers; gRPC-Web text (HTTP/1.1) and Connect unary decode; and
+    `fuzz --grpc-field message` sends 4 re-encoded payloads that VulnLab parses (status 0) and
+    echoes.
+  - Done in M10b: GRP-001…005 (GRP-005's Fuzzer half; Scanner insertion points are M11c) — the
+    protobuf wire codec, gRPC/gRPC-Web(text)/Connect framing with trailers, hand-written descriptor
+    models and `.proto` parser, named decode and proto3 JSON, reflection client and server
+    messages, project schemas, edit-and-resend, Fuzzer protobuf positions; VulnLab's gRPC services
+    (Echo, Orders with a planted SQLi + SafeOrders, reflection, gRPC-Web, Connect);
+    `gulp-cli grpc show|schemas|call`, `fuzz --grpc-field`. Fixed on the way: an HTTP/2 pool race
+    that failed ~⅓ of a cold concurrent burst (HTTP-023); `"\r\n"` being a single Swift
+    `Character` broke CRLF splitting in four places; grep-match didn't see trailers.
+  - **Not verified (no macOS here):** `GulpFeatures/GRPCViews.swift` (Protobuf tab in every
+    response pane, gRPC Schemas sheet), Repeater's "Edit Message" sheet, the Fuzzer's protobuf
+    fields box, `App/ProjectWindow` (toolbar button, schema provider).
+- **M10b carry-overs**: History/Logger "gRPC" protocol label and `grpc-status` column (GRP-001's
+  last sentence — needs a derived column; `grpc show` and the Protobuf tab show both); the per-field
+  "read as" override remembered per path and method (F33 §5 — the CLI/UI show the heuristic
+  reading); field-tree editing in the UI (the sheet edits by path or JSON); a decoded-tree size cap
+  (§5; depth is capped at 32); GRP-006/007 (P2: streaming replay, rich error details, "Copy as
+  grpcurl"); Scanner insertion points inside protobuf (GRP-005, M11c).
 - **Next action**: when CI minutes return, run CI on the branch head, fix any macOS compile issues
-  in the new SwiftUI code (M5…M10a views), then open the M5…M10a PRs and merge; the daily-driver
+  in the new SwiftUI code (M5…M10b views), then open the M5…M10b PRs and merge; the daily-driver
   beta's release work (signed + notarized build, real testers) needs macOS. Meanwhile continue with
-  M10b (gRPC & protobuf) on the Linux-testable core.
+  M11a on the Linux-testable core.
 - **Waiting on the owner**: GitHub Actions minutes (CI is the only macOS build available).
 - Earlier waiting items: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
   **adopted on 2026-11-08** (product decision #7 in `docs/07-decisions.md`) and applied to the specs:
@@ -325,7 +352,7 @@ for behavior.
 - [ ] M9 — Logger, GulpQL, search, Notebook, coverage index — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] **Daily-driver beta** — release gate after M9 (signed + notarized build to real testers)
 - [ ] M10a — Passive scanner + issue model — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
-- [ ] M10b — gRPC & protobuf (F33)
+- [ ] M10b — gRPC & protobuf (F33) — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M11a — Crawler (static), Beacon client + dev Beacon, shared limiter + panic stop
 - [ ] M11b — Active scan engine + P0 checks
 - [ ] M11c — Full check catalog (incl. SCN-070…074) + crawl-and-audit
@@ -582,6 +609,14 @@ for behavior.
   baseline + PassiveLab planted routes with /safe/ twins + `vulnlab-issues.json`; Dashboard issues
   view; `gulp-cli issues|scan`; `Scripts/m10a-dod.sh` PASS. Fixed on the way: deleting a History row
   (or replacing a streaming one) failed on foreign keys from rows without ON DELETE.
+- 2026-11-10 — **M10b implemented** (local Linux gate; macOS views unverified): GulpCodec protobuf
+  wire codec, RPC framing (gRPC, gRPC-Web binary/text, Connect streaming/unary) with trailers,
+  descriptor models, `.proto` parser, named decode + JSON, reflection messages; VulnLab gRPC lab +
+  `Fixtures/grpc/vulnlab.proto`; workspace RPC service (schemas inline in settings, reflection
+  fetch, decode, edit, send from Repeater); Fuzzer protobuf positions; grep sees trailers;
+  `gulp-cli grpc`, `fuzz --grpc-field`; Protobuf tab, gRPC Schemas sheet, Repeater message editor;
+  `Scripts/m10b-dod.sh` PASS. Deviation: schemas inline instead of blobs (doc 07). Fixed on the
+  way: HTTP/2 pool race on cold concurrent bursts; CRLF-as-one-Character splitting bugs.
 
 
 ## How to pick up work (reminder)

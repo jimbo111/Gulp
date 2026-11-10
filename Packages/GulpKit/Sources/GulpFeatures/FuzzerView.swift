@@ -6,6 +6,7 @@
 
 #if canImport(AppKit)
 import AppKit
+import GulpCodec
 import GulpCore
 import GulpFuzzer
 import GulpUI
@@ -81,6 +82,9 @@ final class FuzzerModel {
     var request: [UInt8] = Array("GET /§path§ HTTP/1.1\r\nHost: example.com\r\n\r\n".utf8)
     var targetText = "https://example.com"
     var attackType = AttackType.sniper
+    /// Protobuf field positions for an RPC request (F33 GRP-005), comma-separated dotted paths
+    /// (names with an imported schema, else numbers); empty for § positions.
+    var rpcFieldsText = ""
     // Payloads
     var sets: [PayloadSetDraft] = [PayloadSetDraft()]
     // Settings
@@ -130,11 +134,30 @@ final class FuzzerModel {
         return FuzzAttackConfig(
             name: "Attack \(savedAttacks.count + 1)", target: target, request: request,
             attackType: attackType,
-            sets: sets.map(\.set), matches: matches, extracts: extracts, settings: settings)
+            sets: sets.map(\.set), matches: matches, extracts: extracts, settings: settings,
+            rpcFields: rpcFields)
     }
 
-    /// Positions in the request (0 when the markers are unbalanced).
-    var positionCount: Int { (try? FuzzTemplate(request, marker: settings.marker).positionCount) ?? 0 }
+    /// The protobuf field paths of `rpcFieldsText` (nil: § positions). An unresolvable name makes
+    /// an empty path, which the plan reports as a missing field.
+    var rpcFields: [[Int]]? {
+        let names = rpcFieldsText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard !names.isEmpty else { return nil }
+        let schema = session.grpcSchemaSet()
+        let input = RPC.parse(request: RawRequest(Bytes(request)), response: nil).flatMap {
+            schema.types(for: $0.path)?.input
+        }
+        return names.map { schema.fieldPath($0, type: input) ?? [0] }
+    }
+
+    /// Positions in the request (0 when the markers are unbalanced or a field is missing).
+    var positionCount: Int {
+        if let rpcFields {
+            return (try? RPCPositions(request: request, paths: rpcFields).paths.count) ?? 0
+        }
+        return (try? FuzzTemplate(request, marker: settings.marker).positionCount) ?? 0
+    }
 
     /// The planned request count, or a problem.
     var plannedCount: String {
@@ -435,6 +458,14 @@ struct FuzzerPanel: View {
                 Button("Auto §") { model.autoMark() }
                 Button("Clear §") { model.clearMarks() }
                 Text("\(model.positionCount) positions").font(.caption)
+                if RPC.detect(RawRequest(Bytes(model.request))) != nil {
+                    TextField("Protobuf fields, e.g. message, 3.1", text: $model.rpcFieldsText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 220)
+                        .help(
+                            "Fuzz inside protobuf fields instead of § markers; each payload is re-encoded (F33)"
+                        )
+                }
             }
             MessageEditor(
                 title: "Base request (wrap payload positions in §…§)", bytes: $model.request, editable: true)

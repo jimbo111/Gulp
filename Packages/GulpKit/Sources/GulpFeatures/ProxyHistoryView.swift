@@ -100,12 +100,14 @@ public struct ProxyHistoryView: View {
 }
 
 /// The response, plus HIS-007's Events tab (one row per SSE event with its arrival time) for
-/// `text/event-stream` and a chunk timeline for other streamed bodies.
+/// `text/event-stream`, a chunk timeline for other streamed bodies, and the Protobuf tab for
+/// gRPC/gRPC-Web/Connect calls (F33).
 struct ResponsePane: View {
     enum Tab: String, CaseIterable {
         case message = "Response"
         case events = "Events"
         case chunks = "Chunks"
+        case rpc = "Protobuf"
     }
 
     let exchange: Exchange?
@@ -115,11 +117,13 @@ struct ResponsePane: View {
         let response = exchange?.response
         let marks = exchange?.timing.streamMarks ?? []
         let isEventStream = response.map(SSETimeline.isEventStream) ?? false
+        let isRPC = exchange.map(RPCCallView.isRPC) ?? false
         let tabs = Tab.allCases.filter { tab in
             switch tab {
             case .message: true
             case .events: isEventStream
             case .chunks: !marks.isEmpty && !isEventStream
+            case .rpc: isRPC
             }
         }
         VStack(spacing: 0) {
@@ -138,6 +142,8 @@ struct ResponsePane: View {
                 EventsTable(events: response.map { SSETimeline.events(in: $0, marks: marks) } ?? [])
             case .chunks:
                 ChunkTimeline(marks: marks)
+            case .rpc:
+                if let exchange { RPCCallView(exchange: exchange) }
             }
         }
     }

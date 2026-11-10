@@ -6,6 +6,7 @@
 
 #if canImport(AppKit)
 import AppKit
+import GulpCodec
 import GulpCore
 import GulpHTTP
 import GulpRepeater
@@ -118,6 +119,29 @@ public final class RepeaterModel {
             tabs[index].options = newValue
             let repeater = session.repeater
             Task { await repeater.setOptions(id, newValue) }
+        }
+    }
+
+    // MARK: gRPC (F33 GRP-004)
+
+    /// The draft is a gRPC, gRPC-Web or Connect request.
+    public var draftIsRPC: Bool { RPC.detect(RawRequest(Bytes(draft))) != nil }
+
+    /// Edit message `index` of the draft by field path (`message=hi`, `3.1=x`) or with a whole JSON
+    /// message, re-encoding it (raw bytes stay the truth: only this edit re-encodes). gRPC drafts get
+    /// HTTP/2 when the version is Auto. Returns the error to show, or nil.
+    public func editRPC(message index: Int, fields: [(path: String, value: String)], json: String?) -> String?
+    {
+        do {
+            let edited = try session.editRPCRequest(
+                RawRequest(Bytes(draft)), message: index, fields: fields, json: json)
+            draft = edited.bytes.rawBytes
+            if options.version == .auto, let target = HTTPTarget(url: targetText) {
+                options.version = session.rpcRepeaterOptions(for: edited, target: target).version
+            }
+            return nil
+        } catch {
+            return "\(error)"
         }
     }
 
@@ -490,6 +514,7 @@ public struct RepeaterView: View {
     @State private var renaming: Int64?
     @State private var newTitle = ""
     @State private var showOptions = false
+    @State private var showRPCEditor = false
 
     /// The Repeater for `session`.
     public init(session: ProjectSession) {
@@ -748,6 +773,15 @@ public struct RepeaterView: View {
                 Image(systemName: "slider.horizontal.3")
             }
             .help("Send options")
+            if model.draftIsRPC {
+                Button {
+                    showRPCEditor = true
+                } label: {
+                    Label("Edit Message", systemImage: "curlybraces")
+                }
+                .help("Edit a protobuf field or the whole message as JSON; the call is re-encoded (F33)")
+                .sheet(isPresented: $showRPCEditor) { RPCMessageEditor(model: model) }
+            }
             .popover(isPresented: $showOptions) { optionsForm.padding().frame(width: 300) }
             if let group = model.selectedGroup {
                 Divider().frame(height: 16)
@@ -949,6 +983,52 @@ public struct RepeaterView: View {
         }
         .padding(.horizontal, 6)
         .padding(.bottom, 6)
+    }
+}
+/// Edit a message of an RPC draft (F33 GRP-004): field edits as `path=value` lines, or a whole
+/// message as JSON (needs a schema for protobuf bodies).
+struct RPCMessageEditor: View {
+    let model: RepeaterModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var message = 1
+    @State private var fields = ""
+    @State private var json = ""
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Edit Message").font(.title2)
+            Stepper("Message \(message)", value: $message, in: 1...999)
+            Text("Fields, one per line: path=value (names with a schema, else numbers, e.g. 3.1=x)")
+                .font(.caption).foregroundStyle(.secondary)
+            TextEditor(text: $fields).font(.system(.body, design: .monospaced)).frame(minHeight: 80)
+            Text("Or the whole message as JSON").font(.caption).foregroundStyle(.secondary)
+            TextEditor(text: $json).font(.system(.body, design: .monospaced)).frame(minHeight: 80)
+            if let error { Text(error).foregroundStyle(.red).font(.caption) }
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                Button("Apply") { apply() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .frame(minWidth: 460, minHeight: 360)
+    }
+
+    func apply() {
+        var edits: [(path: String, value: String)] = []
+        for line in fields.split(whereSeparator: \.isNewline)
+        where !line.trimmingCharacters(in: .whitespaces).isEmpty {
+            let parts = line.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard parts.count == 2 else {
+                error = "Expected path=value: \(line)"
+                return
+            }
+            edits.append((String(parts[0]).trimmingCharacters(in: .whitespaces), String(parts[1])))
+        }
+        let trimmed = json.trimmingCharacters(in: .whitespacesAndNewlines)
+        error = model.editRPC(message: message - 1, fields: edits, json: trimmed.isEmpty ? nil : trimmed)
+        if error == nil { dismiss() }
     }
 }
 #endif

@@ -15,6 +15,9 @@ struct ProjectWindow: View {
     @State private var showListeners = false
     /// Global search (⌘⇧F, HIS-050).
     @State private var showSearch = false
+    /// Project → gRPC Schemas… (F33); the revision reloads the schemas RPC views use.
+    @State private var showGRPCSchemas = false
+    @State private var grpcRevision = 0
     /// Listener bind failures from opening the project (PRX-001), shown above the tools.
     @State private var bindErrors: [String] = []
     /// Gulp Browser (BRW-001…004): offer Chrome for Testing when nothing is installed.
@@ -39,12 +42,17 @@ struct ProjectWindow: View {
                 } detail: {
                     detail(session: session)
                         .safeAreaInset(edge: .top) { bindErrorBanner }
+                        .grpcSchemas(from: session, revision: grpcRevision)
                 }
                 .sheet(isPresented: $showListeners) {
                     ProxyListenersView(session: session)
                 }
                 .sheet(isPresented: $showSearch) {
                     SearchView(session: session)
+                        .grpcSchemas(from: session, revision: grpcRevision)
+                }
+                .sheet(isPresented: $showGRPCSchemas) {
+                    GRPCSchemasView(session: session) { grpcRevision += 1 }
                 }
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
@@ -55,6 +63,15 @@ struct ProjectWindow: View {
                         }
                         .keyboardShortcut("f", modifiers: [.command, .shift])
                         .help("Search every request and response in the project (⌘⇧F)")
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            showGRPCSchemas = true
+                        } label: {
+                            Label("gRPC Schemas", systemImage: "curlybraces.square")
+                        }
+                        .help(
+                            "Import .proto files or descriptor sets, or fetch a schema via reflection (F33)")
                     }
                     ToolbarItem(placement: .primaryAction) {
                         Button {

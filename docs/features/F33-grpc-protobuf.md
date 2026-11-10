@@ -67,8 +67,10 @@ its fields. It was added by the 2026-11-08 feature review (A2) and promotes the 
 - gRPC over HTTP/2 depends on the M3b engine (HTTP-020…024) and trailers (HTTP-027); the proxy must
   forward trailers unchanged (PRX-009). gRPC-Web text mode is base64 per HTTP chunk: decode
   incrementally, don't assume one base64 blob.
-- Imported schemas are stored as blobs referenced from a `GRPCSchemaSettings` group in the project
-  `settings` table (doc 04 §6 — the same pattern as other project-level rule sets; no new table).
+- Imported schemas are stored in a `GRPCSchemaSettings` group in the project `settings` table, each
+  as an inline serialized `FileDescriptorSet` (doc 04 §6 — the same pattern as other project-level
+  rule sets; no new table). *(2026-11-10: inline instead of blobs — descriptor sets are small; see
+  doc 07.)*
 - Decompression uses the F03 HTTP-007 helpers; `grpc-encoding` values other than gzip/deflate are
   shown as "unsupported encoding" with the raw bytes.
 

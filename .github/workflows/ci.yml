@@ -97,6 +97,10 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/m10a-dod.sh
+      - name: M10b Definition of Done (gRPC through the proxy decodes; reflection and .proto name fields; edited re-send; gRPC-Web text + Connect; protobuf-field fuzzing)
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/m10b-dod.sh
       - name: Build Beacon
         run: swift build --package-path Beacon -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
       - name: Test Beacon
