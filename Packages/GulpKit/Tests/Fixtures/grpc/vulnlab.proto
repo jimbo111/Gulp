@@ -1,0 +1,55 @@
+// VulnLab's gRPC services (doc 06 §3, F33). The same text is compiled into gulp-vulnlab, which
+// serves it through server reflection; keep the two in sync.
+syntax = "proto3";
+
+package vulnlab;
+
+// Says back what it's told.
+service Echo {
+  rpc Say (EchoRequest) returns (EchoReply);
+  rpc Stream (EchoRequest) returns (stream EchoReply);
+}
+
+enum Mood {
+  MOOD_UNSPECIFIED = 0;
+  HAPPY = 1;
+  GRUMPY = 2;
+}
+
+message EchoRequest {
+  string message = 1;
+  int32 times = 2;
+  Mood mood = 3;
+  map<string, string> labels = 4;
+  repeated int32 numbers = 5;
+}
+
+message EchoReply {
+  message Meta {
+    int64 served_at = 1;
+    bool cached = 2;
+  }
+  string message = 1;
+  int32 length = 2;
+  Meta meta = 3;
+  Mood mood = 4;
+}
+
+// Orders/Get has a planted SQL injection in `id` (M11c); SafeOrders/Get is its parameterized twin.
+service Orders {
+  rpc Get (OrderRequest) returns (Order);
+}
+
+service SafeOrders {
+  rpc Get (OrderRequest) returns (Order);
+}
+
+message OrderRequest {
+  string id = 1;
+}
+
+message Order {
+  string id = 1;
+  string item = 2;
+  double total = 3;
+}
