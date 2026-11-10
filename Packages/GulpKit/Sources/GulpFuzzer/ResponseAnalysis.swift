@@ -103,11 +103,19 @@ public struct ResponseAnalyzer: Sendable {
         }
     }
 
-    /// The text grep reads: status line, headers and the decompressed body (capped).
+    /// The text grep reads: status line, headers, the decompressed body (capped) and, for a chunked
+    /// response, its trailers (where gRPC puts `grpc-status`, F33) as `name: value` lines.
     public static func text(of response: RawResponse) -> String {
         let head = response.bytes[0..<min(response.parsed.headerBlockEnd, response.bytes.count)].rawBytes
         let body = ((try? response.decodedBody(limit: bodyLimit)) ?? nil)?.rawBytes ?? []
-        return String(decoding: head + body.prefix(bodyLimit), as: UTF8.self)
+        var text = String(decoding: head + body.prefix(bodyLimit), as: UTF8.self)
+        if response.headerValue("transfer-encoding")?.string().lowercased().contains("chunked") == true {
+            let trailers = HTTP2Text.responseParts(response).trailers
+            if !trailers.isEmpty {
+                text += "\r\n" + trailers.map { "\($0.name): \($0.value)" }.joined(separator: "\r\n")
+            }
+        }
+        return text
     }
 
     /// Analyze a response for an item whose payloads were `payloads`.

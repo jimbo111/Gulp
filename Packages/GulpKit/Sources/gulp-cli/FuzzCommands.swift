@@ -4,6 +4,7 @@
 
 import ArgumentParser
 import Foundation
+import GulpCodec
 import GulpCore
 import GulpFuzzer
 import GulpWorkspace
@@ -39,6 +40,13 @@ struct Fuzz: AsyncParsableCommand {
     @Flag(help: "Send even out-of-scope requests (explicit override).") var allowOutOfScope = false
     @Option(help: "Print this many result rows.") var rows = 0
     @Flag(help: "Print every extracted value.") var printExtracts = false
+    @Option(
+        help: """
+            Fuzz a protobuf field of the request's first gRPC/gRPC-Web/Connect message instead of §…§ \
+            positions: a dotted path of names (with an imported schema) or numbers, e.g. message or 3.1 \
+            (repeatable; one position each).
+            """)
+    var grpcField: [String] = []
 
     func run() async throws {
         guard let data = FileManager.default.contents(atPath: raw) else {
@@ -81,11 +89,33 @@ struct Fuzz: AsyncParsableCommand {
             $0.hasPrefix("re:") ? GrepMatch(String($0.dropFirst(3)), isRegex: true) : GrepMatch($0)
         }
         let extracts = try extract.map(Self.parseExtract)
-        let config = FuzzAttackConfig(
+        var config = FuzzAttackConfig(
             name: URL(fileURLWithPath: raw).lastPathComponent, target: destination, request: [UInt8](data),
             attackType: type,
             sets: sets, matches: matches, extracts: extracts, settings: settings)
         let session = try await ProjectSession.open(at: URL(fileURLWithPath: project))
+        if !grpcField.isEmpty {
+            // GRP-005: positions are protobuf fields; gRPC itself needs HTTP/2.
+            let request = RawRequest(Bytes([UInt8](data)))
+            let schema = session.grpcSchemaSet()
+            let input = RPC.parse(request: request, response: nil).flatMap {
+                schema.types(for: $0.path)?.input
+            }
+            var paths: [[Int]] = []
+            for field in grpcField {
+                guard let path = schema.fieldPath(field, type: input) else {
+                    try? await session.close()
+                    throw ValidationError(
+                        "Unknown --grpc-field \(field)"
+                            + (input == nil ? " (no schema for this call: use field numbers)" : ""))
+                }
+                paths.append(path)
+            }
+            config.rpcFields = paths
+            if httpVersion == "auto", RPC.detect(request) == .grpc {
+                config.settings.httpVersion = destination.scheme == .https ? .http2 : .http2PriorKnowledge
+            }
+        }
         let run: FuzzRun
         do {
             run = try await session.startAttack(config, allowOutOfScope: allowOutOfScope)

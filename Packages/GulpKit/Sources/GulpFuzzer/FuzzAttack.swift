@@ -104,12 +104,17 @@ public struct FuzzAttackConfig: Sendable, Hashable, Codable {
     public var extracts: [GrepExtract]
     /// Settings.
     public var settings: FuzzSettings
+    /// Protobuf field paths to fuzz inside the request's first message (GRP-005) instead of
+    /// markers; nil or empty for a marker attack.
+    public var rpcFields: [[Int]]?
 
     /// A configuration.
     public init(
         name: String, target: HTTPTarget, request: [UInt8], attackType: AttackType, sets: [PayloadSet],
-        matches: [GrepMatch] = [], extracts: [GrepExtract] = [], settings: FuzzSettings = FuzzSettings()
+        matches: [GrepMatch] = [], extracts: [GrepExtract] = [], settings: FuzzSettings = FuzzSettings(),
+        rpcFields: [[Int]]? = nil
     ) {
+        self.rpcFields = rpcFields
         self.name = name
         self.target = target
         self.request = request
@@ -122,7 +127,13 @@ public struct FuzzAttackConfig: Sendable, Hashable, Codable {
 
     /// The plan (throws on bad markers, sets or processors).
     public func plan() throws -> AttackPlan {
-        try AttackPlan(template: FuzzTemplate(request, marker: settings.marker), type: attackType, sets: sets)
+        let template =
+            if let rpcFields, !rpcFields.isEmpty {
+                FuzzTemplate(rpc: try RPCPositions(request: request, paths: rpcFields))
+            } else {
+                try FuzzTemplate(request, marker: settings.marker)
+            }
+        return try AttackPlan(template: template, type: attackType, sets: sets)
     }
 }
 

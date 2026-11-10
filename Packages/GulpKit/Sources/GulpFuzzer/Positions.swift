@@ -20,6 +20,8 @@ public struct FuzzTemplate: Sendable, Hashable {
     public let segments: [[UInt8]]
     /// Each position's base value (the bytes between its markers).
     public let baseValues: [[UInt8]]
+    /// Protobuf-field positions (GRP-005) instead of markers; nil for a marker template.
+    public let rpc: RPCPositions?
 
     /// Number of positions.
     public var positionCount: Int { baseValues.count }
@@ -52,10 +54,19 @@ public struct FuzzTemplate: Sendable, Hashable {
         }
         segments = stride(from: 0, to: pieces.count, by: 2).map { pieces[$0] }
         baseValues = stride(from: 1, to: pieces.count, by: 2).map { pieces[$0] }
+        rpc = nil
+    }
+
+    /// A template whose positions are protobuf fields of an RPC request (GRP-005).
+    public init(rpc: RPCPositions) {
+        segments = []
+        baseValues = rpc.baseValues
+        self.rpc = rpc
     }
 
     /// The request with `payloads` (one per position; nil keeps the base value) spliced in.
     public func render(_ payloads: [[UInt8]?]) -> [UInt8] {
+        if let rpc { return rpc.render(payloads) }
         var output = segments[0]
         for position in 0..<positionCount {
             output += (position < payloads.count ? payloads[position] : nil) ?? baseValues[position]

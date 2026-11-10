@@ -361,3 +361,40 @@ extension ProtoMessage {
             .replacingOccurrences(of: "\n", with: "\\n") + "\""
     }
 }
+
+extension ProtoValue {
+    /// `text` as a value of wire type `wireType` — how an edited or fuzzed field keeps its type:
+    /// a varint takes a decimal integer (negative numbers as two's complement) or `true`/`false`;
+    /// fixed32/fixed64 take an integer or a decimal (stored as float/double bits); anything else,
+    /// and text that doesn't parse, becomes length-delimited bytes (a deliberate type confusion when
+    /// fuzzing a number field with text).
+    public static func parsing(_ text: [UInt8], as wireType: ProtoWireType) -> ProtoValue {
+        let string = String(decoding: text, as: UTF8.self)
+        switch wireType {
+        case .varint:
+            if let v = UInt64(string) { return .varint(v) }
+            if let v = Int64(string) { return .varint(UInt64(bitPattern: v)) }
+            if string == "true" || string == "false" { return .varint(string == "true" ? 1 : 0) }
+        case .fixed32:
+            if let v = UInt32(string) { return .fixed32(v) }
+            if let v = Int32(string) { return .fixed32(UInt32(bitPattern: v)) }
+            if let v = Float(string) { return .fixed32(v.bitPattern) }
+        case .fixed64:
+            if let v = UInt64(string) { return .fixed64(v) }
+            if let v = Int64(string) { return .fixed64(UInt64(bitPattern: v)) }
+            if let v = Double(string) { return .fixed64(v.bitPattern) }
+        default: break
+        }
+        return .bytes(text)
+    }
+
+    /// The value as editable text: a varint or fixed number in decimal, bytes as UTF-8 (lossy).
+    public var editableText: String {
+        switch self {
+        case .varint(let v), .fixed64(let v): String(v)
+        case .fixed32(let v): String(v)
+        case .bytes(let b): String(decoding: b, as: UTF8.self)
+        case .group(let fields): ProtoMessage(fields).text()
+        }
+    }
+}

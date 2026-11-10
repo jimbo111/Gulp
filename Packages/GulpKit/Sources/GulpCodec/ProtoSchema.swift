@@ -656,3 +656,27 @@ extension Array where Element == UInt8 {
         Array(dropFirst(Protobuf.varint(UInt64(number) << 3).count))
     }
 }
+
+extension ProtoSchemaSet {
+    /// Resolve a dotted field path (`meta.cached`, `3.2`, or a mix) against message `type` to
+    /// field numbers. Numbers pass through (also without a schema); names need the schema and every
+    /// step but the last must be a message field. Nil when a name doesn't resolve.
+    public func fieldPath(_ dotted: String, type: String?) -> [Int]? {
+        var path: [Int] = []
+        var current = type.flatMap { messages[$0] }
+        for part in dotted.split(separator: ".", omittingEmptySubsequences: false).map(String.init) {
+            let def: ProtoFieldDef?
+            if let number = Int(part) {
+                path.append(number)
+                def = current?.field(number)
+            } else {
+                guard let found = current?.fields.first(where: { $0.name == part || $0.jsonName == part })
+                else { return nil }
+                path.append(found.number)
+                def = found
+            }
+            current = def?.type == .message ? def?.typeName.flatMap { messages[$0] } : nil
+        }
+        return path.isEmpty ? nil : path
+    }
+}

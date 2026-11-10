@@ -32,7 +32,7 @@ struct GulpCommand: AsyncParsableCommand {
             WS.self, Browser.self, Scope.self, Target.self, ProjectCommand.self, MCP.self, Decode.self,
             Diff.self, JWTCommand.self, Fuzz.self, Discover.self, Wordlists.self, Query.self, Search.self,
             LoggerCommand.self, Filters.self, NotebookCommand.self, Coverage.self, Seed.self,
-            IssuesCommand.self, ScanCommand.self,
+            IssuesCommand.self, ScanCommand.self, GRPCCommand.self,
         ])
 }
 

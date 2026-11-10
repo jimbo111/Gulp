@@ -207,7 +207,7 @@ let package = Package(
             name: "GulpRepeaterTests",
             dependencies: ["GulpRepeater", "GulpHTTP", "GulpCore"] + nioConcurrency + nioCore),
         .testTarget(name: "GulpOASTTests", dependencies: ["GulpOAST"]),
-        .testTarget(name: "GulpFuzzerTests", dependencies: ["GulpFuzzer"]),
+        .testTarget(name: "GulpFuzzerTests", dependencies: ["GulpFuzzer", "GulpCodec"]),
         .testTarget(name: "GulpCrawlerTests", dependencies: ["GulpCrawler"]),
         .testTarget(name: "GulpScannerTests", dependencies: ["GulpScanner", "GulpCore"]),
         .testTarget(name: "GulpSequencerTests", dependencies: ["GulpSequencer"]),

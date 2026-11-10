@@ -115,3 +115,32 @@ struct ProtoSchemaTests {
                 == "NOT_FOUND: no")
     }
 }
+
+@Suite("Field paths and typed edits (GRP-004/005)")
+struct ProtoEditTests {
+    @Test("Dotted paths resolve by name, JSON name or number; numbers work without a schema")
+    func test_GRP004_fieldPath() throws {
+        let set = ProtoSchemaSet(try ProtoParser.parse(["vulnlab.proto": fixtureProto]))
+        #expect(set.fieldPath("message", type: ".vulnlab.EchoRequest") == [1])
+        #expect(set.fieldPath("meta.servedAt", type: ".vulnlab.EchoReply") == [3, 1])
+        #expect(set.fieldPath("meta.served_at", type: ".vulnlab.EchoReply") == [3, 1])
+        #expect(set.fieldPath("3.cached", type: ".vulnlab.EchoReply") == [3, 2])
+        #expect(set.fieldPath("nope", type: ".vulnlab.EchoRequest") == nil)
+        #expect(ProtoSchemaSet().fieldPath("3.1", type: nil) == [3, 1])
+        #expect(ProtoSchemaSet().fieldPath("message", type: nil) == nil)
+    }
+
+    @Test("Text becomes a value of the field's wire type, or bytes when it doesn't parse")
+    func test_GRP005_parsing() {
+        #expect(ProtoValue.parsing(Array("300".utf8), as: .varint) == .varint(300))
+        #expect(ProtoValue.parsing(Array("-2".utf8), as: .varint) == .varint(UInt64(bitPattern: -2)))
+        #expect(ProtoValue.parsing(Array("true".utf8), as: .varint) == .varint(1))
+        #expect(ProtoValue.parsing(Array("1.5".utf8), as: .fixed64) == .fixed64((1.5 as Double).bitPattern))
+        #expect(ProtoValue.parsing(Array("1.5".utf8), as: .fixed32) == .fixed32((1.5 as Float).bitPattern))
+        #expect(ProtoValue.parsing(Array("x".utf8), as: .varint) == .bytes(Array("x".utf8)))
+        #expect(ProtoValue.parsing(Array("12".utf8), as: .lengthDelimited) == .bytes(Array("12".utf8)))
+        #expect(
+            ProtoValue.varint(7).editableText == "7"
+                && ProtoValue.bytes(Array("hi".utf8)).editableText == "hi")
+    }
+}
