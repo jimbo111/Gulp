@@ -1,5 +1,6 @@
 import Foundation
 import GulpCore
+import GulpFuzzer
 import GulpHTTP
 import GulpProxy
 import GulpRepeater
@@ -565,5 +566,44 @@ struct SiteMapServiceTests {
         await session.inbox.removeFromComparer([added[0].id])
         #expect(await session.inbox.comparerItems.count == 1)
         try await session.close()
+    }
+
+    @Test("FUZ-026 / ScopeGuard: attacks are saved with their results; empty scope refuses; override sends")
+    func test_FUZ026_savedAttack() async throws {
+        let environment = isolatedEnvironment()
+        let session = try await open(environment, "fuzz")
+        var settings = FuzzSettings()
+        settings.timeoutSeconds = 5
+        let config = FuzzAttackConfig(
+            name: "ports", target: HTTPTarget(scheme: .http, host: "127.0.0.1", port: 1),
+            request: Array("GET /§x§ HTTP/1.1\r\nHost: 127.0.0.1:1\r\n\r\n".utf8), attackType: .sniper,
+            sets: [PayloadSet(.list(["a", "b", "c"]))], matches: [GrepMatch("x")], settings: settings)
+        func drain(_ run: FuzzRun) async -> FuzzSummary? {
+            var summary: FuzzSummary?
+            for await event in run.events { if case .finished(let done) = event { summary = done } }
+            return summary
+        }
+        // No scope: the active tool refuses every request.
+        let refused = try await session.startAttack(config)
+        _ = await drain(refused)
+        #expect(try await session.attackResults(refused.id).allSatisfy { $0.error == "out_of_scope" })
+        // The explicit override sends (port 1 refuses the connection; the rows say so and are recorded).
+        let sent = try await session.startAttack(config, allowOutOfScope: true)
+        let summary = await drain(sent)
+        #expect(summary?.sent == 3 && summary?.errors == 3)
+        try await session.close()
+
+        let reopened = try await open(environment, "fuzz")
+        let saved = try await reopened.savedAttacks()
+        #expect(saved.count == 2 && saved.first?.config?.name == "ports" && saved.first?.row.resultCount == 3)
+        let rows = try await reopened.attackResults(sent.id)
+        #expect(
+            rows.map(\.payloads) == [["a"], ["b"], ["c"]]
+                && rows.allSatisfy { $0.error == "connection_refused" && $0.exchangeID > 0 })
+        let csv = try #require(try await reopened.exportAttackCSV(sent.id))
+        #expect(csv.split(separator: "\r\n").count == 4)
+        try await reopened.deleteAttack(refused.id)
+        #expect(try await reopened.savedAttacks().count == 1)
+        try await reopened.close()
     }
 }

@@ -58,6 +58,13 @@ public struct ResponseFindings: Sendable, Hashable, Codable {
     public var extracts: [String?]
     /// Payload reflection.
     public var reflection: Reflection
+
+    /// Findings.
+    public init(matches: [Bool], extracts: [String?], reflection: Reflection) {
+        self.matches = matches
+        self.extracts = extracts
+        self.reflection = reflection
+    }
 }
 
 /// Compiled grep rules for an attack.
