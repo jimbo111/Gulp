@@ -153,6 +153,7 @@ enum VulnLab {
         let requestTarget = request.bytes[request.parsed.target].string()
         let path = String(requestTarget.split(separator: "?", maxSplits: 1).first ?? "")
         let query = queryItems(requestTarget)
+        if let rpc = GRPCLab.respond(request, path: path) { return rpc }
         switch path {
         case "/":
             // The home page: links to the labs, so a proxied visit gives the site map inferred nodes
