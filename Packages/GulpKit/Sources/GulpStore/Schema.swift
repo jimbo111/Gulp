@@ -45,11 +45,20 @@ enum Schema {
             // F14 §5: a snapshot larger than the cap is stored cut, and says so.
             try db.execute(sql: "ALTER TABLE notebook_items ADD COLUMN truncated INTEGER NOT NULL DEFAULT 0")
         }
+        // F08 SCN-004: the user's severity/confidence overrides and notes survive re-findings;
+        // evidence is read per issue.
+        migrator.registerMigration("v6_issue_triage") { db in
+            try db.execute(sql: "ALTER TABLE issues ADD COLUMN severity_user TEXT")
+            try db.execute(sql: "ALTER TABLE issues ADD COLUMN confidence_user TEXT")
+            try db.execute(sql: "ALTER TABLE issues ADD COLUMN notes_md TEXT")
+            try db.execute(sql: "CREATE INDEX ix_evidence_issue ON issue_evidence(issue_id)")
+            try db.execute(sql: "CREATE INDEX ix_issues_host ON issues(host, path)")
+        }
         return migrator
     }
 
     /// The current schema version written to `meta.schema_version`.
-    static let version = 5
+    static let version = 6
 
     /// Schema v1, generated from the SQL block in doc 04 §4 (comments stripped, lines wrapped).
     static let v1 = """

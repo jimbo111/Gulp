@@ -195,11 +195,20 @@ public final class ProjectStore: Sendable {
         }
     }
 
-    /// Delete exchanges and their search entries (HIS-004). Blobs are reclaimed by Compact.
+    /// Delete exchanges and their search entries (HIS-004). Blobs are reclaimed by Compact. Rows that
+    /// point at them are detached first (issue evidence and WebSocket upgrades keep their own data;
+    /// Repeater history entries go), since those references have no ON DELETE action.
     public func delete(_ ids: [ExchangeID]) async throws {
         await writer.flush()
         try await pool.write { db in
             for id in ids {
+                try db.execute(
+                    sql: "UPDATE issue_evidence SET exchange_id = NULL WHERE exchange_id = ?", arguments: [id]
+                )
+                try db.execute(
+                    sql: "UPDATE ws_connections SET upgrade_exchange_id = NULL WHERE upgrade_exchange_id = ?",
+                    arguments: [id])
+                try db.execute(sql: "DELETE FROM repeater_history WHERE exchange_id = ?", arguments: [id])
                 try db.execute(sql: "DELETE FROM fts_exchanges WHERE rowid = ?", arguments: [id])
                 try db.execute(sql: "DELETE FROM exchanges WHERE id = ?", arguments: [id])
             }

@@ -105,6 +105,10 @@ public actor StoreWriter {
         let scope = self.scope
         do {
             try await pool.write { db in
+                // A replacement deletes and re-inserts the same id: rows that reference it (issue
+                // evidence, Repeater history, WebSocket upgrades) are checked at commit, when the
+                // parent exists again, instead of failing at the delete.
+                if batch.contains(where: \.replace) { try db.execute(sql: "PRAGMA defer_foreign_keys = ON") }
                 for (exchange, replace) in batch {
                     if replace { try ExchangeRows.delete(exchange.id, in: db) }
                     let inScope = scope.isInScope(exchange.target, path: ScopePath.of(exchange))
