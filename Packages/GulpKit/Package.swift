@@ -105,7 +105,9 @@ let package = Package(
         .target(name: "GulpSession", dependencies: ["GulpCore", "GulpHTTP"]),
         .target(name: "GulpRepeater", dependencies: ["GulpCore", "GulpHTTP"]),
         .target(name: "GulpOAST", dependencies: ["GulpCore", "GulpHTTP"]),
-        .target(name: "GulpFuzzer", dependencies: ["GulpCore", "GulpHTTP", "GulpOAST", "GulpSession"]),
+        .target(
+            name: "GulpFuzzer",
+            dependencies: ["GulpCore", "GulpHTTP", "GulpCodec", "GulpOAST", "GulpSession"]),
         // GulpCrawler defines the BrowserDriver protocol; it must NOT import GulpBrowser (ADR-010).
         .target(name: "GulpCrawler", dependencies: ["GulpCore", "GulpHTTP", "GulpSession"]),
         .target(
