@@ -18,7 +18,7 @@ import GulpWorkspace
 /// Version marker for the Gulp command-line tool.
 enum GulpCLI {
     /// Semantic version of the CLI; bumped as the tool gains commands.
-    static let version = "0.8.0"
+    static let version = "0.9.0"
 }
 
 /// The root command. `@main` (in a file not named main.swift) is how ArgumentParser runs an async
@@ -30,7 +30,7 @@ struct GulpCommand: AsyncParsableCommand {
         subcommands: [
             Send.self, Group.self, Paste.self, Repeater.self, Proxy.self, History.self, CA.self, CopyAs.self,
             WS.self, Browser.self, Scope.self, Target.self, ProjectCommand.self, MCP.self, Decode.self,
-            Diff.self, JWTCommand.self,
+            Diff.self, JWTCommand.self, Fuzz.self, Discover.self, Wordlists.self,
         ])
 }
 

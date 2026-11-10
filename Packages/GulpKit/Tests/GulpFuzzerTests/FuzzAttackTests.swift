@@ -196,8 +196,9 @@ struct FuzzAttackTests {
             config: config(
                 "GET /§p§ HTTP/1.1\r\n\r\n", .sniper, [PayloadSet(.list(["app/a", "admin", "app/b"]))]),
             engine: engine, inScope: { _, path in path.hasPrefix("/app") })
-        let (results, _) = await collect(attack)
+        let (results, scopeSummary) = await collect(attack)
         #expect(results.count == 3 && engine.sendCount == 2)
+        #expect(scopeSummary?.sent == 2 && scopeSummary?.refused == 1 && scopeSummary?.errors == 0)
         #expect(results.first { $0.payloads == ["admin"] }?.error == "out_of_scope")
 
         let slow = FakeEngine { _, _ in (200, "ok") }

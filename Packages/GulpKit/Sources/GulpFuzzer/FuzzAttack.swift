@@ -135,6 +135,8 @@ public struct FuzzSummary: Sendable, Hashable, Codable {
     public var seconds: Double
     /// Why it stopped early, if it did (`cancelled`, `grep match`, `errors`).
     public var stopReason: String?
+    /// Requests ScopeGuard refused (reported, never sent).
+    public var refused = 0
 
     /// Requests per second.
     public var rate: Double { seconds > 0 ? Double(sent) / seconds : 0 }
@@ -154,6 +156,7 @@ public actor FuzzAttack {
     private var stopReason: String?
     private var sent = 0
     private var errors = 0
+    private var refused = 0
     private var nextSlot: ContinuousClock.Instant?
     private var lastExtracts: [String?] = []
     private var task: Task<Void, Never>?
@@ -206,7 +209,9 @@ public actor FuzzAttack {
     }
 
     func summary(planned: Int, seconds: Double) -> FuzzSummary {
-        FuzzSummary(sent: sent, errors: errors, planned: planned, seconds: seconds, stopReason: stopReason)
+        FuzzSummary(
+            sent: sent, errors: errors, planned: planned, seconds: seconds, stopReason: stopReason,
+            refused: refused)
     }
 
     /// Pause after the in-flight requests.
@@ -250,8 +255,12 @@ public actor FuzzAttack {
     }
 
     func record(_ result: FuzzResult) {
-        sent += 1
-        if result.error != nil { errors += 1 }
+        if result.error == "out_of_scope" {
+            refused += 1
+        } else {
+            sent += 1
+            if result.error != nil { errors += 1 }
+        }
         lastExtracts = result.findings.extracts
         if config.settings.stopOnGrepMatch, result.findings.matches.contains(true), stopReason == nil {
             stopReason = "grep match"
