@@ -222,6 +222,23 @@ public struct SendOptions: Sendable {
     public var onResponseBytes: (@Sendable ([UInt8]) -> Void)?
 
     /// Options with defaults, recorded as `recordAs`.
+    /// Whether the send draws from the shared limiter (F03 §3.4): concurrency budgets, backoff and
+    /// the panic stop. Nil (the default) decides by tool: active tools (Fuzzer, Scanner, Crawler,
+    /// Sequencer, automation, AI, extensions) are governed; the proxy, Repeater, browser and session
+    /// macros are the user's own traffic and are not.
+    public var governed: Bool?
+    /// The rate slot was already taken by the limiter (the engine then doesn't wait for it again).
+    var rateReserved = false
+
+    /// Whether this send is governed (see `governed`).
+    public var isGoverned: Bool {
+        if let governed { return governed }
+        switch recordAs {
+        case .fuzzer, .scanner, .crawler, .sequencer, .automation, .ai, .extension: return true
+        case .proxy, .repeater, .session, .browser: return false
+        }
+    }
+
     public init(recordAs: ToolSource) {
         self.recordAs = recordAs
     }

@@ -52,7 +52,9 @@ public final class NIOHTTPEngine: HTTPEngine {
     private let responseHooks: [any ResponseHook]
     private let recorder: (any ExchangeRecorder)?
     /// The shared requests-per-second caps every send waits for (HTTP-013).
-    public let throttle = Throttle()
+    public let throttle: Throttle
+    /// The shared limiter for active tools: concurrency budgets, backoff, panic stop (F03 §3.4).
+    public let resources: ResourcePool
     /// Credentials that answer `401` challenges automatically (HTTP-012).
     public let platformAuth = PlatformAuth()
 
@@ -70,6 +72,9 @@ public final class NIOHTTPEngine: HTTPEngine {
         self.requestHooks = requestHooks
         self.responseHooks = responseHooks
         self.recorder = recorder
+        let throttle = Throttle()
+        self.throttle = throttle
+        self.resources = ResourcePool(throttle: throttle)
     }
 
     /// Close every pooled connection.
@@ -85,6 +90,60 @@ public final class NIOHTTPEngine: HTTPEngine {
     /// earlier hops are in `redirectChain` (F06 REP-006) — as is a `401` answered with a platform
     /// credential (HTTP-012).
     public func send(
+        _ request: RawRequest, to target: HTTPTarget, options: SendOptions
+    ) async -> ExchangeResult {
+        guard options.isGoverned else { return await sendFollowing(request, to: target, options: options) }
+        return await sendGoverned(request, to: target, options: options)
+    }
+
+    /// A governed send (F03 §3.4): take a slot from the shared limiter, send, give it back. A send
+    /// the panic stop cut is re-sent once the limiter resumes (the cut attempt stays recorded as
+    /// cancelled).
+    func sendGoverned(
+        _ request: RawRequest, to target: HTTPTarget, options: SendOptions
+    ) async -> ExchangeResult {
+        var options = options
+        options.rateReserved = true
+        while true {
+            let permit: ResourcePool.Permit
+            do {
+                permit = try await resources.acquire(host: target.host)
+            } catch .blocked(let host) {
+                let outgoing = OutgoingRequest(request: request, target: target)
+                return await finish(
+                    outgoing, options: options, wire: nil,
+                    error: .other("\(host) is blocked for active tools (its concurrency cap is 0)"),
+                    connectionID: 0, timing: Timing(start: Date()))
+            } catch {
+                let outgoing = OutgoingRequest(request: request, target: target)
+                return await finish(
+                    outgoing, options: options, wire: nil, error: .cancelled, connectionID: 0,
+                    timing: Timing(start: Date()))
+            }
+            let sending = options
+            let inner = Task { await self.sendFollowing(request, to: target, options: sending) }
+            await resources.attach(permit, cancel: { inner.cancel() })
+            let result = await withTaskCancellationHandler {
+                await inner.value
+            } onCancel: {
+                inner.cancel()
+            }
+            let outcome: ResourcePool.Outcome =
+                if let status = result.exchange.response?.parsed.statusCode, result.error == nil {
+                    .status(status)
+                } else if let error = result.error, error.isTimeout {
+                    .timeout
+                } else {
+                    .other
+                }
+            let cut = await resources.release(permit, outcome: outcome)
+            if cut, !Task.isCancelled { continue }
+            return result
+        }
+    }
+
+    /// Send, following redirects and answering one auth challenge as the options say.
+    func sendFollowing(
         _ request: RawRequest, to target: HTTPTarget, options: SendOptions
     ) async -> ExchangeResult {
         var result = await send(request, to: target, options: options, pool: pool)
@@ -316,7 +375,7 @@ public final class NIOHTTPEngine: HTTPEngine {
             return await finish(
                 outgoing, options: options, wire: nil, error: hookError, connectionID: 0, timing: timing)
         }
-        await throttle.acquire(host: outgoing.target.host)  // HTTP-013
+        if !options.rateReserved { await throttle.acquire(host: outgoing.target.host) }  // HTTP-013
 
         let route = upstreamRoute(for: outgoing.target, options: options)
         if let refusal = unsupported(outgoing.target, options, route: route) {
@@ -613,13 +672,11 @@ public final class NIOHTTPEngine: HTTPEngine {
         let parts = HTTP2Text.requestParts(
             outgoing.request, scheme: target.scheme, defaultAuthority: authority)
         let writeStart = NIODeadline.now()
-        let result = await withTaskCancellationHandler {
-            await connection.send(parts, maxResponseBytes: options.maxResponseBytes, deadline: deadline)
-        } onCancel: {
-            // Cancelling one request must not take down the shared connection; the stream timeout
-            // and the collector end the stream.
-        }
-        if result.error == .connectionReset || result.error == .incompleteResponse {
+        // Cancelling one request resets only its stream (H2Connection.send), never the shared
+        // connection.
+        let result = await connection.send(
+            parts, maxResponseBytes: options.maxResponseBytes, deadline: deadline)
+        if !Task.isCancelled, result.error == .connectionReset || result.error == .incompleteResponse {
             await h2Pool.remove(connection, for: key)  // GOAWAY or a dead connection: don't reuse
         }
         var wire: WireResponse?

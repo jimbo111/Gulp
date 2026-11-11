@@ -87,3 +87,13 @@ public struct GulpError: Error, Sendable, Equatable {
         self.underlying = underlying
     }
 }
+
+extension GulpNetworkError {
+    /// A connect, TLS, first-byte, idle or total timeout (counts against a host for backoff, GOV-007).
+    public var isTimeout: Bool {
+        switch self {
+        case .connectTimeout, .tlsHandshakeTimeout, .firstByteTimeout, .idleTimeout, .totalTimeout: true
+        default: false
+        }
+    }
+}

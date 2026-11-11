@@ -110,7 +110,14 @@ final class H2Connection: Sendable {
         }
         let writeEnd = NIODeadline.now()
         do {
-            return (try await done.futureResult.get(), nil, writeEnd)
+            // Cancelled: close just this stream (RST_STREAM CANCEL); the connection stays up.
+            let received = try await withTaskCancellationHandler {
+                try await done.futureResult.get()
+            } onCancel: {
+                done.fail(GulpNetworkError.cancelled)
+                stream.close(promise: nil)
+            }
+            return (received, nil, writeEnd)
         } catch let error as GulpNetworkError {
             return (nil, error, writeEnd)
         } catch {
