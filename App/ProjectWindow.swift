@@ -15,6 +15,8 @@ struct ProjectWindow: View {
     @State private var showListeners = false
     /// Global search (⌘⇧F, HIS-050).
     @State private var showSearch = false
+    /// The panic stop is engaged (F20 GOV-001).
+    @State private var panicked = false
     /// Project → gRPC Schemas… (F33); the revision reloads the schemas RPC views use.
     @State private var showGRPCSchemas = false
     @State private var grpcRevision = 0
@@ -63,6 +65,29 @@ struct ProjectWindow: View {
                         }
                         .keyboardShortcut("f", modifiers: [.command, .shift])
                         .help("Search every request and response in the project (⌘⇧F)")
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            let engage = !panicked
+                            panicked = engage
+                            Task {
+                                if engage {
+                                    await session.panicStop()
+                                } else {
+                                    await session.resumeAll()
+                                }
+                            }
+                        } label: {
+                            Label(
+                                panicked ? "Resume All" : "Panic Stop",
+                                systemImage: panicked ? "play.fill" : "stop.octagon.fill")
+                        }
+                        .keyboardShortcut(".", modifiers: [.control])
+                        .help(
+                            panicked
+                                ? "Resume every paused task"
+                                : "Pause every active task (Scanner, Crawler, Fuzzer…) and cut their requests in flight (⌃.)"
+                        )
                     }
                     ToolbarItem(placement: .primaryAction) {
                         Button {
@@ -140,6 +165,10 @@ struct ProjectWindow: View {
             RepeaterView(session: session)
         case .fuzzer:
             FuzzerView(session: session)
+        case .scanner:
+            CrawlerView(session: session)
+        case .beacon:
+            BeaconView(session: session)
         case .dashboard:
             IssuesDashboard(session: session)
         case .logger:

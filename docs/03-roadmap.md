@@ -180,10 +180,11 @@ discovery, Logger, GulpQL, search and Notebook.
 - *Implemented 2026-11-10 (local Linux gate; `Scripts/m10b-dod.sh` PASS, which also covers F33 test 4's Fuzzer half); the macOS views await CI. Carry-overs in PROGRESS.*
 
 ### M11a — Crawler (static), Beacon client, shared limiter and panic stop
-- [ ] Crawler, **static mode only**: the static-mode P0s CRL-001…CRL-010. The browser-backed P0s (CRL-030/031) are M13a. Build CRL-006's re-authentication **hook point** now; its session-rule/macro wiring is completed in M12a — until then the crawler runs unauthenticated.
-- [ ] Beacon **client** + interactsh client (all P0/P1 of F10 §2.1) and the local **dev Beacon** (BCN-024) for tests; wire the Fuzzer's OAST column (FUZ-025) and the `beacon()` Transform Tag (DEC-021). The deployable Beacon server (BCN-020…023, 025) is post-1.0.
-- [ ] **Shared limiter** (F03 §3.4: GOV-002, GOV-003, GOV-007 — HTTP-013 extended with concurrency budgets and adaptive backoff) and the **panic stop** (F20 GOV-001), built now because M11 ships the first active tools.
+- [x] Crawler, **static mode only**: the static-mode P0s CRL-001…CRL-010. The browser-backed P0s (CRL-030/031) are M13a. Build CRL-006's re-authentication **hook point** now; its session-rule/macro wiring is completed in M12a — until then the crawler runs unauthenticated.
+- [x] Beacon **client** + interactsh client (all P0/P1 of F10 §2.1) and the local **dev Beacon** (BCN-024) for tests; wire the Fuzzer's OAST column (FUZ-025) and the `beacon()` Transform Tag (DEC-021). The deployable Beacon server (BCN-020…023, 025) is post-1.0.
+- [x] **Shared limiter** (F03 §3.4: GOV-002, GOV-003, GOV-007 — HTTP-013 extended with concurrency budgets and adaptive backoff) and the **panic stop** (F20 GOV-001), built now because M11 ships the first active tools.
 - **DoD:** A static crawl of VulnLab discovers every linked route within scope and none outside it; the dev-Beacon and interactsh loops correlate an interaction to its request (F10 tests 1, 3, 4); global/per-host caps bound aggregate throughput (F03 test 6) and backoff reacts to 503 bursts (F03 test 7); the panic stop halts a running crawl + fuzz with zero in-flight requests (F20 test 5).
+- *Implemented 2026-11-11 (local Linux gate; `Scripts/m11a-dod.sh` PASS); the macOS views await CI. Carry-overs in PROGRESS (BCN-007's promote-to-issue, the status-bar health/throttled badges, crawl persistence across restarts).*
 
 ### M11b — Active scan engine and the P0 checks
 - [ ] Insertion points, active check engine, scan configurations, the scan task UI (SCN-020…SCN-038).

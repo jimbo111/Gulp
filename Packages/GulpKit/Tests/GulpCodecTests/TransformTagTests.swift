@@ -60,12 +60,44 @@ struct TransformTagTests {
         #expect(error("«base64{unclosed")?.message.contains("unterminated") == true)
         #expect(error("stray » here")?.message.contains("closing delimiter") == true)
         #expect(error("«hex-decode{zz}»")?.message.contains("hex-decode") == true)
-        #expect(error("«beacon()»")?.message.contains("M11a") == true)
+        #expect(error("«beacon()»")?.message.contains("OAST") == true)  // off until configured (BCN-004)
         #expect(error("«base64(1,2){x}»")?.message.contains("no arguments") == true)
         let custom = TransformTags(open: "{{", close: "}}")
         #expect(
             String(
                 decoding: try custom.evaluate(Array("a {{base64{hi}}} b".utf8), state: TagState()),
                 as: UTF8.self) == "a aGk= b")
+    }
+}
+
+@Suite("beacon() tag (DEC-021, F10 BCN-001)")
+struct BeaconTagTests {
+    @Test("beacon() mints a fresh payload per use in the requested form once OAST is configured")
+    func test_DEC021_beacon() throws {
+        final class Counter: @unchecked Sendable {
+            // @unchecked: `value` is only touched under `lock`.
+            let lock = NSLock()
+            var value = 0
+            func next() -> Int {
+                lock.withLock {
+                    value += 1; return value
+                }
+            }
+        }
+        let state = TagState()
+        let counter = Counter()
+        state.setOASTMinter { "id\(counter.next()).oast.test" }
+        let text = try TransformTags().evaluate(
+            Array("«beacon()» «beacon(url)» «beacon(https)» «beacon(email)»".utf8), state: state)
+        #expect(
+            String(decoding: text, as: UTF8.self)
+                == "id1.oast.test http://id2.oast.test/ https://id3.oast.test/ gulp@id4.oast.test")
+        #expect(throws: TransformTagError.self) {
+            try TransformTags().evaluate(Array("«beacon(ftp)»".utf8), state: state)
+        }
+        state.setOASTMinter(nil)
+        #expect(throws: TransformTagError.self) {
+            try TransformTags().evaluate(Array("«beacon()»".utf8), state: state)
+        }
     }
 }

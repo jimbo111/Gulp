@@ -8,10 +8,10 @@
 // is evaluated first, then the op runs on it. Spaces and tabs just inside `{ … }` are trimmed, so
 // tags can be spaced for reading. Arguments are positional (`hmac-sha256(s3cret)`) or `key=value`.
 // Every Decoder operation is a tag, plus the dynamic ops `var(name)`, `now(format)`,
-// `random(charset,len)`, `uuid()`, `counter(name)` and `len{inner}`; `beacon()` is reserved for
-// Beacon (M11a). Everything outside tags is kept byte for byte. `««` and `»»` are literal
-// delimiters. Errors name the byte offset of the tag (DEC-023); unbalanced delimiters are errors,
-// never silently passed through.
+// `random(charset,len)`, `uuid()`, `counter(name)` and `len{inner}`; `beacon()` mints an OAST
+// payload host once OAST is configured (F10, M11a). Everything outside tags is kept byte for byte.
+// `««` and `»»` are literal delimiters. Errors name the byte offset of the tag (DEC-023); unbalanced
+// delimiters are errors, never silently passed through.
 
 import Foundation
 
@@ -32,6 +32,18 @@ public final class TagState: @unchecked Sendable {
     private let lock = NSLock()
     private var variables: [String: String]
     private var counters: [String: Int] = [:]
+    private var oastMinter: (@Sendable () -> String)?
+
+    /// Set (or clear) how `beacon()` mints an OAST payload host (F10 BCN-001; nil: OAST is off).
+    public func setOASTMinter(_ minter: (@Sendable () -> String)?) {
+        lock.withLock { oastMinter = minter }
+    }
+
+    /// A fresh OAST payload host, or nil when OAST isn't configured.
+    public func mintOASTHost() -> String? {
+        let minter = lock.withLock { oastMinter }
+        return minter?()
+    }
 
     /// State with `variables`.
     public init(variables: [String: String] = [:]) {
@@ -254,7 +266,20 @@ public struct TransformTags: Sendable {
         case "lit":
             return Array(arguments.joined(separator: ",").utf8)
         case "beacon":
-            throw fail("beacon() needs Beacon (arrives in M11a)")
+            // F10 BCN-001: a unique payload per evaluation; `beacon()`/`beacon(host)` the hostname,
+            // `beacon(url)` http://host/, `beacon(https)`, `beacon(email)`.
+            guard let host = state.mintOASTHost() else {
+                throw fail(
+                    "beacon() needs OAST: configure a Beacon or interactsh server first (it is off by default)"
+                )
+            }
+            switch (arguments.first ?? "host").lowercased() {
+            case "", "host", "dns": return Array(host.utf8)
+            case "url", "http": return Array("http://\(host)/".utf8)
+            case "https": return Array("https://\(host)/".utf8)
+            case "email": return Array("gulp@\(host)".utf8)
+            default: throw fail("beacon(…) takes host, url, https or email")
+            }
         default:
             guard let transform = Transforms.named(name) else { throw fail("unknown operation \"\(name)\"") }
             var named: [String: String] = [:]

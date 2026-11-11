@@ -142,6 +142,7 @@ enum VulnLab {
         <li><a href="/file?name=readme.txt">Files</a></li>
         <li><a href="/go?next=/">Go</a></li>
         <li><a href="/race/status?code=GULP10">Coupon status</a></li>
+        <li><a href="/crawl/">Crawl lab</a></li>
         </ul>
         <form action="/guestbook" method="post"><input name="message"></form>
         </body></html>
@@ -154,7 +155,12 @@ enum VulnLab {
         let path = String(requestTarget.split(separator: "?", maxSplits: 1).first ?? "")
         let query = queryItems(requestTarget)
         if let rpc = GRPCLab.respond(request, path: path) { return rpc }
+        if let crawl = CrawlLab.respond(path, query) { return crawl }
         switch path {
+        case "/lab/burst":
+            return BurstLab.respond(query)
+        case "/fetch", "/safe/fetch":
+            return OASTLab.fetch(query, safe: path.hasPrefix("/safe"))
         case "/":
             // The home page: links to the labs, so a proxied visit gives the site map inferred nodes
             // (F04 TGT-003). `/admin` is deliberately not linked (content discovery finds it, M8).

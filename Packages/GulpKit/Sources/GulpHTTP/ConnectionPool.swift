@@ -58,9 +58,10 @@ actor ConnectionPool {
         return nextID
     }
 
-    /// Wait until fewer than `maxPerKey` connections for `key` are in use, then take a slot.
-    func acquireSlot(_ key: PoolKey) async {
-        if inUse[key, default: 0] < maxPerKey {
+    /// Wait until fewer than `maxPerKey` (or the send's own `limit`, HTTP-003 "configurable per
+    /// tool") connections for `key` are in use, then take a slot.
+    func acquireSlot(_ key: PoolKey, limit: Int? = nil) async {
+        if inUse[key, default: 0] < max(1, limit ?? maxPerKey) {
             inUse[key, default: 0] += 1
             return
         }

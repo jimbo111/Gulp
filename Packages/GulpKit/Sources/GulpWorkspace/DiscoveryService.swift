@@ -39,6 +39,11 @@ extension ProjectSession {
         let writer = store.writer
         let (events, continuation) = AsyncStream.makeStream(
             of: DiscoveryEvent.self, bufferingPolicy: .unbounded)
+        // GOV-001: discovery has no pause of its own; its sends wait at the shared limiter.
+        let tasks = activeTasks
+        let taskID = UUID()
+        await tasks.add(
+            ActiveTask(id: taskID, kind: "discovery", name: config.baseURL, pause: {}, resume: {}))
         Task {
             for await event in source {
                 if case .found(var found) = event {
@@ -52,6 +57,7 @@ extension ProjectSession {
                     continuation.yield(event)
                 }
             }
+            await tasks.remove(taskID)
             continuation.finish()
         }
         continuation.onTermination = { _ in Task { await discovery.cancel() } }

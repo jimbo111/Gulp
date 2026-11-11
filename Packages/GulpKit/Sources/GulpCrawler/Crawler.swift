@@ -127,6 +127,9 @@ public struct CrawlReport: Sendable, Hashable, Codable {
     public var stopReason = "done"
     /// Wall-clock seconds.
     public var seconds = 0.0
+
+    /// An empty report.
+    public init() {}
 }
 
 /// Live crawl events.
@@ -279,7 +282,7 @@ public actor Crawler {
             var robotsURL = origin
             robotsURL.path = "/robots.txt"
             robotsURL.query = nil
-            if let text = await fetchText(robotsURL), !text.isEmpty {
+            if let text = await fetchText(robotsURL, continuation), !text.isEmpty {
                 let hints = RobotsHints(text)
                 robots[origin.authority + origin.scheme.rawValue] = hints
                 for path in hints.hintPaths {
@@ -301,7 +304,7 @@ public actor Crawler {
     func addSitemap(_ address: String, origin: CrawlURL, _ continuation: AsyncStream<CrawlEvent>.Continuation)
         async
     {
-        guard let url = CrawlURL(address), let text = await fetchText(url) else { return }
+        guard let url = CrawlURL(address), let text = await fetchText(url, continuation) else { return }
         for loc in PageParser.sitemapURLs(text) {
             guard let page = CrawlURL(loc) else { continue }
             await enqueue(FrontierItem(method: "GET", url: page, depth: 1, source: .sitemap), continuation)
@@ -309,7 +312,7 @@ public actor Crawler {
     }
 
     /// Fetch a hint file (counted as a page; scope applies). Nil unless it returned 200.
-    func fetchText(_ url: CrawlURL) async -> String? {
+    func fetchText(_ url: CrawlURL, _ continuation: AsyncStream<CrawlEvent>.Continuation) async -> String? {
         let key = "GET " + url.key(config.normalization)
         guard seen.insert(key).inserted, await inScope(url.target, url.requestTarget),
             fetched < config.maxPages
@@ -319,7 +322,9 @@ public actor Crawler {
         fetched += 1
         let result = await send(
             request(for: FrontierItem(method: "GET", url: url, depth: 0, source: .robots)), url.target)
-        record(FrontierItem(method: "GET", url: url, depth: 0, source: .robots), result)
+        let source: LinkSource = url.path.hasSuffix(".txt") ? .robots : .sitemap
+        continuation.yield(
+            .page(record(FrontierItem(method: "GET", url: url, depth: 0, source: source), result)))
         guard let response = result.exchange.response, response.parsed.statusCode == 200,
             let body = (try? response.decodedBody(limit: PageParser.maxBody)) ?? nil
         else { return nil }

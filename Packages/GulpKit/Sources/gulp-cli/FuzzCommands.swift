@@ -47,6 +47,12 @@ struct Fuzz: AsyncParsableCommand {
             (repeatable; one position each).
             """)
     var grpcField: [String] = []
+    @Option(
+        help:
+            "After the attack, poll OAST this many seconds and flag rows that caused interactions (FUZ-025).")
+    var oastWait: Double = 0
+    @Flag(help: "Evaluate Transform Tags in each request, payloads included (e.g. «beacon(url)», F12/F10).")
+    var tags = false
 
     func run() async throws {
         guard let data = FileManager.default.contents(atPath: raw) else {
@@ -85,6 +91,7 @@ struct Fuzz: AsyncParsableCommand {
         settings.retries = retries
         settings.stopOnGrepMatch = stopOnMatch
         settings.stopAfterErrors = stopAfterErrors
+        settings.transformTags = tags
         let matches = match.map {
             $0.hasPrefix("re:") ? GrepMatch(String($0.dropFirst(3)), isRegex: true) : GrepMatch($0)
         }
@@ -160,6 +167,23 @@ struct Fuzz: AsyncParsableCommand {
             print(
                 "#\(result.seq)\t\(result.status.map(String.init) ?? "-")\t\(result.length)\t\(payloads)\t\(result.error ?? "")"
             )
+        }
+        if oastWait > 0 {
+            // FUZ-025: the OAST column — rows whose payload caused an out-of-band interaction.
+            await session.oast.drain(timeout: .seconds(oastWait), quiet: .seconds(min(2, oastWait)))
+            var flagged: [(FuzzResult, [String])] = []
+            for result in results where result.exchangeID != 0 {
+                let interactions =
+                    (try? await session.store.oastInteractions(forExchange: result.exchangeID)) ?? []
+                if !interactions.isEmpty {
+                    flagged.append((result, Array(Swift.Set(interactions.map(\.proto))).sorted()))
+                }
+            }
+            print("oast: \(flagged.count) row(s) caused interactions")
+            for (result, protocols) in flagged {
+                let payloads = result.payloads.map { $0 ?? "-" }.joined(separator: " | ")
+                print("  #\(result.seq)\t\(protocols.joined(separator: ","))\t\(payloads)")
+            }
         }
         try await session.close()
     }

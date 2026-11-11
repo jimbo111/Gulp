@@ -229,6 +229,9 @@ public struct SendOptions: Sendable {
     public var governed: Bool?
     /// The rate slot was already taken by the limiter (the engine then doesn't wait for it again).
     var rateReserved = false
+    /// Connections per pool key for this send (nil: the engine's default). Governed sends lift it:
+    /// their concurrency is bounded by the limiter's per-host budget instead (GOV-003).
+    var connectionLimit: Int?
 
     /// Whether this send is governed (see `governed`).
     public var isGoverned: Bool {

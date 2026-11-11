@@ -109,6 +109,18 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
     private var waiting: [CheckedContinuation<Void, Never>] = []
     /// TGT-024: when set, proxy exchanges out of this scope are not recorded.
     private var proxyScope: ScopeService?
+    /// F10: the OAST session's correlation id; requests carrying it have their payloads linked to
+    /// the exchange by `oastHandler`.
+    private var oastPrefix: [UInt8]?
+    private var oastHandler: (@Sendable ([String], ExchangeID, ToolSource) async -> Void)?
+
+    /// Watch recorded requests for OAST payloads with `prefix` (nil stops watching).
+    func setOASTWatch(
+        prefix: String?, handler: (@Sendable ([String], ExchangeID, ToolSource) async -> Void)?
+    ) {
+        oastPrefix = prefix.map { Array($0.utf8) }
+        oastHandler = handler
+    }
 
     /// Drop out-of-scope proxy exchanges (`scope`), or record everything (nil).
     func setProxyScope(_ scope: ScopeService?) {
@@ -128,10 +140,20 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
             let path = (exchange.derived.path ?? "/") + (exchange.derived.query.map { "?" + $0 } ?? "")
             if !proxyScope.isInScope(exchange.target, path: path) { return Self.notRecorded }
         }
+        let id: ExchangeID
         if paused {
-            return await withCheckedContinuation { held.append((exchange, $0)) }
+            id = await withCheckedContinuation { held.append((exchange, $0)) }
+        } else {
+            id = await writer.record(exchange)
         }
-        return await writer.record(exchange)
+        if let oastPrefix, let oastHandler, id != Self.notRecorded {
+            let ids = OASTService.payloadIDs(in: exchange.request.bytes.rawBytes, prefix: oastPrefix)
+            if !ids.isEmpty {
+                let source = exchange.source
+                Task { await oastHandler(ids, id, source) }
+            }
+        }
+        return id
     }
 
     func update(_ exchange: Exchange) async {
@@ -211,7 +233,7 @@ public actor ProjectSession {
     /// Long-running work tied to the session (the site map's listener); cancelled and awaited by
     /// `close()` so nothing reads the store while it closes.
     var backgroundTasks: [Task<Void, Never>] = []
-    private let recorder: ProjectRecorder
+    let recorder: ProjectRecorder
     /// Mints leaves for TLS interception; nil when the CA could not be loaded (CONNECT then fails
     /// with a clear page instead of the project failing to open).
     public nonisolated let minter: LeafMinter?
@@ -233,6 +255,10 @@ public actor ProjectSession {
     public nonisolated let coverage: CoverageService
     /// The live passive scanner (F08 §4).
     public nonisolated let passiveScan: PassiveScanService
+    /// Running active tasks, for the panic stop (F20 GOV-001).
+    public nonisolated let activeTasks = ActiveTasks()
+    /// OAST (F10): payloads, polling, interactions.
+    public nonisolated let oast: OASTService
     private let currentStore: CurrentStore
 
     private init(
@@ -270,6 +296,8 @@ public actor ProjectSession {
             scope: { await scopeGuard.current })
         self.siteMap = SiteMapService { await currentStore.store }
         self.coverage = CoverageService { await currentStore.store }
+        self.oast = OASTService(
+            engine: engine, store: { await currentStore.store }, tagState: tagState, events: events)
         self.passiveScan = PassiveScanService(
             store: { await currentStore.store }, config: { settings.get(PassiveScanConfig.self) },
             scopeIsEmpty: { await scopeGuard.current.rules.isEmpty }, events: events)
@@ -354,6 +382,15 @@ public actor ProjectSession {
         await session.applyProxyScope()
         await session.startSiteMap()
         await session.startPassiveScan()
+        await session.applyNetworkSettings()
+        if session.settings.get(OASTSettings.self).enabled {
+            do {
+                try await session.startOAST()
+            } catch {
+                await events.publish(
+                    .log(LogEntry(level: .warning, message: "OAST: \(error)", module: "gulp.oast")))
+            }
+        }
         return session
     }
 
@@ -449,6 +486,7 @@ public actor ProjectSession {
         for task in tasks { await task.value }
         await repeater.flush()
         await proxy.stopAll()
+        await stopOAST()
         await http.shutdown()
         await passiveScan.drain()  // headless runs (gulp-cli proxy) finish scanning what they recorded
         try await store.close()

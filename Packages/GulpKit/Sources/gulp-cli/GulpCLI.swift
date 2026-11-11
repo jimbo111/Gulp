@@ -32,7 +32,8 @@ struct GulpCommand: AsyncParsableCommand {
             WS.self, Browser.self, Scope.self, Target.self, ProjectCommand.self, MCP.self, Decode.self,
             Diff.self, JWTCommand.self, Fuzz.self, Discover.self, Wordlists.self, Query.self, Search.self,
             LoggerCommand.self, Filters.self, NotebookCommand.self, Coverage.self, Seed.self,
-            IssuesCommand.self, ScanCommand.self, GRPCCommand.self,
+            IssuesCommand.self, ScanCommand.self, GRPCCommand.self, CrawlCommand.self, OASTCommand.self,
+            GovernorCommand.self,
         ])
 }
 
@@ -722,6 +723,12 @@ struct Repeater: AsyncParsableCommand {
     @Flag(help: "Send Transform Tags literally instead of evaluating them.")
     var noTags = false
 
+    @Option(
+        help:
+            "After sending, poll OAST for this many seconds and print the interactions the request caused (F10)."
+    )
+    var oastWait: Double = 0
+
     func run() async throws {
         guard let data = FileManager.default.contents(atPath: raw) else {
             throw ValidationError("Cannot read \(raw)")
@@ -758,6 +765,9 @@ struct Repeater: AsyncParsableCommand {
         if !stream { print(result?.exchange.response?.wireBytes.string() ?? "(no response)") }
         let history = await session.repeater.history(tab.id)
         print("tab \(tab.id) '\(tab.title)': \(history.count) send(s); last exchange #\(history.last ?? 0)")
+        if oastWait > 0, let last = history.last {
+            await printOASTInteractions(session, exchange: last, wait: oastWait)
+        }
         try await session.close()
         if result?.error != nil { throw ExitCode(2) }
     }

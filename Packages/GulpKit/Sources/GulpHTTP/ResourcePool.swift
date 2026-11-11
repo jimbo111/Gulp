@@ -87,6 +87,8 @@ public actor ResourcePool {
     private var waiterOrder: [UInt64] = []
     private var cancelHandlers: [UInt64: @Sendable () -> Void] = [:]
     private var revoked: Set<UInt64> = []
+    /// Slots granted so far (a monotonic counter; rates are measured from it).
+    public private(set) var granted = 0
     private var peakGlobal = 0
     private var peakByHost: [String: Int] = [:]
     private var health: [String: HostHealth] = [:]
@@ -137,6 +139,7 @@ public actor ResourcePool {
                 peakGlobal = max(peakGlobal, inFlight)
                 peakByHost[host] = max(peakByHost[host] ?? 0, inFlightByHost[host] ?? 0)
                 let permit = Permit(id: id, host: host)
+                granted += 1
                 // The rate schedule (and backoff) while holding the slot.
                 let throttle = self.throttle
                 await throttle.acquire(host: host, governed: true)
@@ -257,7 +260,7 @@ public actor ResourcePool {
     /// Consecutive good outcomes that allow a recovery step.
     static let recoveryRun = 10
     static let stepInterval = Duration.seconds(1)
-    static let minimumRate = 0.5
+    static let minimumRate = 1.0
 
     /// Hosts currently backed off.
     public var throttledHosts: [HostBackoff] {

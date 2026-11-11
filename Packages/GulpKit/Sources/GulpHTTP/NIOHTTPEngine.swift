@@ -104,6 +104,7 @@ public final class NIOHTTPEngine: HTTPEngine {
     ) async -> ExchangeResult {
         var options = options
         options.rateReserved = true
+        options.connectionLimit = 512
         while true {
             let permit: ResourcePool.Permit
             do {
@@ -476,7 +477,7 @@ public final class NIOHTTPEngine: HTTPEngine {
             return await sendH2(outgoing, on: shared, key: key, options: options, deadline: totalDeadline)
         }
 
-        await pool.acquireSlot(key)
+        await pool.acquireSlot(key, limit: options.connectionLimit)
         for attemptNumber in 1...2 {
             if Task.isCancelled {
                 await pool.releaseSlot(key)

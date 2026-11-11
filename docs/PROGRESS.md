@@ -14,9 +14,9 @@ order; within a milestone, do P0 first.
   launched by the Gulp Browser launcher through the proxy loads `https://localhost:8443` with no
   certificate interstitial (SPKI pin of the Gulp CA) and the request is in history. M1–M4a DoD
   scripts still pass in the same run.
-- **Active milestone**: **M11a — Crawler (static), Beacon client, shared limiter and panic stop**
-  next (the **daily-driver beta** release gate after M9 still needs macOS for its release work);
-  M5…M10b are implemented and await the macOS CI run (see their status below).
+- **Active milestone**: **M11b — Active scan engine and the P0 checks** next (the **daily-driver
+  beta** release gate after M9 still needs macOS for its release work); M5…M11a are implemented and
+  await the macOS CI run (see their status below).
 - **Branching**: `main` holds merged milestones (PRs jimbo111/Gulp#1 M0–M2, #2 review fixes,
   #3 M3a, then M3b + the feature-review adoption). Work happens on
   the session branch and is merged by PR once CI is green.
@@ -243,10 +243,37 @@ order; within a milestone, do P0 first.
   reading); field-tree editing in the UI (the sheet edits by path or JSON); a decoded-tree size cap
   (§5; depth is capped at 32); GRP-006/007 (P2: streaming replay, rich error details, "Copy as
   grpcurl"); Scanner insertion points inside protobuf (GRP-005, M11c).
+- **M11a status — implementation complete; macOS verification pending** (2026-11-11):
+  - Local gate: all tests and **M1…M11a DoD scripts PASS**, lint clean. The M11a DoD
+    (`Scripts/m11a-dod.sh`, also in CI) runs VulnLab and two dev Beacons: a static crawl of `:8088`
+    reaches all 32 routes of `Tests/Fixtures/vulnlab-crawl.txt`, reports the two out-of-scope links
+    and the logout link without fetching them, and fills the site map; Test Beacon passes; a Repeater
+    request with `«beacon(url)»` to the blind SSRF yields DNS and HTTP interactions tied to its
+    exchange; a token-protected Beacon refuses registration without the token; the Fuzzer's OAST
+    column flags exactly the two payload rows; a 2,000 req/s fuzz plus a crawl peak at ≈1,006 req/s
+    under a 1,000 cap and at 50 in flight under a 50 budget (130 wanted); a 503 burst drives the
+    rate from ≈300/s to ≈37/s with the throttled flag, then it recovers; the panic stop cuts every
+    in-flight request (0 within one tick), pauses the fuzz and the crawl, and resume completes both
+    with no errors.
+  - Done in M11a: CRL-001…010 (static; CRL-006 as the hook point), BCN-001…006 (BCN-003/006 in the
+    Beacon tool), BCN-024 (dev Beacon), FUZ-025 (`fuzz --oast-wait`), DEC-021 `beacon()`, GOV-001…003
+    and GOV-007; `gulp-cli crawl`, `oast configure|payload|test|list`, `governor set|caps-drill|
+    backoff-drill|panic-drill`, `repeater --oast-wait`, `fuzz --tags`. Fixed on the way: HTTP/2
+    sends ignored cancellation (a cut stream ran to completion); governed sends were capped at 6
+    connections per host; the crawler's robots/sitemap fetches weren't reported as pages.
+  - **Not verified (no macOS here):** `GulpFeatures/CrawlerView.swift` (crawl sheet + progress,
+    Beacon tool), the panic-stop toolbar item (⌃.) in `App/ProjectWindow`.
+- **M11a carry-overs**: BCN-007 "promote to issue" (the Scanner's OAST checks raise issues in
+  M11b); the status-bar Beacon health and per-host "throttled" badges (the data is there:
+  `OASTService.currentHealth`, `ResourcePool.throttledHosts`; the panel is GOV-006, M16b); crawl
+  pause/resume across app restarts and a stored crawl report (F09 §4); "Crawl from here" in Target
+  and "New crawl" on the Dashboard (the crawl lives under Scanner); persisting the OAST session
+  across restarts (Keychain-held key); a manual interop check against a public interactsh server;
+  the deployable Beacon (BCN-020…023, 025: post-1.0).
 - **Next action**: when CI minutes return, run CI on the branch head, fix any macOS compile issues
-  in the new SwiftUI code (M5…M10b views), then open the M5…M10b PRs and merge; the daily-driver
+  in the new SwiftUI code (M5…M11a views), then open the M5…M11a PRs and merge; the daily-driver
   beta's release work (signed + notarized build, real testers) needs macOS. Meanwhile continue with
-  M11a on the Linux-testable core.
+  M11b on the Linux-testable core.
 - **Waiting on the owner**: GitHub Actions minutes (CI is the only macOS build available).
 - Earlier waiting items: nothing. The scope proposals in `docs/FEATURE-REVIEW.md` §3 were
   **adopted on 2026-11-08** (product decision #7 in `docs/07-decisions.md`) and applied to the specs:
@@ -353,7 +380,7 @@ for behavior.
 - [ ] **Daily-driver beta** — release gate after M9 (signed + notarized build to real testers)
 - [ ] M10a — Passive scanner + issue model — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M10b — gRPC & protobuf (F33) — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
-- [ ] M11a — Crawler (static), Beacon client + dev Beacon, shared limiter + panic stop
+- [ ] M11a — Crawler (static), Beacon client + dev Beacon, shared limiter + panic stop — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M11b — Active scan engine + P0 checks
 - [ ] M11c — Full check catalog (incl. SCN-070…074) + crawl-and-audit
 - [ ] M12a — Sessions, auth, macros, request signing
@@ -617,6 +644,17 @@ for behavior.
   `gulp-cli grpc`, `fuzz --grpc-field`; Protobuf tab, gRPC Schemas sheet, Repeater message editor;
   `Scripts/m10b-dod.sh` PASS. Deviation: schemas inline instead of blobs (doc 07). Fixed on the
   way: HTTP/2 pool race on cold concurrent bursts; CRLF-as-one-Character splitting bugs.
+- 2026-11-11 — **M11a implemented** (local Linux gate; macOS views unverified): GulpHTTP
+  `ResourcePool` (global/per-host concurrency, backoff, panic pause; governed sends) and HTTP/2
+  stream cancellation; GulpCrawler (normalization, page parser, forms, robots/sitemap, frontier,
+  budgets, cookie jar, re-auth hook); GulpOAST interactsh client (checked against the interactsh
+  source) + engine transport; schema v7 OAST rows; Beacon package `BeaconKit` + `gulp-beacon --dev`
+  (HTTP API + capture, UDP DNS); workspace network settings, active-task registry + panic stop,
+  crawl service, OAST service (`beacon()` tag, recorder linking, polling, Test Beacon); VulnLab crawl
+  lab, blind `/fetch`, `/lab/burst`; CLI `crawl`, `oast`, `governor`; Crawl/Beacon views and the
+  panic-stop toolbar item; `Scripts/m11a-dod.sh` PASS. Deviation: interactsh's AES mode is CTR, not
+  GCM (F10 corrected). Fixed on the way: HTTP/2 cancellation ran streams to completion; governed
+  sends were capped at 6 connections per host.
 
 
 ## How to pick up work (reminder)

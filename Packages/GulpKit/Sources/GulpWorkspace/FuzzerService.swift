@@ -43,6 +43,12 @@ extension ProjectSession {
             name: config.name, configJSON: configJSON, baseRequest: config.request, state: "running")
         let source = await attack.start()
         let (events, continuation) = AsyncStream.makeStream(of: FuzzEvent.self, bufferingPolicy: .unbounded)
+        let tasks = activeTasks
+        let taskID = UUID()
+        await tasks.add(
+            ActiveTask(
+                id: taskID, kind: "fuzzer", name: config.name, pause: { await attack.pause() },
+                resume: { await attack.resume() }))
         Task {
             var pending: [FuzzerResultRow] = []
             var lastFlush = ContinuousClock.now
@@ -62,6 +68,7 @@ extension ProjectSession {
                 }
                 continuation.yield(event)
             }
+            await tasks.remove(taskID)
             continuation.finish()
         }
         continuation.onTermination = { _ in Task { await attack.cancel() } }

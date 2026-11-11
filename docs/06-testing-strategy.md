@@ -57,7 +57,9 @@ tests can measure false positives.
 | SSTI | `/ssti?name=` (a tiny template engine that evaluates `{{ a*b }}`) | `/safe/ssti` | SCN |
 | Path traversal | `/file?name=` (serves from a sandboxed fixture tree that contains a fake `etc/passwd`) | `/safe/file` | SCN |
 | XXE | `/xml` (simulated entity expansion against a fixture file) | `/safe/xml` | SCN |
-| SSRF | `/fetch?url=` (performs the HTTP fetch only to the Beacon/dev host; anything else is simulated) | `/safe/fetch` | SCN, BCN |
+| SSRF | `/fetch?url=` (blind: answers at once; for hosts under the dev Beacon domain — `oast.test`, or `GULP_VULNLAB_BEACON_DOMAIN` — it sends a DNS query to the Beacon's DNS port and an HTTP GET to its HTTP port, `GULP_VULNLAB_BEACON_DNS`/`_HTTP`, default 127.0.0.1:8053/8090; anything else is simulated) | `/safe/fetch` (allowlist; never fetches) | SCN, BCN |
+| Crawler (M11a) | `/crawl/`: every link kind the static crawler follows (anchors, stylesheet `url()`, script fetch string, image, iframe → meta refresh, GET form, redirect, pagination, JSON path), `/robots.txt` + `/sitemap.xml` hints, a `/crawl/logout` link that must never be fetched and two out-of-scope links; `Tests/Fixtures/vulnlab-crawl.txt` lists the routes a crawl of `:8088` must reach. `/crawl/slow/` links 60 slow pages for the limiter drills | — | CRL |
+| Limiter (M11a) | `/lab/burst?key=&ok=MS&bad=MS`: per key, 200 for `ok` ms after the first request, 503 for `bad` ms, then 200 (a time-boxed burst for the backoff test); `/slow?ms=` and `/echo` for the rate and concurrency drills | — | GOV |
 | Open redirect | `/go?next=` | `/safe/go` | SCN |
 | CORS | `/api/cors` (reflects Origin with credentials) | `/safe/api/cors` | SCN |
 | Header issues | Pages with missing CSP/HSTS, cookies without Secure/HttpOnly, verbose errors with stack traces, an exposed `.git/HEAD`, `/.env` | `/safe/*` with correct headers | SCN passive |
