@@ -87,7 +87,8 @@ public actor ResourcePool {
     private var waiterOrder: [UInt64] = []
     private var cancelHandlers: [UInt64: @Sendable () -> Void] = [:]
     private var revoked: Set<UInt64> = []
-    /// Slots granted so far (a monotonic counter; rates are measured from it).
+    /// Sends released so far, counted once their rate slot came up (a monotonic counter; rates
+    /// are measured from it).
     public private(set) var granted = 0
     private var peakGlobal = 0
     private var peakByHost: [String: Int] = [:]
@@ -139,7 +140,6 @@ public actor ResourcePool {
                 peakGlobal = max(peakGlobal, inFlight)
                 peakByHost[host] = max(peakByHost[host] ?? 0, inFlightByHost[host] ?? 0)
                 let permit = Permit(id: id, host: host)
-                granted += 1
                 // The rate schedule (and backoff) while holding the slot.
                 let throttle = self.throttle
                 await throttle.acquire(host: host, governed: true)
@@ -149,6 +149,7 @@ public actor ResourcePool {
                     if Task.isCancelled { throw .cancelled }
                     continue
                 }
+                granted += 1  // released to send: counted after the rate slot, so rates measure sends
                 return permit
             }
             await wait()

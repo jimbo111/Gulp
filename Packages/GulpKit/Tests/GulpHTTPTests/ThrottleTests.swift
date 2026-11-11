@@ -43,9 +43,13 @@ struct ThrottleTests {
         }
         #expect(ContinuousClock.now - started >= .milliseconds(190))  // 4 gaps of 50 ms
         await engine.throttle.set(.none)
+        // No limits: no slot is ever reserved (checked on the schedule itself; wall-clock bounds
+        // are unreliable under a parallel test run), and sends still go through promptly.
+        let now = ContinuousClock.now
+        for _ in 0..<5 { #expect(await engine.throttle.reserve(host: "127.0.0.1", now: now) == .zero) }
         let unthrottled = ContinuousClock.now
         for _ in 0..<5 { _ = await engine.send(request, to: target, options: options) }
-        #expect(ContinuousClock.now - unthrottled < .milliseconds(190))
+        #expect(ContinuousClock.now - unthrottled < .seconds(2))
         await engine.shutdown()
         await server.stop()
     }

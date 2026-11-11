@@ -90,7 +90,9 @@ public actor SiteMapService {
             after = last.id
             await Task.yield()
         }
-        for id in (try? await store.textualResponseIDs()) ?? [] {
+        // Only exchanges already added above: one recorded meanwhile is the catch-up's, and taking
+        // its links now would show inferred children before their page.
+        for id in (try? await store.textualResponseIDs()) ?? [] where id <= after {
             if Task.isCancelled { return }
             guard let exchange = try? await store.exchange(id: id) else { continue }
             for url in Self.links(of: exchange) { fresh.addInferred(url: url) }

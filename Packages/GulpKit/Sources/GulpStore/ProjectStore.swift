@@ -93,13 +93,31 @@ public final class ProjectStore: Sendable {
     public func close() async throws {
         await writer.flush()
         try? await updateStatistics()  // so the next open plans GulpQL queries well (HIS-024)
-        try await pool.writeWithoutTransaction { db in
-            try db.checkpoint(.truncate)
+        // A reader that switched to a new file a moment ago (Save As) may still be finishing a query
+        // here; the truncating checkpoint and the close then report SQLITE_BUSY — wait briefly.
+        try await Self.retryingBusy {
+            _ = try await pool.writeWithoutTransaction { db in try db.checkpoint(.truncate) }
         }
-        try pool.close()
+        try await Self.retryingBusy { try pool.close() }
         // Unlink while still holding the lock, so nobody can lock the old file in between.
         try? FileManager.default.removeItem(atPath: ProjectLock.path(for: url))
         lock.release()
+    }
+
+    /// Run `operation`, retrying (up to ~1.4 s) while SQLite reports BUSY or LOCKED.
+    static func retryingBusy(_ operation: () async throws -> Void) async throws {
+        var attempt = 0
+        while true {
+            do {
+                try await operation()
+                return
+            } catch let error as DatabaseError
+                where (error.resultCode == .SQLITE_BUSY || error.resultCode == .SQLITE_LOCKED) && attempt < 10
+            {
+                attempt += 1
+                try await Task.sleep(for: .milliseconds(25 * attempt))
+            }
+        }
     }
 
     /// Write a consistent copy of the whole project to `url` (Save As, PRJ-002), using SQLite's
@@ -107,8 +125,10 @@ public final class ProjectStore: Sendable {
     public func backup(to url: URL) async throws {
         await writer.flush()
         let destination = try DatabaseQueue(path: url.path)
-        try pool.backup(to: destination)
-        try destination.close()
+        defer { try? destination.close() }
+        // A background writer (the passive scanner's cursor, a settings change) committing during
+        // the copy can make a backup step fail with SQLITE_BUSY/LOCKED: try again shortly.
+        try await Self.retryingBusy { try pool.backup(to: destination) }
     }
 
     /// Every project-scope settings value, by key (for "Use settings from…", PRJ-005).

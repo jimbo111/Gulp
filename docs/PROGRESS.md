@@ -260,7 +260,9 @@ order; within a milestone, do P0 first.
     and GOV-007; `gulp-cli crawl`, `oast configure|payload|test|list`, `governor set|caps-drill|
     backoff-drill|panic-drill`, `repeater --oast-wait`, `fuzz --tags`. Fixed on the way: HTTP/2
     sends ignored cancellation (a cut stream ran to completion); governed sends were capped at 6
-    connections per host; the crawler's robots/sitemap fetches weren't reported as pages.
+    connections per host; the crawler's robots/sitemap fetches weren't reported as pages; a
+    site-map rebuild race, SQLITE_BUSY on closing the old file after Save As, and a timing-only
+    throttle test (doc 07).
   - **Not verified (no macOS here):** `GulpFeatures/CrawlerView.swift` (crawl sheet + progress,
     Beacon tool), the panic-stop toolbar item (⌃.) in `App/ProjectWindow`.
 - **M11a carry-overs**: BCN-007 "promote to issue" (the Scanner's OAST checks raise issues in
