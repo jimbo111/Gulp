@@ -46,7 +46,7 @@ struct StoreTests {
         for table in expected { #expect(tables.contains(table), "missing table \(table)") }
         let version = try await store.meta("schema_version")
         let uuid = try await store.meta("project_uuid")
-        #expect(version == "6" && uuid != nil)
+        #expect(version == "7" && uuid != nil)
     }
 
     @Test("PRJ-003: an exchange round-trips byte-for-byte with its metadata")
