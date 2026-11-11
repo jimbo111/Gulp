@@ -54,11 +54,21 @@ enum Schema {
             try db.execute(sql: "CREATE INDEX ix_evidence_issue ON issue_evidence(issue_id)")
             try db.execute(sql: "CREATE INDEX ix_issues_host ON issues(host, path)")
         }
+        // F10 BCN-002: payloads remember the exchange that carried them (no foreign key: deleting an
+        // exchange must not fail on, or delete, its OAST record) and their host; an interaction keeps
+        // its unique id even when no payload of this project matches it.
+        migrator.registerMigration("v7_oast") { db in
+            try db.execute(sql: "ALTER TABLE oast_payloads ADD COLUMN exchange_id INTEGER")
+            try db.execute(sql: "ALTER TABLE oast_payloads ADD COLUMN host TEXT")
+            try db.execute(sql: "ALTER TABLE oast_interactions ADD COLUMN unique_id TEXT")
+            try db.execute(sql: "CREATE INDEX ix_oast_payload_exchange ON oast_payloads(exchange_id)")
+            try db.execute(sql: "CREATE INDEX ix_oast_interaction_payload ON oast_interactions(payload_id)")
+        }
         return migrator
     }
 
     /// The current schema version written to `meta.schema_version`.
-    static let version = 6
+    static let version = 7
 
     /// Schema v1, generated from the SQL block in doc 04 §4 (comments stripped, lines wrapped).
     static let v1 = """

@@ -104,7 +104,12 @@ let package = Package(
             ]),
         .target(name: "GulpSession", dependencies: ["GulpCore", "GulpHTTP"]),
         .target(name: "GulpRepeater", dependencies: ["GulpCore", "GulpHTTP"]),
-        .target(name: "GulpOAST", dependencies: ["GulpCore", "GulpHTTP"]),
+        .target(
+            name: "GulpOAST",
+            dependencies: [
+                "GulpCore", "GulpHTTP", .product(name: "Crypto", package: "swift-crypto"),
+                .product(name: "_CryptoExtras", package: "swift-crypto"),
+            ]),
         .target(
             name: "GulpFuzzer",
             dependencies: ["GulpCore", "GulpHTTP", "GulpCodec", "GulpOAST", "GulpSession"],
@@ -206,9 +211,20 @@ let package = Package(
         .testTarget(
             name: "GulpRepeaterTests",
             dependencies: ["GulpRepeater", "GulpHTTP", "GulpCore"] + nioConcurrency + nioCore),
-        .testTarget(name: "GulpOASTTests", dependencies: ["GulpOAST"]),
+        .testTarget(
+            name: "GulpOASTTests",
+            dependencies: [
+                "GulpOAST", "GulpCore", .product(name: "Crypto", package: "swift-crypto"),
+                .product(name: "_CryptoExtras", package: "swift-crypto"),
+                .product(name: "NIOConcurrencyHelpers", package: "swift-nio"),
+            ]),
         .testTarget(name: "GulpFuzzerTests", dependencies: ["GulpFuzzer", "GulpCodec"]),
-        .testTarget(name: "GulpCrawlerTests", dependencies: ["GulpCrawler", "GulpCore", "GulpHTTP"]),
+        .testTarget(
+            name: "GulpCrawlerTests",
+            dependencies: [
+                "GulpCrawler", "GulpCore", "GulpHTTP",
+                .product(name: "NIOConcurrencyHelpers", package: "swift-nio"),
+            ]),
         .testTarget(name: "GulpScannerTests", dependencies: ["GulpScanner", "GulpCore"]),
         .testTarget(name: "GulpSequencerTests", dependencies: ["GulpSequencer"]),
         .testTarget(name: "GulpReportTests", dependencies: ["GulpReport"]),
