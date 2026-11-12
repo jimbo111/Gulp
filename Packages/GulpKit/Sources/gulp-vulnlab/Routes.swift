@@ -237,6 +237,15 @@ enum VulnLab {
                 return json(
                     200, #"{"id":\#(id),"owner":"\#(id == 1 ? "alice" : "bob")","total":\#(id * 10)}"#)
             }
+            if path.hasPrefix("/safe/api/orders/"), let id = Int(path.dropFirst("/safe/api/orders/".count)) {
+                // The enforcing twin: the order is returned only to its owner (by the session cookie).
+                guard (1...2).contains(id) else { return json(404, #"{"error":"no such order"}"#) }
+                let owner = id == 1 ? "alice" : "bob"
+                guard let session = AuthLab.cookie(request, "session"),
+                    AuthLab.sessionUser(session) == owner
+                else { return json(403, #"{"error":"forbidden"}"#) }
+                return json(200, #"{"id":\#(id),"owner":"\#(owner)","total":\#(id * 10)}"#)
+            }
             if path.hasPrefix("/status/") {
                 return status(Int(path.dropFirst("/status/".count)))
             }

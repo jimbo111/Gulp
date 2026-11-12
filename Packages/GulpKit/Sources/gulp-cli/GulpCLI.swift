@@ -33,7 +33,7 @@ struct GulpCommand: AsyncParsableCommand {
             Diff.self, JWTCommand.self, Fuzz.self, Discover.self, Wordlists.self, Query.self, Search.self,
             LoggerCommand.self, Filters.self, NotebookCommand.self, Coverage.self, Seed.self,
             IssuesCommand.self, ScanCommand.self, GRPCCommand.self, CrawlCommand.self, OASTCommand.self,
-            GovernorCommand.self, SessionCommand.self,
+            GovernorCommand.self, SessionCommand.self, AuthzCommand.self,
         ])
 }
 

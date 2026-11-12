@@ -29,6 +29,12 @@ and the secret scanner in M19a, the Smuggling Probe in M19b); the JWT Workbench 
 | ADV-006 | P2 | IDOR helper: detect object-id parameters and try adjacent/other-user ids (within scope) to find missing ownership checks. |
 | WSX-004 | P0 | **WebSocket per-message authorization**: distinguish handshake-time vs per-message authorization by replaying captured WS messages (over a fresh `openWebSocket` connection) with a stripped/other-identity session and reporting whether privileged actions still succeed; servers that authorize only at handshake are flagged, not treated as benign. *(Moved from F26, 2026-11-08; later: M22 — post-1.0.)* |
 
+*As built (M12b, 2026-11-12):* `AuthzAnalysis` (pure verdict) + `ProjectSession.runAuthzMatrix`
+replay each request as each identity and raise `authz.broken-access-control` for bypasses;
+`gulp-cli authz orders` demos it on VulnLab's IDOR vs the enforcing `/safe/api/orders/{id}` twin
+(`Scripts/m12b-dod.sh`). ADV-004 (live mode), ADV-005's per-identity CSRF (reuses M12a session
+rules) and ADV-006 (IDOR id-walking) and the macOS matrix UI are carry-overs. See doc 07.
+
 ## 2. JWT Workbench (moved to F12, 2026-11-08)
 
 The JWT Workbench (ADV-010…ADV-013) moved to **F12 §2.3** so it ships with the Decoder in **M7**,

@@ -201,7 +201,12 @@ public enum IssueDefinitions {
     static let manual: [IssueDefinition] = [
         def(
             "manual.finding", "Manual finding", "Manual", .medium, .firm,
-            "Found by hand during testing; see the detail and the evidence.", "See the detail.")
+            "Found by hand during testing; see the detail and the evidence.", "See the detail."),
+        def(
+            "authz.broken-access-control", "Broken access control", "Access control", .high, .firm,
+            "A request succeeded for an identity that should not be allowed to make it: a lower-privilege or unauthenticated user received the same response as the authorized user. The server is not checking who is asking (IDOR / missing authorization).",
+            "Enforce an ownership/role check on the server for every request, not just in the UI; deny by default and verify the caller owns or may access the object.",
+            "- [OWASP broken access control](https://owasp.org/Top10/A01_2021-Broken_Access_Control/)"),
     ]
 
     static let other: [IssueDefinition] = [

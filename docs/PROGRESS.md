@@ -299,6 +299,10 @@ order; within a milestone, do P0 first.
   + `gulp-cli session sign|reauth`; `Scripts/m12a-dod.sh` PASS and in CI. Deferred: jar import/export
   (SES-003), rule tester (SES-014), client certs/platform auth per identity (SES-040/041), GulpQL rule
   scope, Keychain key storage, and the macOS Sessions UI; recorded login + passkeys stay M13a.
+- **M12b status — implementation complete; macOS matrix UI pending** (2026-11-12): the Authz Matrix
+  (replay as identities, verdicts, bypass issues) + VulnLab enforcing twin + `gulp-cli authz orders`;
+  `Scripts/m12b-dod.sh` PASS and in CI. Carry-overs: ADV-004 live mode, ADV-005 per-identity CSRF,
+  ADV-006 id-walking, the `/admin` self-granted-role case, and the macOS matrix view.
 - **M11c status — partial** (2026-11-12): done and in CI (`Scripts/m11c-dod.sh` PASS): GRP-005's
   Scanner half (protobuf-field insertion points; the gRPC-Web SQLi is found, the safe twin clean),
   crawl-and-audit (`scan crawl-audit`), the OpenAPI scan (`scan api`, all operations), SCN-036
@@ -708,6 +712,11 @@ for behavior.
   response-side cookie/nonce/staleness) with single-flight re-auth; VulnLab `/signed/*` independent
   verifiers and `/session/expire`; `gulp-cli session sign|reauth`; `Scripts/m12a-dod.sh` PASS. ECCurve
   is now Codable. Deviations and carry-overs in doc 07 and the status block above.
+
+- 2026-11-12 — **M12b implemented** (local Linux gate; macOS UI unverified): `AuthzAnalysis` verdict
+  logic, `runAuthzMatrix` orchestration (replay as identities under ScopeGuard, raise
+  `authz.broken-access-control`), VulnLab `/safe/api/orders/{id}` enforcing twin, `gulp-cli authz
+  orders`; `Scripts/m12b-dod.sh` PASS. Carry-overs above.
 
 ## How to pick up work (reminder)
 

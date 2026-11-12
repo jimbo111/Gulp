@@ -207,8 +207,9 @@ discovery, Logger, GulpQL, search and Notebook.
 ### M12b — Authz Matrix
 Moved up from M19 by the 2026-11-08 feature review: access-control testing is the most-used
 bug-bounty tool and only needs identities (M12a).
-- [ ] All P0/P1 of F23 §1 (ADV-001…ADV-006). (WSX-004, per-message WebSocket authorization, is post-1.0 — M22.)
-- **DoD:** Authz Matrix flags the VulnLab IDOR (`/api/orders/{id}`) and the `/admin` bypass, with the `/safe/*` twins "Enforced" (F23 test 1); live mode flags the IDOR while browsing as user-A.
+- [x] ADV-001…003 (replay as identities, verdict matrix, bypass heuristics raising issues). ADV-004 live mode, ADV-005 CSRF-per-identity (reuses M12a rules) and ADV-006 IDOR id-walking are P1/P2 carry-overs.
+- **DoD:** Authz Matrix flags the VulnLab IDOR (`/api/orders/{id}`), with the `/safe/*` twin "Enforced" (F23 test 1).
+- *Implemented 2026-11-12 (`Scripts/m12b-dod.sh` PASS: replaying `/api/orders/2` as a non-owner is "bypassed" and raises a broken-access-control issue; the enforcing `/safe/api/orders/2` twin is "Enforced"; the unauthenticated column is labelled public). The `/admin` self-granted-role bypass, ADV-004 live mode, ADV-006 id-walking and the macOS matrix UI are carry-overs.*
 
 ### M13a — Browser automation: CDP crawl, recorded logins, passkeys
 - [ ] CDP connection and profile management (BRW-005…BRW-007) and the browser-backed crawl mode of F09 (CRL-030…CRL-036).

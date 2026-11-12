@@ -66,6 +66,9 @@ enum AuthLab {
                 ]))
     }
 
+    /// The user a session cookie belongs to (for the enforcing /safe/api/orders twin).
+    static func sessionUser(_ session: String) -> String? { sessions.withLockedValue { $0[session] } }
+
     static func cookie(_ request: RawRequest, _ name: String) -> String? {
         guard let header = request.headerValue("cookie")?.string() else { return nil }
         for pair in header.split(separator: ";") {
