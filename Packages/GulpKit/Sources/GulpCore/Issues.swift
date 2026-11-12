@@ -99,6 +99,9 @@ public struct IssueEvidence: Sendable, Hashable, Codable {
     /// A short note ("Set-Cookie: sid lacks HttpOnly").
     public var note: String?
 
+    /// The note on the evidence row that holds an active finding's base request (SCN-037).
+    public static let baseRequestNote = "base request"
+
     /// Evidence.
     public init(
         id: Int64 = 0, exchangeID: ExchangeID? = nil, oastInteractionID: Int64? = nil,
@@ -141,6 +144,9 @@ public struct IssueFinding: Sendable, Hashable {
     public var references: String
     /// The proof.
     public var evidence: IssueEvidence
+    /// For active findings: the unmodified request the probe was derived from. Stored as an extra
+    /// evidence row noted `IssueEvidence.baseRequestNote`, so a re-test (SCN-037) can start from it.
+    public var baseExchangeID: ExchangeID?
 
     /// A finding.
     public init(

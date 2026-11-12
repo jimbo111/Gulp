@@ -29,9 +29,40 @@ enum ScanLab {
             delayMilliseconds: delay)
     }
 
+    /// `/scanlab/`: links to every crawlable vulnerable route and its safe twin (with parameters)
+    /// and the guestbook forms, so a crawl from here reaches them (the M11c crawl-and-audit DoD).
+    static let index: String = {
+        let gets = [
+            "/xss/html?q=hello", "/xss/attr?q=hello", "/xss/js?q=hello", "/xss/url?q=https://example.com/",
+            "/sqli/error?id=1", "/sqli/bool?id=1", "/sqli/time?id=1", "/cmd/ping?host=127.0.0.1",
+            "/ssti?name=gulp",
+            "/file?name=readme.txt", "/fetch?url=http://example.com/", "/go?next=/", "/crlf?lang=en",
+        ]
+        var links = gets.flatMap { [$0, "/safe" + $0] }.map {
+            "<li><a href=\"\($0.replacingOccurrences(of: "&", with: "&amp;"))\">\($0)</a></li>"
+        }
+        links += ["", "/safe"].map { prefix in
+            """
+            <li><form method="post" action="\(prefix)/guestbook"><input name="message" value="hello"><button>Sign</button></form></li>
+            """
+        }
+        return "<!doctype html><html><head><title>Scan lab</title></head><body><h1>Scan lab</h1><ul>"
+            + links.joined(separator: "\n") + "</ul></body></html>"
+    }()
+
     static func respond(_ request: RawRequest, path: String, query: [String: String]) -> VulnReply? {
-        let safe = path.hasPrefix("/safe/")
-        let route = safe ? String(path.dropFirst(5)) : path
+        if path == "/scanlab/" || path == "/scanlab" {
+            return VulnReply(
+                bytes: VulnLab.response(200, body: Array(index.utf8), type: "text/html; charset=utf-8"))
+        }
+        // `/lab/patch?route=/ssti`: from now on the route behaves like its safe twin (the re-test
+        // demonstration: a re-test after the patch reports the issue fixed).
+        if path == "/lab/patch", let route = query["route"] {
+            patched.insert(route)
+            return text("patched \(route)\n")
+        }
+        let safe = path.hasPrefix("/safe/") || patched.contains(path)
+        let route = path.hasPrefix("/safe/") ? String(path.dropFirst(5)) : path
         let body = String(decoding: request.bytes.rawBytes[request.parsed.body], as: UTF8.self)
         switch route {
         case "/sqli/error": return sqli(query["id"] ?? "", safe: safe, showErrors: true)
@@ -256,6 +287,7 @@ enum ScanLab {
     // MARK: guestbook
 
     private static let book = NSLockedMessages()
+    private static let patched = LockedRoutes()
 
     /// POST stores `message`; GET renders the messages — unencoded here, encoded on the safe twin.
     static func guestbook(_ request: RawRequest, body: String, safe: Bool) -> VulnReply {
@@ -293,4 +325,14 @@ final class NSLockedMessages: @unchecked Sendable {
     }
 
     func messages(safe isSafe: Bool) -> [String] { lock.withLock { isSafe ? safe : vulnerable } }
+}
+
+/// Routes patched with `/lab/patch`.
+final class LockedRoutes: @unchecked Sendable {
+    // @unchecked: `routes` is only touched while holding `lock`.
+    private let lock = NSLock()
+    private var routes: Set<String> = []
+
+    func insert(_ route: String) { lock.withLock { _ = routes.insert(route) } }
+    func contains(_ route: String) -> Bool { lock.withLock { routes.contains(route) } }
 }

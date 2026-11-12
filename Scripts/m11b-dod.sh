@@ -54,7 +54,8 @@ wait_port 8090
 "$GULP" scan active --project "$PROJECT" --manifest "$MANIFEST" --base "$LAB" --config balanced | tee "$WORK/scan.txt"
 grep -qE '^scan: [0-9]+ findings, [0-9]+ probes, 0 out of scope in [0-9.]+ s \(done\)$' "$WORK/scan.txt" || fail "the scan didn't finish"
 "$GULP" scan verify-active --project "$PROJECT" --manifest "$MANIFEST" | tee "$WORK/verify.txt" || fail "issues differ from the manifest"
-grep -qE '^verify-active: 32 routes, 20 expected issue\(s\), 0 missing, 0 unexpected$' "$WORK/verify.txt" || fail "verification summary"
+routes=$(grep -c '"method"' "$MANIFEST")
+grep -qE "^verify-active: $routes routes, [0-9]+ expected issue\(s\), 0 missing, 0 unexpected$" "$WORK/verify.txt" || fail "verification summary"
 for oast in active.cmd.oast active.xxe.oast active.ssrf.oast; do
   grep -q "  $oast: 1" "$WORK/scan.txt" || fail "no $oast finding"
 done

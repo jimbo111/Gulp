@@ -5,6 +5,7 @@
 // nothing else in the request is re-serialized (raw bytes are the truth).
 
 import Foundation
+import GulpCodec
 import GulpCore
 
 /// Where an insertion point sits (SCN-020).
@@ -19,6 +20,8 @@ public enum InsertionPointKind: String, Sendable, Codable, Hashable, CaseIterabl
     case pathSegment = "path segment"
     case wholeBody = "whole body"
     case custom
+    /// A field inside a protobuf message of a gRPC, gRPC-Web or Connect request (GRP-005).
+    case protobufField = "protobuf field"
 }
 
 /// How a payload is written into an insertion point.
@@ -33,6 +36,8 @@ public enum PayloadEncoding: String, Sendable, Codable, Hashable {
     case xml
     /// As-is (headers, multipart, whole body).
     case none
+    /// Written into a protobuf field and the message re-encoded (lengths and envelope recomputed).
+    case protobuf
 }
 
 /// One insertion point.
@@ -47,6 +52,10 @@ public struct InsertionPoint: Sendable, Hashable {
     public var range: Range<Int>
     /// How payloads are encoded here.
     public var encoding: PayloadEncoding
+    /// For `.protobufField`: the field path (field numbers, outer to inner).
+    public var protoPath: [Int]? = nil
+    /// For `.protobufField`: which message of the request body.
+    public var messageIndex = 0
 
     /// A label for issues and logs (`url param id`).
     public var label: String { "\(kind.rawValue) \(name)" }
@@ -54,10 +63,27 @@ public struct InsertionPoint: Sendable, Hashable {
     /// The base request with `payload` written here. `encoded` payloads are already in wire form
     /// (a CRLF probe's `%0d%0a`) and are spliced in as they are.
     public func build(_ base: RawRequest, payload: String, encoded: Bool = false) -> RawRequest {
+        if let protoPath {
+            return Self.buildProtobuf(base, path: protoPath, message: messageIndex, payload: payload)
+        }
         let bytes = base.bytes.rawBytes
         let value = encoded ? Array(payload.utf8) : Array(Self.encode(payload, encoding).utf8)
         let spliced = Array(bytes[..<range.lowerBound]) + value + Array(bytes[range.upperBound...])
         return RawRequest(Bytes(spliced)).updatingContentLength()
+    }
+
+    /// The request with the protobuf field at `path` set to `payload` (same wire type where the
+    /// text parses for it) and the message, envelope and Content-Length re-encoded.
+    static func buildProtobuf(_ base: RawRequest, path: [Int], message index: Int, payload: String)
+        -> RawRequest
+    {
+        guard let call = RPC.parse(request: base, response: nil), call.requests.indices.contains(index),
+            let message = try? Protobuf.decode(call.requests[index].payload),
+            let old = message.value(at: path),
+            let edited = message.setting(path, to: ProtoValue.parsing(Array(payload.utf8), as: old.wireType)),
+            let rebuilt = RPC.replacingMessage(base, at: index, with: edited.encoded)
+        else { return base }
+        return rebuilt
     }
 
     static func encode(_ payload: String, _ encoding: PayloadEncoding) -> String {
@@ -82,7 +108,7 @@ public struct InsertionPoint: Sendable, Hashable {
                 of: "<", with: "&lt;"
             )
             .replacingOccurrences(of: ">", with: "&gt;")
-        case .none:
+        case .none, .protobuf:
             return payload
         }
     }
@@ -104,8 +130,7 @@ public struct InsertionPolicy: Sendable, Codable, Hashable {
     public init(
         kinds: Set<InsertionPointKind> = [
             .urlParam, .bodyParam, .jsonValue, .xmlValue, .multipartField, .cookie, .header, .pathSegment,
-            .wholeBody,
-            .custom,
+            .wholeBody, .custom, .protobufField,
         ],
         headers: [String] = ["User-Agent", "Referer", "X-Forwarded-For"],
         skipNames: String =
@@ -164,6 +189,19 @@ public enum InsertionPoints {
                         baseValue: String(decoding: bytes[field.value], as: UTF8.self),
                         range: field.value, encoding: .none))
             }
+        }
+        // Protobuf fields of RPC requests (GRP-005): every text and numeric leaf of each message.
+        if let call = RPC.parse(request: request, response: nil) {
+            for (index, message) in call.requests.enumerated() where !message.json {
+                guard let decoded = try? Protobuf.decode(message.payload) else { continue }
+                points += protobufLeaves(decoded, prefix: []).map { leaf in
+                    InsertionPoint(
+                        kind: .protobufField, name: leaf.path.map(String.init).joined(separator: "."),
+                        baseValue: leaf.value, range: 0..<0, encoding: .protobuf, protoPath: leaf.path,
+                        messageIndex: index)
+                }
+            }
+            return filter(points, policy)
         }
         // Body.
         let body = parsed.body
@@ -226,6 +264,33 @@ public enum InsertionPoints {
                 }
             }
         }
+        return filter(points, policy)
+    }
+
+    /// Text and numeric leaves of a protobuf message (first occurrence of each field number;
+    /// nested messages descended up to 8 levels).
+    static func protobufLeaves(_ message: ProtoMessage, prefix: [Int]) -> [(path: [Int], value: String)] {
+        var leaves: [(path: [Int], value: String)] = []
+        var seen: Set<Int> = []
+        for field in message.fields where seen.insert(field.number).inserted {
+            let path = prefix + [field.number]
+            switch field.value {
+            case .varint(let v): leaves.append((path, String(v)))
+            case .bytes(let bytes):
+                switch Protobuf.readings(bytes).first {
+                case .string(let text): leaves.append((path, text))
+                case .message(let nested) where prefix.count < 8:
+                    leaves += protobufLeaves(nested, prefix: path)
+                default: break
+                }
+            default: break
+            }
+        }
+        return leaves
+    }
+
+    /// Apply the policy: kinds, skipped names and the per-request cap.
+    static func filter(_ points: [InsertionPoint], _ policy: InsertionPolicy) -> [InsertionPoint] {
         let skip =
             policy.skipNames.isEmpty
             ? nil : try? NSRegularExpression(pattern: policy.skipNames, options: [.caseInsensitive])

@@ -102,10 +102,23 @@ extension ProjectStore {
                 added = true
                 try db.execute(
                     sql: """
-                        DELETE FROM issue_evidence WHERE issue_id = ? AND id NOT IN \
+                        DELETE FROM issue_evidence WHERE issue_id = ? AND (note IS NULL OR note != ?) AND id NOT IN \
                         (SELECT id FROM issue_evidence WHERE issue_id = ? ORDER BY id DESC LIMIT ?)
                         """,
-                    arguments: [id, id, Self.maxEvidencePerIssue])
+                    arguments: [id, IssueEvidence.baseRequestNote, id, Self.maxEvidencePerIssue])
+            }
+            // The base request of an active finding (kept for re-tests, SCN-037; one per issue).
+            if let base = finding.baseExchangeID,
+                try Int.fetchOne(
+                    db, sql: "SELECT 1 FROM issue_evidence WHERE issue_id = ? AND note = ?",
+                    arguments: [id, IssueEvidence.baseRequestNote]) == nil
+            {
+                try db.execute(
+                    sql: """
+                        INSERT INTO issue_evidence (issue_id, exchange_id, request_markers_json, \
+                        response_markers_json, note) VALUES (?, ?, '[]', '[]', ?)
+                        """,
+                    arguments: [id, base, IssueEvidence.baseRequestNote])
             }
             return IssueRecordResult(id: id, isNew: isNew, addedEvidence: added)
         }

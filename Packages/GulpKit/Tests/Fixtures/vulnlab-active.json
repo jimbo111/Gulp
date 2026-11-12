@@ -1,34 +1,263 @@
 [
-{"method": "GET", "path": "/xss/html?q=hello", "expect": ["active.xss.reflected"]},
-{"method": "GET", "path": "/xss/attr?q=hello", "expect": ["active.xss.reflected"]},
-{"method": "GET", "path": "/xss/js?q=hello", "expect": ["active.xss.reflected"]},
-{"method": "GET", "path": "/xss/url?q=https://example.com/", "expect": ["active.xss.reflected"]},
-{"method": "GET", "path": "/safe/xss/html?q=hello", "expect": []},
-{"method": "GET", "path": "/safe/xss/attr?q=hello", "expect": []},
-{"method": "GET", "path": "/safe/xss/js?q=hello", "expect": []},
-{"method": "GET", "path": "/safe/xss/url?q=https://example.com/", "expect": []},
-{"method": "POST", "path": "/guestbook", "contentType": "application/x-www-form-urlencoded", "body": "message=hello", "expect": ["active.xss.stored"]},
-{"method": "POST", "path": "/safe/guestbook", "contentType": "application/x-www-form-urlencoded", "body": "message=hello", "expect": []},
-{"method": "GET", "path": "/sqli/error?id=1", "expect": ["active.sqli.error", "active.sqli.boolean"]},
-{"method": "GET", "path": "/sqli/bool?id=1", "expect": ["active.sqli.boolean"]},
-{"method": "GET", "path": "/sqli/time?id=1", "expect": ["active.sqli.time"]},
-{"method": "POST", "path": "/sqli/json", "contentType": "application/json", "body": "{\"id\":\"1\"}", "expect": ["active.sqli.error", "active.sqli.boolean"]},
-{"method": "GET", "path": "/safe/sqli/error?id=1", "expect": []},
-{"method": "GET", "path": "/safe/sqli/bool?id=1", "expect": []},
-{"method": "GET", "path": "/safe/sqli/time?id=1", "expect": []},
-{"method": "POST", "path": "/safe/sqli/json", "contentType": "application/json", "body": "{\"id\":\"1\"}", "expect": []},
-{"method": "GET", "path": "/cmd/ping?host=127.0.0.1", "expect": ["active.cmd.time", "active.cmd.oast"]},
-{"method": "GET", "path": "/safe/cmd/ping?host=127.0.0.1", "expect": []},
-{"method": "GET", "path": "/ssti?name=gulp", "expect": ["active.ssti"]},
-{"method": "GET", "path": "/safe/ssti?name=gulp", "expect": []},
-{"method": "GET", "path": "/file?name=readme.txt", "expect": ["active.path-traversal"]},
-{"method": "GET", "path": "/safe/file?name=readme.txt", "expect": []},
-{"method": "POST", "path": "/xml", "contentType": "application/xml", "body": "<?xml version=\"1.0\"?><order><item>book</item></order>", "expect": ["active.xxe.inband", "active.xxe.oast"]},
-{"method": "POST", "path": "/safe/xml", "contentType": "application/xml", "body": "<?xml version=\"1.0\"?><order><item>book</item></order>", "expect": []},
-{"method": "GET", "path": "/fetch?url=http://example.com/", "expect": ["active.ssrf.oast"]},
-{"method": "GET", "path": "/safe/fetch?url=http://example.com/", "expect": []},
-{"method": "GET", "path": "/go?next=/", "expect": ["active.open-redirect"]},
-{"method": "GET", "path": "/safe/go?next=/", "expect": []},
-{"method": "GET", "path": "/crlf?lang=en", "expect": ["active.crlf"]},
-{"method": "GET", "path": "/safe/crlf?lang=en", "expect": []}
+  {
+    "method": "GET",
+    "path": "/xss/html?q=hello",
+    "expect": [
+      "active.xss.reflected"
+    ],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/xss/attr?q=hello",
+    "expect": [
+      "active.xss.reflected"
+    ],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/xss/js?q=hello",
+    "expect": [
+      "active.xss.reflected"
+    ],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/xss/url?q=https://example.com/",
+    "expect": [
+      "active.xss.reflected"
+    ],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/safe/xss/html?q=hello",
+    "expect": [],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/safe/xss/attr?q=hello",
+    "expect": [],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/safe/xss/js?q=hello",
+    "expect": [],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/safe/xss/url?q=https://example.com/",
+    "expect": [],
+    "crawl": true
+  },
+  {
+    "method": "POST",
+    "path": "/guestbook",
+    "contentType": "application/x-www-form-urlencoded",
+    "body": "message=hello",
+    "expect": [
+      "active.xss.stored"
+    ],
+    "crawl": true
+  },
+  {
+    "method": "POST",
+    "path": "/safe/guestbook",
+    "contentType": "application/x-www-form-urlencoded",
+    "body": "message=hello",
+    "expect": [],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/sqli/error?id=1",
+    "expect": [
+      "active.sqli.error",
+      "active.sqli.boolean"
+    ],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/sqli/bool?id=1",
+    "expect": [
+      "active.sqli.boolean"
+    ],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/sqli/time?id=1",
+    "expect": [
+      "active.sqli.time"
+    ],
+    "crawl": true
+  },
+  {
+    "method": "POST",
+    "path": "/sqli/json",
+    "contentType": "application/json",
+    "body": "{\"id\":\"1\"}",
+    "expect": [
+      "active.sqli.error",
+      "active.sqli.boolean"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/safe/sqli/error?id=1",
+    "expect": [],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/safe/sqli/bool?id=1",
+    "expect": [],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/safe/sqli/time?id=1",
+    "expect": [],
+    "crawl": true
+  },
+  {
+    "method": "POST",
+    "path": "/safe/sqli/json",
+    "contentType": "application/json",
+    "body": "{\"id\":\"1\"}",
+    "expect": []
+  },
+  {
+    "method": "GET",
+    "path": "/cmd/ping?host=127.0.0.1",
+    "expect": [
+      "active.cmd.time",
+      "active.cmd.oast"
+    ],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/safe/cmd/ping?host=127.0.0.1",
+    "expect": [],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/ssti?name=gulp",
+    "expect": [
+      "active.ssti"
+    ],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/safe/ssti?name=gulp",
+    "expect": [],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/file?name=readme.txt",
+    "expect": [
+      "active.path-traversal"
+    ],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/safe/file?name=readme.txt",
+    "expect": [],
+    "crawl": true
+  },
+  {
+    "method": "POST",
+    "path": "/xml",
+    "contentType": "application/xml",
+    "body": "<?xml version=\"1.0\"?><order><item>book</item></order>",
+    "expect": [
+      "active.xxe.inband",
+      "active.xxe.oast"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/safe/xml",
+    "contentType": "application/xml",
+    "body": "<?xml version=\"1.0\"?><order><item>book</item></order>",
+    "expect": []
+  },
+  {
+    "method": "GET",
+    "path": "/fetch?url=http://example.com/",
+    "expect": [
+      "active.ssrf.oast"
+    ],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/safe/fetch?url=http://example.com/",
+    "expect": [],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/go?next=/",
+    "expect": [
+      "active.open-redirect"
+    ],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/safe/go?next=/",
+    "expect": [],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/crlf?lang=en",
+    "expect": [
+      "active.crlf"
+    ],
+    "crawl": true
+  },
+  {
+    "method": "GET",
+    "path": "/safe/crlf?lang=en",
+    "expect": [],
+    "crawl": true
+  },
+  {
+    "method": "POST",
+    "path": "/vulnlab.Orders/Get",
+    "contentType": "application/grpc-web+proto",
+    "bodyBase64": "AAAAAAMKATE=",
+    "expect": [
+      "active.sqli.error"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/vulnlab.SafeOrders/Get",
+    "contentType": "application/grpc-web+proto",
+    "bodyBase64": "AAAAAAMKATE=",
+    "expect": []
+  },
+  {
+    "method": "GET",
+    "path": "/redirect?to=/echo",
+    "crawl": true,
+    "expect": [
+      "active.open-redirect",
+      "active.crlf"
+    ]
+  }
 ]

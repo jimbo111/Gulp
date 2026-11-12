@@ -6,6 +6,8 @@
 import ArgumentParser
 import Foundation
 import GulpCore
+import GulpCrawler
+import GulpHTTP
 import GulpScanner
 import GulpStore
 import GulpWorkspace
@@ -16,14 +18,23 @@ struct ActiveExpectation: Decodable {
     var path: String
     var body: String?
     var contentType: String?
+    /// Extra header lines (`Authorization: Bearer …`).
+    var headers: [String]?
+    /// A crawl from the lab's index reaches this route with these parameters (crawl-and-audit DoD).
+    var crawl: Bool?
     var expect: [String]
+
+    /// A binary body (gRPC-Web frames), base64.
+    var bodyBase64: String?
 
     func request(host: String) -> RawRequest {
         var lines = ["\(method) \(path) HTTP/1.1", "Host: \(host)"]
         if let contentType { lines.append("Content-Type: \(contentType)") }
-        let payload = body ?? ""
-        if body != nil { lines.append("Content-Length: \(payload.utf8.count)") }
-        return RawRequest(Bytes(lines.joined(separator: "\r\n") + "\r\n\r\n" + payload))
+        lines += headers ?? []
+        let payload =
+            bodyBase64.flatMap { Data(base64Encoded: $0) }.map { [UInt8]($0) } ?? Array((body ?? "").utf8)
+        if body != nil || bodyBase64 != nil { lines.append("Content-Length: \(payload.count)") }
+        return RawRequest(Bytes(Array((lines.joined(separator: "\r\n") + "\r\n\r\n").utf8) + payload))
     }
 
     var routePath: String { String(path.split(separator: "?", maxSplits: 1).first ?? "") }
@@ -119,12 +130,17 @@ extension ScanCommand {
         )
         @Option(help: "Project file.") var project: String
         @Option(help: "The manifest (as for scan active).") var manifest: String
+        @Flag(help: "Only the routes marked `crawl` are expected; other manifest routes are ignored.")
+        var crawled = false
 
         func run() async throws {
             guard let data = FileManager.default.contents(atPath: manifest) else {
                 throw ValidationError("Cannot read \(manifest)")
             }
-            let entries = try JSONDecoder().decode([ActiveExpectation].self, from: data)
+            let all = try JSONDecoder().decode([ActiveExpectation].self, from: data)
+            let entries = crawled ? all.filter { $0.crawl == true } : all
+            let ignored = Swift.Set(
+                crawled ? all.filter { $0.crawl != true }.map { Issue.normalizedPath($0.routePath) } : [])
             var expected: [String: Swift.Set<String>] = [:]
             for entry in entries {
                 expected[Issue.normalizedPath(entry.routePath), default: []].formUnion(entry.expect)
@@ -132,7 +148,9 @@ extension ScanCommand {
             let session = try await openSession(project)
             var actual: [String: Swift.Set<String>] = [:]
             for issue in try await session.store.issues() where issue.typeID.hasPrefix("active.") {
-                actual[Issue.normalizedPath(issue.path), default: []].insert(issue.typeID)
+                let path = Issue.normalizedPath(issue.path)
+                guard expected[path] != nil || !ignored.contains(path) else { continue }
+                actual[path, default: []].insert(issue.typeID)
             }
             var missing: [String] = []
             var unexpected: [String] = []
@@ -152,6 +170,141 @@ extension ScanCommand {
             )
             try await session.close()
             if !missing.isEmpty || !unexpected.isEmpty { throw ExitCode(1) }
+        }
+    }
+}
+
+extension ScanCommand {
+    /// Print a scan summary like `scan active` does.
+    static func printSummary(_ summary: ScanSummary) {
+        print(
+            String(
+                format: "scan: %d findings, %d probes, %d out of scope in %.1f s (%@)", summary.findings,
+                summary.probes, summary.outOfScope, summary.seconds, summary.stopReason))
+        for (check, count) in summary.perCheck.sorted(by: { $0.key < $1.key }) {
+            print("  \(check): \(count)")
+        }
+    }
+
+    static func scanConfig(_ name: String, oastGrace: Double?, unsafe: Bool) throws -> ScanConfig {
+        guard let preset = ScanConfig.Preset(rawValue: name) else {
+            throw ValidationError("Unknown --config \(name)")
+        }
+        var config = ScanConfig.preset(preset)
+        if let oastGrace { config.oastGraceSeconds = oastGrace }
+        config.unsafe = unsafe
+        return config
+    }
+
+    struct CrawlAudit: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "crawl-audit",
+            abstract: "Crawl from seed URLs, then actively scan the distinct requests found (SCN-035).")
+        @Option(help: "Project file (created if missing).") var project: String
+        @Option(help: "A start URL (repeatable).") var seed: [String] = []
+        @Option(help: "Max pages crawled.") var maxPages = 2_000
+        @Option(help: "Submit forms: none, get, all.") var forms = "all"
+        @Option(help: "passive-only, light, balanced (default), thorough.") var config = "balanced"
+        @Option(help: "Seconds to wait for OAST interactions at the end.") var oastGrace: Double?
+        @Flag(help: "Allow payloads that could change data (SCN-038).") var unsafe = false
+        @Flag(help: "Crawl and scan out of scope (explicit override).") var allowOutOfScope = false
+
+        func run() async throws {
+            guard !seed.isEmpty else { throw ValidationError("Give at least one --seed") }
+            let scan = try ScanCommand.scanConfig(config, oastGrace: oastGrace, unsafe: unsafe)
+            let formPolicy: FormPolicy = forms == "none" ? .none : forms == "get" ? .get : .all
+            let crawl = CrawlConfig(seeds: seed, maxPages: maxPages, forms: formPolicy)
+            let session = try await ProjectSession.open(at: URL(fileURLWithPath: project))
+            let run = await session.startCrawlAndAudit(
+                crawl: crawl, scan: scan, allowOutOfScope: allowOutOfScope)
+            for await event in run.events {
+                switch event {
+                case .crawl(.finished(let report)):
+                    print("crawl: \(report.pages.count) pages (\(report.stopReason))")
+                case .auditStarted(let count): print("audit: \(count) distinct requests")
+                case .scan(.finished(let summary)): ScanCommand.printSummary(summary)
+                case .scan(.log(let line)): print("log: \(line)")
+                default: break
+                }
+            }
+            try await session.close()
+        }
+    }
+
+    struct API: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "api", abstract: "Scan every operation of an OpenAPI document (ADV-050).")
+        @Option(help: "Project file (created if missing).") var project: String
+        @Option(help: "The OpenAPI JSON: a URL (fetched through the engine) or a file.") var spec: String
+        @Option(help: "Base URL when the document names no server.") var base: String?
+        @Option(help: "passive-only, light, balanced (default), thorough.") var config = "balanced"
+        @Option(help: "Seconds to wait for OAST interactions at the end.") var oastGrace: Double?
+        @Flag(help: "Allow payloads that could change data (SCN-038).") var unsafe = false
+        @Flag(help: "Scan out of scope (explicit override).") var allowOutOfScope = false
+
+        func run() async throws {
+            let scan = try ScanCommand.scanConfig(config, oastGrace: oastGrace, unsafe: unsafe)
+            let session = try await ProjectSession.open(at: URL(fileURLWithPath: project))
+            let document: Data
+            if spec.hasPrefix("http://") || spec.hasPrefix("https://") {
+                guard let target = HTTPTarget(url: spec), let url = URL(string: spec) else {
+                    throw ValidationError("Bad --spec URL")
+                }
+                let path = url.path.isEmpty ? "/" : url.path
+                let request = RawRequest(
+                    Bytes(
+                        "GET \(path) HTTP/1.1\r\nHost: \(url.host ?? target.host)\(url.port.map { ":\($0)" } ?? "")\r\nAccept: application/json\r\n\r\n"
+                    ))
+                let result = await session.http.send(
+                    request, to: target, options: SendOptions(recordAs: .scanner))
+                guard let body = try? result.exchange.response?.decodedBody() else {
+                    throw ValidationError("Couldn't fetch \(spec)")
+                }
+                document = Data(body.rawBytes)
+            } else {
+                guard let data = FileManager.default.contents(atPath: spec) else {
+                    throw ValidationError("Cannot read \(spec)")
+                }
+                document = data
+            }
+            let requests = try session.apiScanRequests(document, baseURL: base ?? spec)
+            let coverage = session.apiCoverage(requests, config: scan)
+            for item in coverage { print("operation: \(item.operation)\t\(item.points) insertion point(s)") }
+            print(
+                "api: \(coverage.count) operations, \(coverage.filter { $0.points > 0 }.count) with insertion points"
+            )
+            let run = await session.startActiveScan(
+                requests, config: scan, allowOutOfScope: allowOutOfScope, name: "API scan")
+            for await event in run.events {
+                if case .finished(let summary) = event { ScanCommand.printSummary(summary) }
+            }
+            try await session.close()
+        }
+    }
+
+    struct Retest: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Re-test active issues: re-run their check at the same insertion point (SCN-037).")
+        @Option(help: "Project file.") var project: String
+        @Option(help: "Issue ids (comma-separated); default: every open active issue.") var ids: String?
+        @Flag(help: "Re-test even out of scope (explicit override).") var allowOutOfScope = false
+
+        func run() async throws {
+            let session = try await openSession(project)
+            let chosen: [IssueID]
+            if let ids {
+                chosen = ids.split(separator: ",").compactMap { IssueID($0) }
+            } else {
+                chosen = try await session.store.issues().filter {
+                    $0.typeID.hasPrefix("active.") && $0.status == .open
+                }
+                .map(\.id)
+            }
+            for id in chosen {
+                let result = try await session.retestIssue(id, allowOutOfScope: allowOutOfScope)
+                print("retest #\(id): \(result.outcome.rawValue) — \(result.detail)")
+            }
+            try await session.close()
         }
     }
 }

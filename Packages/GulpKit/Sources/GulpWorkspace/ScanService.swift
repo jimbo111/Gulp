@@ -38,14 +38,10 @@ struct SessionOASTProvider: OASTProvider {
 }
 
 extension ProjectSession {
-    /// Start an active scan of `requests` (SCN-035).
-    public func startActiveScan(
-        _ requests: [(request: RawRequest, target: HTTPTarget)], config: ScanConfig,
-        allowOutOfScope: Bool = false,
-        name: String = "Active scan"
-    ) async -> ScanRun {
+    /// Sends a probe through the session engine as recorded, governed Scanner traffic.
+    func scanSender() -> @Sendable (RawRequest, HTTPTarget) async -> Probe {
         let engine = http
-        let send: @Sendable (RawRequest, HTTPTarget) async -> Probe = { request, target in
+        return { request, target in
             var options = SendOptions(recordAs: .scanner)
             options.timeouts.total = .seconds(30)
             options.updateContentLength = false
@@ -58,16 +54,30 @@ extension ProjectSession {
                 seconds: Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18,
                 error: result.error?.code)
         }
+    }
+
+    /// ScopeGuard as the scanner's scope check (strict unless overridden for this scan).
+    func scanScope(allowOutOfScope: Bool) -> @Sendable (HTTPTarget, String) async -> Bool {
+        if allowOutOfScope { return { @Sendable _, _ in true } }
         let scopeGuard = self.scopeGuard
-        let inScope: @Sendable (HTTPTarget, String) async -> Bool
-        if allowOutOfScope {
-            inScope = { @Sendable _, _ in true }
-        } else {
-            inScope = { @Sendable target, path in await scopeGuard.permits(target, path: path) }
-        }
-        let registered = await oast.correlationID != nil
-        let provider: (any OASTProvider)? =
-            registered ? SessionOASTProvider(oast: oast, store: { [store] in store }) : nil
+        return { @Sendable target, path in await scopeGuard.permits(target, path: path) }
+    }
+
+    /// The project's OAST session for blind checks, when one is registered.
+    func scanOAST() async -> (any OASTProvider)? {
+        guard await oast.correlationID != nil else { return nil }
+        return SessionOASTProvider(oast: oast, store: { [store] in store })
+    }
+
+    /// Start an active scan of `requests` (SCN-035).
+    public func startActiveScan(
+        _ requests: [(request: RawRequest, target: HTTPTarget)], config: ScanConfig,
+        allowOutOfScope: Bool = false,
+        name: String = "Active scan"
+    ) async -> ScanRun {
+        let send = scanSender()
+        let inScope = scanScope(allowOutOfScope: allowOutOfScope)
+        let provider = await scanOAST()
         let scan = ActiveScan(
             requests: requests, config: config, send: send, inScope: inScope, oast: provider)
         let source = await scan.start()
@@ -122,4 +132,73 @@ extension ProjectSession {
     }
 
     nonisolated var events_: EventBus { events }
+
+    /// Re-test one active issue (SCN-037): re-run the check that reported it, at the same insertion
+    /// point, starting from the stored base request (or the evidence request when there is none).
+    /// Found again: the new evidence is recorded and the issue is (re)opened. Not found: the issue is
+    /// marked fixed.
+    public func retestIssue(_ id: IssueID, allowOutOfScope: Bool = false) async throws -> RetestResult {
+        guard let issue = try await store.issue(id) else {
+            return RetestResult(outcome: .inconclusive, detail: "no such issue")
+        }
+        guard let check = ActiveRetest.check(for: issue.typeID) else {
+            return RetestResult(
+                outcome: .inconclusive, detail: "\(issue.typeID) isn't reported by an active check")
+        }
+        let base =
+            issue.evidence.first { $0.note == IssueEvidence.baseRequestNote && $0.exchangeID != nil }
+            ?? issue.evidence.last { $0.exchangeID != nil }
+        guard let exchangeID = base?.exchangeID, let exchange = try await store.exchange(id: exchangeID)
+        else {
+            return RetestResult(outcome: .inconclusive, detail: "the issue has no request to re-send")
+        }
+        var config = ScanConfig.preset(.thorough)
+        config.oastGraceSeconds = 8
+        let label = issue.insertionPoint
+        let scan = ActiveScan(
+            requests: [(exchange.request, exchange.target)], config: config, checks: [check],
+            send: scanSender(),
+            inScope: scanScope(allowOutOfScope: allowOutOfScope), oast: await scanOAST(),
+            points: label.map { wanted in
+                { @Sendable point in point.label.lowercased() == wanted.lowercased() }
+            })
+        var found: [IssueFinding] = []
+        var summary: ScanSummary?
+        for await event in await scan.start() {
+            switch event {
+            case .finding(let finding) where finding.typeID == issue.typeID: found.append(finding)
+            case .finished(let done): summary = done
+            default: break
+            }
+        }
+        await store.writer.flush()
+        if summary?.outOfScope ?? 0 > 0 {
+            return RetestResult(outcome: .inconclusive, detail: "the request is out of scope")
+        }
+        if found.isEmpty {
+            try await store.setIssueStatus(.fixed, for: [id])
+            return RetestResult(
+                outcome: .fixed, detail: "the check no longer finds it (\(summary?.probes ?? 0) requests)")
+        }
+        for finding in found { _ = try await store.record(finding) }
+        return RetestResult(outcome: .stillPresent, detail: "found again (\(summary?.probes ?? 0) requests)")
+    }
+}
+
+/// The verdict of a re-test (SCN-037).
+public struct RetestResult: Sendable, Hashable {
+    /// The verdict.
+    public enum Outcome: String, Sendable, Hashable {
+        /// Found again; the issue is open.
+        case stillPresent = "still present"
+        /// Not found; the issue is marked fixed.
+        case fixed
+        /// Couldn't re-test (no request, out of scope, not an active issue).
+        case inconclusive
+    }
+
+    /// The verdict.
+    public var outcome: Outcome
+    /// Why.
+    public var detail: String
 }

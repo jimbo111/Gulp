@@ -119,7 +119,7 @@ let package = Package(
         .target(
             name: "GulpScanner",
             dependencies: [
-                "GulpCore", "GulpHTTP", "GulpOAST", "GulpCrawler", "GulpSession",
+                "GulpCore", "GulpCodec", "GulpHTTP", "GulpOAST", "GulpCrawler", "GulpSession",
             ]),
         .target(name: "GulpSequencer", dependencies: ["GulpCore", "GulpHTTP"]),
         .target(name: "GulpReport", dependencies: ["GulpCore"]),
@@ -225,7 +225,7 @@ let package = Package(
                 "GulpCrawler", "GulpCore", "GulpHTTP",
                 .product(name: "NIOConcurrencyHelpers", package: "swift-nio"),
             ]),
-        .testTarget(name: "GulpScannerTests", dependencies: ["GulpScanner", "GulpCore"]),
+        .testTarget(name: "GulpScannerTests", dependencies: ["GulpScanner", "GulpCore", "GulpCodec"]),
         .testTarget(name: "GulpSequencerTests", dependencies: ["GulpSequencer"]),
         .testTarget(name: "GulpReportTests", dependencies: ["GulpReport"]),
         .testTarget(name: "GulpExtensionsTests", dependencies: ["GulpExtensions"]),

@@ -25,6 +25,7 @@ public enum ActiveChecks {
 
     static let parameterKinds: Set<InsertionPointKind> = [
         .urlParam, .bodyParam, .jsonValue, .xmlValue, .multipartField, .cookie, .pathSegment, .custom,
+        .protobufField,
     ]
 }
 

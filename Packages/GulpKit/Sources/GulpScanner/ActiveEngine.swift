@@ -200,12 +200,19 @@ public struct ScanConfig: Sendable, Codable, Hashable {
     public var maxRequestsPerPoint: Int
     /// Allow payloads that could change data (SCN-038).
     public var unsafe: Bool
+    /// Max requests for the whole scan; 0 is unlimited (SCN-038's global budget).
+    public var maxRequests: Int
+    /// Report one issue per type and path, listing every insertion point it was found at, instead
+    /// of one per insertion point (SCN-036).
+    public var consolidate: Bool
 
     /// A config.
     public init(
         preset: Preset = .balanced, intensity: CheckIntensity = .balanced, disabledFamilies: Set<String> = [],
         insertion: InsertionPolicy = InsertionPolicy(), concurrency: Int = 8, timingSamples: Int = 1,
-        oastGraceSeconds: Double = 8, maxRequestsPerPoint: Int = 120, unsafe: Bool = false
+        oastGraceSeconds: Double = 8, maxRequestsPerPoint: Int = 120, unsafe: Bool = false,
+        maxRequests: Int = 0,
+        consolidate: Bool = false
     ) {
         self.preset = preset
         self.intensity = intensity
@@ -216,6 +223,35 @@ public struct ScanConfig: Sendable, Codable, Hashable {
         self.oastGraceSeconds = oastGraceSeconds
         self.maxRequestsPerPoint = maxRequestsPerPoint
         self.unsafe = unsafe
+        self.maxRequests = maxRequests
+        self.consolidate = consolidate
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case preset, intensity, disabledFamilies, insertion, concurrency, timingSamples, oastGraceSeconds
+        case maxRequestsPerPoint, unsafe, maxRequests, consolidate
+    }
+
+    /// Decodes a config; missing keys take the preset's (or balanced) defaults, so saved configs
+    /// keep loading as fields are added.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let base = ScanConfig.preset(try c.decodeIfPresent(Preset.self, forKey: .preset) ?? .custom)
+        self.init(
+            preset: base.preset,
+            intensity: try c.decodeIfPresent(CheckIntensity.self, forKey: .intensity) ?? base.intensity,
+            disabledFamilies: try c.decodeIfPresent(Set<String>.self, forKey: .disabledFamilies)
+                ?? base.disabledFamilies,
+            insertion: try c.decodeIfPresent(InsertionPolicy.self, forKey: .insertion) ?? base.insertion,
+            concurrency: try c.decodeIfPresent(Int.self, forKey: .concurrency) ?? base.concurrency,
+            timingSamples: try c.decodeIfPresent(Int.self, forKey: .timingSamples) ?? base.timingSamples,
+            oastGraceSeconds: try c.decodeIfPresent(Double.self, forKey: .oastGraceSeconds)
+                ?? base.oastGraceSeconds,
+            maxRequestsPerPoint: try c.decodeIfPresent(Int.self, forKey: .maxRequestsPerPoint)
+                ?? base.maxRequestsPerPoint,
+            unsafe: try c.decodeIfPresent(Bool.self, forKey: .unsafe) ?? base.unsafe,
+            maxRequests: try c.decodeIfPresent(Int.self, forKey: .maxRequests) ?? base.maxRequests,
+            consolidate: try c.decodeIfPresent(Bool.self, forKey: .consolidate) ?? base.consolidate)
     }
 
     /// A preset's config (SCN-034).
@@ -226,7 +262,9 @@ public struct ScanConfig: Sendable, Codable, Hashable {
         case .light:
             ScanConfig(
                 preset: preset, intensity: .light,
-                insertion: InsertionPolicy(kinds: [.urlParam, .bodyParam, .jsonValue, .custom]),
+                insertion: InsertionPolicy(kinds: [
+                    .urlParam, .bodyParam, .jsonValue, .protobufField, .custom,
+                ]),
                 timingSamples: 1)
         case .balanced: ScanConfig(preset: preset)
         case .thorough:
@@ -260,7 +298,7 @@ public struct ScanSummary: Sendable, Hashable {
     public var seconds: Double
     /// Findings per check id.
     public var perCheck: [String: Int]
-    /// `done` or `cancelled`.
+    /// `done`, `cancelled` or `budget` (the scan-wide request budget was spent).
     public var stopReason: String
 }
 
@@ -274,6 +312,7 @@ public actor ActiveScan {
     let sender: @Sendable (RawRequest, HTTPTarget) async -> Probe
     let inScope: @Sendable (HTTPTarget, String) async -> Bool
     let oast: (any OASTProvider)?
+    let pointFilter: (@Sendable (InsertionPoint) -> Bool)?
     private var paused = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private var cancelled = false
@@ -281,15 +320,22 @@ public actor ActiveScan {
     private var seen: Set<String> = []
     private var perCheck: [String: Int] = [:]
     private var pendingOAST: [(host: String, finding: IssueFinding)] = []
+    private var consolidated: [String: (finding: IssueFinding, points: [String])] = [:]
+    private var consolidatedOrder: [String] = []
+    private var globalUsed = 0
+    private var exhausted = false
     private var task: Task<Void, Never>?
 
-    /// A scan of `requests` with `checks` (default: every built-in check enabled by `config`).
+    /// A scan of `requests` with `checks` (default: every built-in check enabled by `config`). With
+    /// `points`, only the insertion points it accepts are tested and request-level checks don't run.
     public init(
         requests: [(request: RawRequest, target: HTTPTarget)], config: ScanConfig,
         checks: [any ActiveCheck]? = nil,
         send: @escaping @Sendable (RawRequest, HTTPTarget) async -> Probe,
-        inScope: @escaping @Sendable (HTTPTarget, String) async -> Bool, oast: (any OASTProvider)? = nil
+        inScope: @escaping @Sendable (HTTPTarget, String) async -> Bool, oast: (any OASTProvider)? = nil,
+        points pointFilter: (@Sendable (InsertionPoint) -> Bool)? = nil
     ) {
+        self.pointFilter = pointFilter
         self.requests = requests
         self.config = config
         self.checks = (checks ?? ActiveChecks.all).filter {
@@ -336,10 +382,50 @@ public actor ActiveScan {
 
     func count() { probes += 1 }
 
-    /// Keep the first finding per dedup key (SCN-036 consolidation within the scan).
+    /// Keep the first finding per dedup key. With `consolidate` (SCN-036), findings of one type on
+    /// one path are held back and merged: they are emitted at the end of the scan, one per type and
+    /// path, listing every insertion point.
     func accept(_ finding: IssueFinding, check: String) -> Bool {
         guard seen.insert(finding.dedupKey).inserted else { return false }
+        if config.consolidate {
+            let key = [
+                finding.typeID, finding.host.lowercased(), Issue.normalizedPath(finding.path),
+                finding.variant,
+            ]
+            .joined(separator: "|")
+            if consolidated[key] != nil {
+                consolidated[key]?.points.append(finding.insertionPoint ?? "request")
+            } else {
+                consolidated[key] = (finding, [finding.insertionPoint ?? "request"])
+                consolidatedOrder.append(key)
+                perCheck[check, default: 0] += 1
+            }
+            return false
+        }
         perCheck[check, default: 0] += 1
+        return true
+    }
+
+    /// The merged findings of a consolidating scan.
+    func mergedFindings() -> [IssueFinding] {
+        consolidatedOrder.compactMap { key in
+            guard var (finding, points) = consolidated[key] else { return nil }
+            if points.count > 1 {
+                finding.detail +=
+                    "\n\nAlso found at: " + points.dropFirst().map { "**\($0)**" }.joined(separator: ", ")
+                    + "."
+            }
+            return finding
+        }
+    }
+
+    /// Take one request from the scan-wide budget (SCN-038); false once it is spent.
+    func takeGlobal() -> Bool {
+        guard config.maxRequests == 0 || globalUsed < config.maxRequests else {
+            exhausted = true
+            return false
+        }
+        globalUsed += 1
         return true
     }
 
@@ -356,8 +442,9 @@ public actor ActiveScan {
                 continuation.yield(.log("out of scope, not scanned: \(target.host)\(path)"))
                 continue
             }
-            units.append((request, target, nil))  // request-level checks
-            for point in InsertionPoints.derive(request, policy: config.insertion) {
+            if pointFilter == nil { units.append((request, target, nil)) }  // request-level checks
+            for point in InsertionPoints.derive(request, policy: config.insertion)
+            where pointFilter?(point) ?? true {
                 units.append((request, target, point))
             }
         }
@@ -378,7 +465,7 @@ public actor ActiveScan {
                     .progress(
                         requestsDone: 0, requests: requests.count, pointsDone: done, points: total,
                         probes: probes))
-                if cancelled { group.cancelAll() } else { _ = add() }
+                if cancelled { group.cancelAll() } else if !exhausted { _ = add() }
             }
         }
         // SCN-033: wait for late interactions, then resolve the registered payloads.
@@ -397,12 +484,16 @@ public actor ActiveScan {
                 if accept(confirmed, check: confirmed.typeID) { continuation.yield(.finding(confirmed)) }
             }
         }
+        for finding in mergedFindings() { continuation.yield(.finding(finding)) }
+        if exhausted {
+            continuation.yield(.log("the scan's request budget (\(config.maxRequests)) is spent"))
+        }
         let elapsed = ContinuousClock.now - started
         let summary = ScanSummary(
             findings: perCheck.values.reduce(0, +), probes: probes, outOfScope: outOfScope,
             seconds: Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18,
             perCheck: perCheck,
-            stopReason: cancelled ? "cancelled" : "done")
+            stopReason: cancelled ? "cancelled" : exhausted ? "budget" : "done")
         continuation.yield(.finished(summary))
         continuation.finish()
     }
@@ -417,7 +508,7 @@ public actor ActiveScan {
             base: request, target: target,
             send: { probe in
                 await self.gate()
-                guard await budget.take() else {
+                guard await self.takeGlobal(), await budget.take() else {
                     return Probe(request: probe, response: nil, exchangeID: 0, seconds: 0, error: "budget")
                 }
                 await self.count()
@@ -443,7 +534,10 @@ public actor ActiveScan {
         }
         for check in applicable {
             if await isCancelled() { return }
-            let findings = await check.run(point, baseline: baseline, context: context)
+            var findings = await check.run(point, baseline: baseline, context: context)
+            if let base = baseline?.original.exchangeID, base != 0 {
+                for index in findings.indices { findings[index].baseExchangeID = base }
+            }
             for finding in findings where await accept(finding, check: check.id) {
                 continuation.yield(.finding(finding))
             }
@@ -462,5 +556,15 @@ actor Budget {
         guard used < limit else { return false }
         used += 1
         return true
+    }
+}
+
+/// Re-testing one issue (SCN-037): which check produces an issue type.
+public enum ActiveRetest {
+    /// The built-in check that reports `typeID` (`active.sqli.boolean` → the SQL injection check).
+    public static func check(for typeID: String) -> (any ActiveCheck)? {
+        ActiveChecks.all.filter { typeID == $0.id || typeID.hasPrefix($0.id + ".") }.max {
+            $0.id.count < $1.id.count
+        }
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import GulpCodec
 import GulpCore
 import Testing
 
@@ -81,6 +82,11 @@ struct FakeApp: Sendable {
             let value = rawQuery["l"] ?? ""
             let decoded = safe ? Self.escape(value) : (value.removingPercentEncoding ?? value)
             return (Self.response(200, headers: ["Content-Language: \(decoded)"], body: "ok"), 0.01)
+        case "/tpl2":
+            return (
+                Self.text(query.values.sorted().map { safe ? $0 : Self.evaluate($0) }.joined(separator: ",")),
+                0.01
+            )
         case "/fetch":
             return (Self.text("fetched"), 0.01)
         case "/ping":
@@ -325,7 +331,14 @@ struct ActiveScanTests {
         let passive = ScanConfig.preset(.passiveOnly)
         let (findings, summary) = await scan(plantedRequests, app: FakeApp(), config: passive)
         #expect(findings.isEmpty && summary?.probes == 0)
-        #expect(ScanConfig.preset(.light).insertion.kinds == [.urlParam, .bodyParam, .jsonValue, .custom])
+        #expect(
+            ScanConfig.preset(.light).insertion.kinds == [
+                .urlParam, .bodyParam, .jsonValue, .protobufField, .custom,
+            ])
+        // Saved configs missing newer keys still load (defaults of their preset).
+        let decoded = try? JSONDecoder().decode(
+            ScanConfig.self, from: Data(#"{"preset":"light","concurrency":3}"#.utf8))
+        #expect(decoded?.concurrency == 3 && decoded?.timingSamples == 1 && decoded?.maxRequests == 0)
         #expect(ScanConfig.preset(.thorough).intensity == .thorough)
     }
 
@@ -350,6 +363,73 @@ struct ActiveScanTests {
             if case .finished(let summary) = event { reason = summary.stopReason }
         }
         #expect(reason == "cancelled")
+    }
+
+    @Test("SCN-038: the scan-wide budget stops the scan")
+    func test_SCN038_globalBudget() async {
+        var config = ScanConfig.preset(.balanced)
+        config.maxRequests = 10
+        config.concurrency = 1
+        let (_, summary) = await scan(plantedRequests, app: FakeApp(), config: config)
+        #expect(summary?.stopReason == "budget")
+        #expect((summary?.probes ?? 99) <= 10)
+    }
+
+    @Test("SCN-036: consolidation reports one issue per type and path, listing the insertion points")
+    func test_SCN036_consolidation() async {
+        let request = get("/tpl?name=a&title=b")
+        let separate = await scan([request], app: FakeApp(), config: .preset(.balanced))
+        #expect(
+            separate.findings.filter { $0.typeID == "active.ssti" }.count == 1,
+            "only `name` is evaluated by the fake")
+        // A second evaluating parameter: the fake evaluates every value on /tpl2.
+        var config = ScanConfig.preset(.balanced)
+        config.consolidate = true
+        let merged = await scan([get("/tpl2?a=x&b=y")], app: FakeApp(), config: config)
+        let ssti = merged.findings.filter { $0.typeID == "active.ssti" }
+        #expect(ssti.count == 1)
+        #expect(ssti.first?.detail.contains("Also found at:") == true)
+        let plain = await scan([get("/tpl2?a=x&b=y")], app: FakeApp())
+        #expect(plain.findings.filter { $0.typeID == "active.ssti" }.count == 2)
+    }
+
+    @Test("SCN-037: a re-test finds the check that reports an issue type")
+    func test_SCN037_retestCheck() {
+        #expect(ActiveRetest.check(for: "active.sqli.boolean")?.id == "active.sqli")
+        #expect(ActiveRetest.check(for: "active.xss.reflected")?.id == "active.xss.reflected")
+        #expect(ActiveRetest.check(for: "active.cmd.oast")?.id == "active.cmd")
+        #expect(ActiveRetest.check(for: "passive.csp.missing") == nil)
+    }
+
+    @Test("GRP-005: protobuf fields of a gRPC request are insertion points; probes re-encode the message")
+    func test_GRP005_protobufPoints() throws {
+        let inner = Protobuf.encode(ProtoField(1, .bytes(Array("deep".utf8))))
+        let message =
+            Protobuf.encode(ProtoField(1, .bytes(Array("42".utf8))))
+            + Protobuf.encode(ProtoField(2, .varint(7)))
+            + Protobuf.encode(ProtoField(3, .bytes(inner)))
+        let body = RPC.frame(message)
+        let head =
+            [
+                "POST /vulnlab.Orders/Get HTTP/1.1", "Host: app.test", "Content-Type: application/grpc",
+                "TE: trailers", "Content-Length: \(body.count)",
+            ].joined(separator: "\r\n") + "\r\n\r\n"
+        let request = RawRequest(Bytes(Array(head.utf8) + body))
+        let points = InsertionPoints.derive(request)
+        #expect(points.allSatisfy { $0.kind == .protobufField })
+        #expect(Set(points.map(\.name)) == ["1", "2", "3.1"])
+        let id = try #require(points.first { $0.name == "1" })
+        #expect(id.baseValue == "42" && id.label == "protobuf field 1")
+        let probe = id.build(request, payload: "42' OR 'a'='a")
+        let call = try #require(RPC.parse(request: probe, response: nil))
+        let decoded = try Protobuf.decode(call.requests[0].payload)
+        #expect(decoded.value(at: [1]) == .bytes(Array("42' OR 'a'='a".utf8)))
+        #expect(decoded.value(at: [3, 1]) == .bytes(Array("deep".utf8)), "other fields kept")
+        let deep = try #require(points.first { $0.name == "3.1" })
+        let nested = try Protobuf.decode(
+            RPC.parse(request: deep.build(request, payload: "x"), response: nil)!.requests[0].payload)
+        #expect(nested.value(at: [3, 1]) == .bytes(Array("x".utf8)))
+        #expect(probe.headerValue("content-length")?.string() == String(probe.parsed.body.count))
     }
 
     @Test("Redirect host parsing handles the browser's quirks")

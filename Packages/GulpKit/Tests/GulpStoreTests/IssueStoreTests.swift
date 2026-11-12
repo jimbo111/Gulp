@@ -55,6 +55,26 @@ struct IssueStoreTests {
         try await store.close()
     }
 
+    @Test("SCN-037: an active finding keeps its base request as evidence, once, past the cap")
+    func test_SCN037_baseRequestEvidence() async throws {
+        let store = try ProjectStore.open(at: temporaryProject())
+        let base = await exchange(store, "/item?id=1")
+        var active = finding(
+            "active.sqli.error", path: "/item", point: "url param id", exchange: await exchange(store))
+        active.baseExchangeID = base
+        let created = try await store.record(active)
+        for _ in 0..<12 {
+            var again = active
+            again.evidence.exchangeID = await exchange(store)
+            try await store.record(again)
+        }
+        let issue = try #require(try await store.issue(created.id))
+        let bases = issue.evidence.filter { $0.note == IssueEvidence.baseRequestNote }
+        #expect(bases.map(\.exchangeID) == [base], "one base row, never evicted by the cap")
+        #expect(issue.evidence.count == ProjectStore.maxEvidencePerIssue + 1)
+        try await store.close()
+    }
+
     @Test("SCN-004: triage survives re-findings; fixed issues reopen; overrides drive filters")
     func test_SCN004_triage() async throws {
         let store = try ProjectStore.open(at: temporaryProject())

@@ -197,7 +197,7 @@ func parseList<T>(_ text: String?, _ make: (String) -> T?, _ what: String) throw
 struct ScanCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "scan", abstract: "Run scans over a project.",
-        subcommands: [Passive.self, Active.self, VerifyActive.self])
+        subcommands: [Passive.self, Active.self, VerifyActive.self, CrawlAudit.self, API.self, Retest.self])
 
     struct Passive: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
