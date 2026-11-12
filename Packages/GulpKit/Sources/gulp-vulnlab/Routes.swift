@@ -156,6 +156,7 @@ enum VulnLab {
         let query = queryItems(requestTarget)
         if let rpc = GRPCLab.respond(request, path: path) { return rpc }
         if let crawl = CrawlLab.respond(path, query) { return crawl }
+        if let scan = ScanLab.respond(request, path: path, query: query) { return scan }
         switch path {
         case "/lab/burst":
             return BurstLab.respond(query)

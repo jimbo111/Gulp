@@ -229,6 +229,14 @@ proves it.
 - Determinism for tests: seed any randomness (canaries) from an injectable RNG; VulnLab timing is
   stable enough for the time-based checks in CI (use generous thresholds).
 
+- *As built (M11b, 2026-11-12)*: the registry is `ActiveChecks.all` (`ActiveCheck`: id, family,
+  intensity, insertion-point kinds); the engine is the `ActiveScan` actor (a bounded task group over
+  request × insertion-point units, a per-point request budget, pause/resume/cancel, OAST resolved
+  after the grace period). Canary randomness is not seeded; tests assert behavior instead (doc 07,
+  2026-11-12). The P0 checks and their issue ids: `active.xss.reflected|stored`,
+  `active.sqli.error|boolean|time`, `active.cmd.time|oast`, `active.ssti`, `active.path-traversal`,
+  `active.xxe.inband|oast`, `active.ssrf.oast`, `active.open-redirect`, `active.crlf`.
+
 ## 6. Edge cases
 
 - **Dynamic / non-deterministic pages**: responses that change every request (timestamps, CSRF

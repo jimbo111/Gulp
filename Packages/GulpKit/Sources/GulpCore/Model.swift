@@ -304,8 +304,13 @@ public struct DerivedFields: Sendable, Codable, Equatable {
         let m = request.bytes[p.method].string()
         method = m.isEmpty ? nil : m
         var requestTarget = request.bytes[p.target].string()
-        // Absolute-form (`http://host/path`): keep only the path part.
-        if let schemeEnd = requestTarget.range(of: "://") {
+        // Absolute-form (`http://host/path`): keep only the path part. Only a target that *starts*
+        // with a scheme is absolute — `/fetch?url=http://x/` is origin-form with a URL in its query.
+        if !requestTarget.hasPrefix("/"), let schemeEnd = requestTarget.range(of: "://"),
+            requestTarget[..<schemeEnd.lowerBound].allSatisfy({
+                $0.isLetter || $0.isNumber || "+-.".contains($0)
+            })
+        {
             let afterAuthority = requestTarget[schemeEnd.upperBound...]
             requestTarget = afterAuthority.firstIndex(of: "/").map { String(afterAuthority[$0...]) } ?? "/"
         }

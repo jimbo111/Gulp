@@ -28,7 +28,8 @@ public struct IssueDefinition: Sendable, Hashable, Identifiable {
 /// The catalog (SCN-006).
 public enum IssueDefinitions {
     /// Every built-in definition.
-    public static let all: [IssueDefinition] = headers + cookies + disclosure + input + other + manual
+    public static let all: [IssueDefinition] =
+        headers + cookies + disclosure + input + other + manual + active
 
     static let byID: [String: IssueDefinition] = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
 
@@ -234,5 +235,79 @@ public enum IssueDefinitions {
             "passive.tls.weak-protocol", "Weak TLS protocol", "TLS", .medium, .certain,
             "The server negotiated TLS 1.0 or 1.1, which are deprecated and have known weaknesses.",
             "Allow only TLS 1.2 and 1.3."),
+    ]
+
+    /// Active-check definitions (F08 §3.2, M11b).
+    static let active: [IssueDefinition] = [
+        def(
+            "active.xss.reflected", "Cross-site scripting (reflected)", "XSS", .high, .firm,
+            "Input is copied into the page without encoding for its context, so a crafted link runs the attacker's script in the victim's session — stealing data, acting as the user or rewriting the page.",
+            "Encode output for the exact context (HTML text, attribute, JavaScript string, URL) with a templating engine that escapes by default; validate URLs to allow only http(s); add a strict CSP as defense in depth.",
+            "- [OWASP XSS prevention](\(owasp)Cross_Site_Scripting_Prevention_Cheat_Sheet.html)"),
+        def(
+            "active.xss.stored", "Cross-site scripting (stored)", "XSS", .high, .firm,
+            "Submitted data is stored and later rendered without encoding, so every visitor of the page runs the attacker's script.",
+            "Encode stored data when rendering it, for its context; sanitize rich text with an allowlist sanitizer; add a strict CSP.",
+            "- [OWASP XSS prevention](\(owasp)Cross_Site_Scripting_Prevention_Cheat_Sheet.html)"),
+        def(
+            "active.sqli.error", "SQL injection (error-based)", "SQL injection", .high, .firm,
+            "Input changes the structure of a database query: a quote broke the query and the database error came back, so an attacker can read or change data.",
+            "Use parameterized queries (prepared statements) everywhere; never build SQL by concatenating input. Don't show database errors to users.",
+            "- [OWASP SQL injection prevention](\(owasp)SQL_Injection_Prevention_Cheat_Sheet.html)"),
+        def(
+            "active.sqli.boolean", "SQL injection (boolean-based)", "SQL injection", .high, .firm,
+            "True and false conditions injected into the input change the page consistently, so the input reaches a SQL query unsanitized and data can be extracted bit by bit.",
+            "Use parameterized queries; never build SQL from input.",
+            "- [OWASP SQL injection prevention](\(owasp)SQL_Injection_Prevention_Cheat_Sheet.html)"),
+        def(
+            "active.sqli.time", "SQL injection (time-based)", "SQL injection", .high, .firm,
+            "Database sleep functions injected into the input delayed the response in proportion to the requested time, so the input is executed as SQL even though nothing visible changes.",
+            "Use parameterized queries; never build SQL from input.",
+            "- [OWASP SQL injection prevention](\(owasp)SQL_Injection_Prevention_Cheat_Sheet.html)"),
+        def(
+            "active.cmd.time", "OS command injection (time-based)", "Command injection", .high, .firm,
+            "Shell metacharacters in the input start extra commands on the server (a `sleep` measurably delayed the response), giving an attacker code execution.",
+            "Don't pass input to a shell. Call programs directly with an argument array, or use a library API; validate input against an allowlist.",
+            "- [OWASP OS command injection defense](\(owasp)OS_Command_Injection_Defense_Cheat_Sheet.html)"),
+        def(
+            "active.cmd.oast", "OS command injection (out-of-band)", "Command injection", .high, .certain,
+            "A command injected into the input made the server contact an attacker-controlled host, proving commands run on the server.",
+            "Don't pass input to a shell; call programs with an argument array and validate input.",
+            "- [OWASP OS command injection defense](\(owasp)OS_Command_Injection_Defense_Cheat_Sheet.html)"),
+        def(
+            "active.ssti", "Server-side template injection", "Template injection", .high, .certain,
+            "Input is evaluated as a template expression on the server (arithmetic came back computed). Template engines usually allow reaching code execution from there.",
+            "Never build templates from input; pass input as data to fixed templates. Use a sandboxed engine if users must author templates.",
+            "- [OWASP testing guide: SSTI](https://owasp.org/www-project-web-security-testing-guide/)"),
+        def(
+            "active.path-traversal", "Path traversal", "File access", .high, .certain,
+            "Input used as a file name can climb out of the intended directory with `../`, letting an attacker read arbitrary files such as configuration and secrets.",
+            "Map user input to an allowlist of files or IDs; otherwise canonicalize the path and verify it stays inside the base directory before opening it.",
+            "- [OWASP path traversal](https://owasp.org/www-community/attacks/Path_Traversal)"),
+        def(
+            "active.xxe.inband", "XML external entity injection", "XXE", .high, .certain,
+            "The XML parser resolves external entities, so a document can pull local files into the response.",
+            "Disable DTDs and external entity resolution in the XML parser (or use a parser that does so by default).",
+            "- [OWASP XXE prevention](\(owasp)XML_External_Entity_Prevention_Cheat_Sheet.html)"),
+        def(
+            "active.xxe.oast", "XML external entity injection (out-of-band)", "XXE", .high, .certain,
+            "The XML parser fetched an external entity from an attacker-controlled host, so it resolves external entities (file reads and SSRF follow).",
+            "Disable DTDs and external entity resolution in the XML parser.",
+            "- [OWASP XXE prevention](\(owasp)XML_External_Entity_Prevention_Cheat_Sheet.html)"),
+        def(
+            "active.ssrf.oast", "Server-side request forgery", "SSRF", .high, .certain,
+            "The server fetches URLs taken from the request, so an attacker can make it reach internal services and cloud metadata endpoints.",
+            "Fetch only from an allowlist of hosts; resolve and block private, loopback and link-local addresses (re-check after redirects); don't return fetched content verbatim.",
+            "- [OWASP SSRF prevention](\(owasp)Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)"),
+        def(
+            "active.open-redirect", "Open redirect", "Redirects", .low, .certain,
+            "The application redirects to any host named in the request, which lends the site's trust to phishing links and can leak tokens in OAuth-style flows.",
+            "Redirect only to relative paths or an allowlist of hosts; reject protocol-relative (`//`) and backslash forms.",
+            "- [OWASP unvalidated redirects](\(owasp)Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html)"),
+        def(
+            "active.crlf", "HTTP response header injection (CRLF)", "Header injection", .medium, .certain,
+            "Line breaks in the input end up in a response header, so an attacker can add headers (cookies, redirects) or split the response.",
+            "Reject or strip CR and LF from anything placed in headers; use framework APIs that refuse them.",
+            "- [OWASP CRLF injection](https://owasp.org/www-community/vulnerabilities/CRLF_Injection)"),
     ]
 }

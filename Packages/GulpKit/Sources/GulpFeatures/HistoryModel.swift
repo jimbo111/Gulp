@@ -30,6 +30,8 @@ public final class HistoryModel {
     @ObservationIgnored public var sendToDecoder: (@MainActor (ExchangeID) -> Void)?
     /// "Send to Fuzzer" (F07): the first selected row's request.
     @ObservationIgnored public var sendToFuzzer: (@MainActor (ExchangeID) -> Void)?
+    /// "Actively scan" (F08 SCN-035): the selected rows.
+    @ObservationIgnored public var activelyScan: (@MainActor ([ExchangeID]) -> Void)?
     /// "Add to Notebook" (F14 NB-001, ⌘⇧N): the selected rows.
     @ObservationIgnored public var addToNotebook: (@MainActor ([ExchangeID]) -> Void)?
     /// Live updates (the Logger's capture toggle, HIS-041): when off, new traffic doesn't refresh

@@ -293,6 +293,7 @@ struct HistoryTableView: NSViewRepresentable {
             }
             if model.sendToDecoder != nil { addItem("Send to Decoder", #selector(sendToDecoder), to: menu) }
             if model.sendToFuzzer != nil { addItem("Send to Fuzzer", #selector(sendToFuzzer), to: menu) }
+            if model.activelyScan != nil { addItem("Actively scan", #selector(activelyScan), to: menu) }
             if model.addToNotebook != nil {
                 let item = NSMenuItem(
                     title: "Add to Notebook", action: #selector(addToNotebook), keyEquivalent: "N")
@@ -349,6 +350,10 @@ struct HistoryTableView: NSViewRepresentable {
             Task {
                 if let first = await targetIDs().first { model.sendToFuzzer?(first) }
             }
+        }
+
+        @objc func activelyScan() {
+            Task { model.activelyScan?(await targetIDs()) }
         }
 
         @objc func addToNotebook() {

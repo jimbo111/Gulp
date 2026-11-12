@@ -196,7 +196,8 @@ func parseList<T>(_ text: String?, _ make: (String) -> T?, _ what: String) throw
 /// `gulp-cli scan passive --project p.gulp [--all]` (F08 §3.1, §4).
 struct ScanCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "scan", abstract: "Run scans over a project.", subcommands: [Passive.self])
+        commandName: "scan", abstract: "Run scans over a project.",
+        subcommands: [Passive.self, Active.self, VerifyActive.self])
 
     struct Passive: AsyncParsableCommand {
         static let configuration = CommandConfiguration(

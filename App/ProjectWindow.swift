@@ -131,13 +131,14 @@ struct ProjectWindow: View {
             for await _ in await session.repeaterTabsOpened() { selection = .repeater }
         }
         .task(id: session.map { ObjectIdentifier($0) }) {
-            // "Send to Comparer / Decoder / Fuzzer" brings that tool forward (CMP-001, DEC-004, F07).
+            // "Send to Comparer / Decoder / Fuzzer", "Actively scan" bring that tool forward (CMP-001, DEC-004, F07, SCN-035).
             guard let session else { return }
             for await tool in await session.inbox.opened() {
                 switch tool {
                 case .comparer: selection = .comparer
                 case .decoder: selection = .decoder
                 case .fuzzer: selection = .fuzzer
+                case .scanner: selection = .scanner
                 }
             }
         }
@@ -166,7 +167,7 @@ struct ProjectWindow: View {
         case .fuzzer:
             FuzzerView(session: session)
         case .scanner:
-            CrawlerView(session: session)
+            ScannerView(session: session)
         case .beacon:
             BeaconView(session: session)
         case .dashboard:

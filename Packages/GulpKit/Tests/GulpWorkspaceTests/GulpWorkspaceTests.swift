@@ -4,6 +4,7 @@ import GulpFuzzer
 import GulpHTTP
 import GulpProxy
 import GulpRepeater
+import GulpScanner
 import GulpStore
 import GulpTLS
 import Testing
@@ -570,6 +571,33 @@ struct SiteMapServiceTests {
         #expect(fuzzerInput?.target == HTTPTarget(scheme: .http, host: "lab"))
         await session.inbox.removeFromComparer([added[0].id])
         #expect(await session.inbox.comparerItems.count == 1)
+        await session.sendToScanner([first, second])
+        #expect(await iterator.next() == .scanner)
+        #expect(await session.inbox.scanInput == [first, second])
+        try await session.close()
+    }
+
+    @Test("SCN-035 / ScopeGuard: an active scan sends nothing out of scope unless overridden")
+    func test_SCN035_scanScope() async throws {
+        let environment = isolatedEnvironment()
+        let session = try await open(environment, "scan")
+        let request = RawRequest(Bytes("GET /a?x=1 HTTP/1.1\r\nHost: 127.0.0.1:1\r\n\r\n"))
+        let target = HTTPTarget(scheme: .http, host: "127.0.0.1", port: 1)
+        func drain(_ run: ScanRun) async -> ScanSummary? {
+            var summary: ScanSummary?
+            for await event in run.events { if case .finished(let done) = event { summary = done } }
+            return summary
+        }
+        var config = ScanConfig.preset(.light)
+        config.disabledFamilies = Set(ActiveChecks.families).subtracting(["ssti"])
+        let refused = await drain(await session.startActiveScan([(request, target)], config: config))
+        #expect(refused?.outOfScope == 1 && refused?.probes == 0)
+        // The override sends (port 1 refuses; nothing is found, the probes are recorded as Scanner traffic).
+        let sent = await drain(
+            await session.startActiveScan([(request, target)], config: config, allowOutOfScope: true))
+        #expect(sent?.outOfScope == 0 && (sent?.probes ?? 0) > 0 && sent?.findings == 0)
+        await session.store.writer.flush()
+        #expect(try await session.store.count() == sent?.probes, "every probe is recorded (source: scanner)")
         try await session.close()
     }
 

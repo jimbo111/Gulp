@@ -115,6 +115,11 @@ issues explicit rather than incidental:
   route including `/safe/*`). Exercise these only on the HTTPS `:8443` listener, which serves a
   vulnerable/`/safe/` pair for them; on the plaintext listener they are suppressed (or emitted at
   Info and excluded from the precision assertion).
+- **Active-check manifest** (M11b): the vulnerable active routes and their `/safe/` twins are in
+  `Fixtures/vulnlab-active.json` (route, method, body, expected issue ids); `gulp-cli scan
+  verify-active` reports missing and unexpected issues against it (`Scripts/m11b-dod.sh`).
+  `GulpScannerTests/ActiveScanTests` also runs every P0 check against an in-process fake app with
+  simulated timing, so dose-response and OAST resolution are tested without sleeping.
 - **OAST wiring**: the OAST-based P0 checks (SSRF, OS-command, XXE) only fire when a Beacon is
   configured (BCN-004 is off by default). The test run **must** start the dev Beacon (`make beacon
   --dev` equivalent, F10 BCN-024) and point the scan config at it; otherwise those three have no

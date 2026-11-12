@@ -128,8 +128,10 @@ enum PassiveLab {
                     200, body: Array(#"{"status":"public"}"#.utf8), type: "application/json",
                     headers: safe ? [] : ["Access-Control-Allow-Origin: *"]))
         case "/go":
-            let next = query["next"] ?? "/"
-            let local = next.hasPrefix("/") && !next.hasPrefix("//")
+            // Line breaks are dropped (header injection is `/crlf`'s lab, not this one).
+            let next = VulnLab.withoutLineBreaks(query["next"] ?? "/")
+            // Browsers read `/\host` like `//host`: both leave the site.
+            let local = next.hasPrefix("/") && !next.hasPrefix("//") && !next.hasPrefix("/\\")
             let location = safe && !local ? "/" : next
             return VulnReply(bytes: VulnLab.response(302, body: [], headers: ["Location: \(location)"]))
         case "/cache/sensitive":

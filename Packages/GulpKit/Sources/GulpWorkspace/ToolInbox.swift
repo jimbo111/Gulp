@@ -1,4 +1,4 @@
-// GulpWorkspace — "Send to Comparer / Decoder" (F13 CMP-001, F12 DEC-004): the items the Comparer
+// GulpWorkspace — "Send to Comparer / Decoder / Fuzzer / Scanner" (F13 CMP-001, F12 DEC-004, F07, SCN-035): the items the Comparer
 // lists and the Decoder's current input, fed from History, Repeater and the site map, plus a stream
 // the window watches to bring the tool forward. UI-free so it is tested on Linux.
 
@@ -42,6 +42,8 @@ public enum InboxTool: Sendable, Equatable {
     case decoder
     /// The Fuzzer.
     case fuzzer
+    /// The Scanner ("Actively scan", SCN-035).
+    case scanner
 }
 
 /// A request sent to the Fuzzer (F07): the base request and where it goes.
@@ -69,6 +71,8 @@ public actor ToolInbox {
     public private(set) var decoderInput: [UInt8] = []
     /// The Fuzzer's base request (the last thing sent to it).
     public private(set) var fuzzerInput: FuzzerInput?
+    /// The exchanges last sent to the Scanner ("Actively scan").
+    public private(set) var scanInput: [ExchangeID] = []
     /// At most this many Comparer items are kept (the oldest drop off).
     public static let maxItems = 100
     private var watchers: [UUID: AsyncStream<InboxTool>.Continuation] = [:]
@@ -116,6 +120,12 @@ public actor ToolInbox {
         announce(.fuzzer)
     }
 
+    /// Queue exchanges for an active scan (SCN-035).
+    public func sendToScanner(_ ids: [ExchangeID]) {
+        scanInput = ids
+        announce(.scanner)
+    }
+
     private func announce(_ tool: InboxTool) {
         for watcher in watchers.values { watcher.yield(tool) }
     }
@@ -156,5 +166,10 @@ extension ProjectSession {
         guard let exchange = try await store.exchange(id: id) else { return }
         await inbox.sendToFuzzer(
             FuzzerInput(request: exchange.request.bytes.rawBytes, target: exchange.target))
+    }
+
+    /// "Actively scan" (SCN-035): queue the exchanges' requests for the Scanner's audit pane.
+    public func sendToScanner(_ ids: [ExchangeID]) async {
+        await inbox.sendToScanner(ids)
     }
 }

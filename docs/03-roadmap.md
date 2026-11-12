@@ -187,9 +187,10 @@ discovery, Logger, GulpQL, search and Notebook.
 - *Implemented 2026-11-11 (local Linux gate; `Scripts/m11a-dod.sh` PASS); the macOS views await CI. Carry-overs in PROGRESS (BCN-007's promote-to-issue, the status-bar health/throttled badges, crawl persistence across restarts).*
 
 ### M11b — Active scan engine and the P0 checks
-- [ ] Insertion points, active check engine, scan configurations, the scan task UI (SCN-020…SCN-038).
-- [ ] Every active check marked **[P0]** in F08 §3.2, with the §3.4 detection methodology.
+- [x] Insertion points, active check engine, scan configurations, the scan task UI (SCN-020…SCN-038).
+- [x] Every active check marked **[P0]** in F08 §3.2, with the §3.4 detection methodology.
 - **DoD:** An active audit of VulnLab's vulnerable endpoints finds every P0 vulnerability planted there (including the three OAST checks via the dev Beacon), with zero false positives on the "safe twin" endpoints (doc 06 §3).
+- *Implemented 2026-11-12 (local Linux gate; `Scripts/m11b-dod.sh` PASS: 32 routes, 20 expected issues, 0 missing, 0 unexpected); the macOS Scanner → Audit pane awaits CI.*
 
 ### M11c — Full check catalog and crawl-and-audit
 - [ ] The remaining (P1) active checks of F08 §3.2 and the checks added by the 2026-11-08 review: server-side prototype pollution, client-side path traversal, mass assignment, upload bypasses and JWT checks (SCN-070…SCN-074).

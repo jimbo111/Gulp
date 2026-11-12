@@ -119,6 +119,13 @@ extension ProjectStore {
         }
     }
 
+    /// Interactions reported for one unique id (a scanner check's payload).
+    public func oastInteractions(uniqueID: String) async throws -> [StoredOASTInteraction] {
+        try await pool.read { db in
+            try Self.interactionRows(db, where: "i.unique_id = ? ORDER BY i.id", [uniqueID.lowercased()])
+        }
+    }
+
     func oastInteractions(ids: [Int64]) async throws -> [StoredOASTInteraction] {
         try await pool.read { db in
             try Self.interactionRows(

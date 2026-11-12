@@ -66,6 +66,10 @@ struct ModelTests {
         let absolute = RawRequest(Bytes("GET http://h:8080/x/y.js?q HTTP/1.1\r\n\r\n"))
         let a = DerivedFields(target: target, request: absolute, response: nil)
         #expect(a.path == "/x/y.js" && a.query == "q" && a.ext == "js" && a.status == nil)
+        // A URL inside the query doesn't make the target absolute-form.
+        let nested = RawRequest(Bytes("GET /fetch?url=http://example.com/a HTTP/1.1\r\n\r\n"))
+        let n = DerivedFields(target: target, request: nested, response: nil)
+        #expect(n.path == "/fetch" && n.query == "url=http://example.com/a")
     }
 
     @Test("Exchange computes derived fields and starts pending")

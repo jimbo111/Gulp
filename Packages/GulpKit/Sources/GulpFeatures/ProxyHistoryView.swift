@@ -20,6 +20,8 @@ public struct ProxyHistoryView: View {
     var sendToDecoder: (@MainActor (ExchangeID) -> Void)?
     /// Send to Fuzzer (F07).
     var sendToFuzzer: (@MainActor (ExchangeID) -> Void)?
+    /// Actively scan (F08 SCN-035).
+    var activelyScan: (@MainActor ([ExchangeID]) -> Void)?
     /// Add to Notebook (F14 NB-001).
     var addToNotebook: (@MainActor ([ExchangeID]) -> Void)?
     /// Saved and recent GulpQL filters (HIS-026).
@@ -59,6 +61,7 @@ public struct ProxyHistoryView: View {
                     created.sendToComparer = sendToComparer
                     created.sendToDecoder = sendToDecoder
                     created.sendToFuzzer = sendToFuzzer
+                    created.activelyScan = activelyScan
                     created.addToNotebook = addToNotebook
                     model = created
                 }
@@ -423,6 +426,7 @@ public struct SessionHistoryView: View {
         view.sendToComparer = { ids in Task { try? await session.sendToComparer(ids, part: .response) } }
         view.sendToDecoder = { id in Task { try? await session.sendToDecoder(id, part: .request) } }
         view.sendToFuzzer = { id in Task { try? await session.sendToFuzzer(id) } }
+        view.activelyScan = { ids in Task { await session.sendToScanner(ids) } }
         view.addToNotebook = { ids in
             Task { for id in ids { _ = try? await session.addToNotebook(id) } }
         }

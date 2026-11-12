@@ -14,8 +14,8 @@ order; within a milestone, do P0 first.
   launched by the Gulp Browser launcher through the proxy loads `https://localhost:8443` with no
   certificate interstitial (SPKI pin of the Gulp CA) and the request is in history. M1–M4a DoD
   scripts still pass in the same run.
-- **Active milestone**: **M11b — Active scan engine and the P0 checks** next (the **daily-driver
-  beta** release gate after M9 still needs macOS for its release work); M5…M11a are implemented and
+- **Active milestone**: **M11c — Full check catalog and crawl-and-audit** next (the **daily-driver
+  beta** release gate after M9 still needs macOS for its release work); M5…M11b are implemented and
   await the macOS CI run (see their status below).
 - **Branching**: `main` holds merged milestones (PRs jimbo111/Gulp#1 M0–M2, #2 review fixes,
   #3 M3a, then M3b + the feature-review adoption). Work happens on
@@ -272,6 +272,28 @@ order; within a milestone, do P0 first.
   and "New crawl" on the Dashboard (the crawl lives under Scanner); persisting the OAST session
   across restarts (Keychain-held key); a manual interop check against a public interactsh server;
   the deployable Beacon (BCN-020…023, 025: post-1.0).
+- **M11b status — implementation complete; macOS verification pending** (2026-11-12):
+  - Local gate: all tests and **M1…M11b DoD scripts PASS**, lint clean. The M11b DoD
+    (`Scripts/m11b-dod.sh`, also in CI) runs VulnLab and the dev Beacon, configures OAST, and runs
+    `gulp-cli scan active --manifest Tests/Fixtures/vulnlab-active.json --config balanced` over the
+    32 vulnerable and safe-twin routes: 20 findings, `verify-active: 0 missing, 0 unexpected`
+    (including `active.cmd.oast`, `active.xxe.oast` and `active.ssrf.oast` through the Beacon), and
+    no issue on any `/safe/` route (about 1,150 probes in ≈11 s).
+  - Done in M11b: SCN-020…038 — insertion points (query, form, JSON, XML + whole body, multipart,
+    cookies, chosen headers, REST path segments, custom ranges), the `ActiveScan` engine (baselines
+    with volatility, per-point budgets, concurrency, pause/resume/cancel, OAST grace, in-scan dedup),
+    presets (passive-only, light, balanced, thorough, custom), the P0 checks of F08 §3.2 with the
+    §3.4 methodology, the workspace scan service (ScopeGuard, governed `scanner` traffic, findings
+    as issues), `gulp-cli scan active|verify-active`, History "Actively scan" → Scanner → Audit
+    (presets, unsafe and out-of-scope gates with confirmation, live findings, ≤100 ms refresh).
+    Fixed on the way: `DerivedFields` mis-read `?url=http://…` targets as absolute-form; multipart
+    boundaries were lowercased; VulnLab CRLF stripping missed `"\r\n"` (doc 07).
+  - **Not verified (no macOS here):** `GulpFeatures/ScannerView.swift` (Audit pane) and the History
+    "Actively scan" menu item.
+- **M11b carry-overs**: per-check configuration in the UI (families can be disabled in the config
+  JSON/CLI); the Audit pane takes History rows only ("Actively scan" from the site map and
+  Repeater come with crawl-and-audit, M11c); scan tasks aren't persisted across restarts (F08 §2.3's
+  resumable task, with M11c's crawl-and-audit task).
 - **Next action**: when CI minutes return, run CI on the branch head, fix any macOS compile issues
   in the new SwiftUI code (M5…M11a views), then open the M5…M11a PRs and merge; the daily-driver
   beta's release work (signed + notarized build, real testers) needs macOS. Meanwhile continue with
@@ -383,7 +405,7 @@ for behavior.
 - [ ] M10a — Passive scanner + issue model — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M10b — gRPC & protobuf (F33) — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M11a — Crawler (static), Beacon client + dev Beacon, shared limiter + panic stop — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
-- [ ] M11b — Active scan engine + P0 checks
+- [ ] M11b — Active scan engine + P0 checks — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M11c — Full check catalog (incl. SCN-070…074) + crawl-and-audit
 - [ ] M12a — Sessions, auth, macros, request signing
 - [ ] M12b — Authz Matrix
@@ -657,6 +679,14 @@ for behavior.
   panic-stop toolbar item; `Scripts/m11a-dod.sh` PASS. Deviation: interactsh's AES mode is CTR, not
   GCM (F10 corrected). Fixed on the way: HTTP/2 cancellation ran streams to completion; governed
   sends were capped at 6 connections per host.
+- 2026-11-12 — **M11b implemented** (local Linux gate; macOS views unverified): GulpScanner
+  insertion points, `ActiveScan` engine, scan presets and the P0 active checks (reflected/stored XSS,
+  SQLi error/boolean/time, command injection time/OAST, SSTI, path traversal, XXE in-band/OAST, SSRF
+  OAST, open redirect, CRLF) with 14 issue definitions; VulnLab scan lab + safe twins +
+  `Fixtures/vulnlab-active.json`; workspace scan service; `gulp-cli scan active|verify-active`;
+  Scanner → Audit pane and History "Actively scan"; unit tests against an in-process fake app with
+  simulated timing; `Scripts/m11b-dod.sh` PASS. Deviation: canaries aren't seeded (F08 §5; doc 07).
+  Fixed on the way: absolute-form detection in `DerivedFields`; case-sensitive multipart boundaries.
 
 
 ## How to pick up work (reminder)
