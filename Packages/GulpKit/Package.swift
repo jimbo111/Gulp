@@ -102,7 +102,12 @@ let package = Package(
                 .product(name: "NIOTLS", package: "swift-nio"),
                 .product(name: "NIOHPACK", package: "swift-nio-http2"),
             ]),
-        .target(name: "GulpSession", dependencies: ["GulpCore", "GulpHTTP"]),
+        .target(
+            name: "GulpSession",
+            dependencies: [
+                "GulpCore", "GulpHTTP", "GulpCodec", .product(name: "Crypto", package: "swift-crypto"),
+                .product(name: "_CryptoExtras", package: "swift-crypto"),
+            ]),
         .target(name: "GulpRepeater", dependencies: ["GulpCore", "GulpHTTP"]),
         .target(
             name: "GulpOAST",
@@ -207,7 +212,8 @@ let package = Package(
                 .product(name: "NIOHTTP2", package: "swift-nio-http2"),
                 .product(name: "NIOHPACK", package: "swift-nio-http2"),
             ]),
-        .testTarget(name: "GulpSessionTests", dependencies: ["GulpSession"]),
+        .testTarget(
+            name: "GulpSessionTests", dependencies: ["GulpSession", "GulpCore", "GulpHTTP", "GulpCodec"]),
         .testTarget(
             name: "GulpRepeaterTests",
             dependencies: ["GulpRepeater", "GulpHTTP", "GulpCore"] + nioConcurrency + nioCore),

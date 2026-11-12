@@ -128,7 +128,7 @@ public struct JWT: Sendable, Equatable {
 }
 
 /// An elliptic curve for ES256/384/512.
-public enum ECCurve: String, Sendable, Hashable, CaseIterable {
+public enum ECCurve: String, Sendable, Hashable, Codable, CaseIterable {
     case p256 = "P-256", p384 = "P-384", p521 = "P-521"
 
     /// The JWS algorithm that uses this curve.
