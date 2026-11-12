@@ -83,6 +83,12 @@ enum AuthLab {
         return text(200, "Welcome, \(user)\n")
     }
 
+    /// Expire every session (the re-auth DoD forces expiry, SES-012).
+    static func expireAll() -> VulnReply {
+        sessions.withLockedValue { $0.removeAll() }
+        return text(200, "sessions expired\n")
+    }
+
     static func admin(_ request: RawRequest) -> VulnReply {
         cookie(request, "role") == "admin"
             ? text(200, "Admin panel: 3 users, 0 alerts\n") : text(403, "Forbidden: admins only\n")

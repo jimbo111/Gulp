@@ -217,6 +217,8 @@ public actor ProjectSession {
     public nonisolated let events: EventBus
     /// The HTTP engine every tool sends through (records into this project).
     public nonisolated let http: NIOHTTPEngine
+    /// Session handling state (cookie jar, identities, rules, macros; F15).
+    public nonisolated let sessionState: SessionState
     /// The proxy listeners.
     public nonisolated let proxy: ProxyServer
     /// Layered settings (project → user → default).
@@ -276,9 +278,19 @@ public actor ProjectSession {
         self.matchReplace = matchReplace
         let tagState = TagState(variables: settings.get(VariablesSettings.self).values)
         self.tagState = tagState
+        let sessionLog: @Sendable (String) -> Void = { message in
+            Task {
+                await events.publish(.log(LogEntry(level: .info, message: message, module: "gulp.session")))
+            }
+        }
+        let sessionState = SessionState(settings.get(SessionSettings.self), log: sessionLog)
+        self.sessionState = sessionState
         let engine = NIOHTTPEngine(
-            requestHooks: [TransformTagHook(state: tagState), matchReplace], responseHooks: [matchReplace],
-            recorder: recorder)
+            requestHooks: [
+                SessionRequestHook(state: sessionState), TransformTagHook(state: tagState), matchReplace,
+                SessionSignerHook(state: sessionState),
+            ],
+            responseHooks: [matchReplace, SessionResponseHook(state: sessionState)], recorder: recorder)
         self.http = engine
         self.minter = minter
         let intercept = InterceptQueue(events: events)
@@ -383,6 +395,7 @@ public actor ProjectSession {
         await session.startSiteMap()
         await session.startPassiveScan()
         await session.applyNetworkSettings()
+        await session.startSession()
         if session.settings.get(OASTSettings.self).enabled {
             do {
                 try await session.startOAST()

@@ -199,9 +199,10 @@ discovery, Logger, GulpQL, search and Notebook.
 - **DoD:** A "Crawl and audit" of VulnLab finds every planted vulnerability (the doc 06 §3 fixture manifest, including the M11c fixtures and the gRPC SQLi) with zero false positives on the safe twins — the scanner-accuracy test (doc 06 §3); a scan of the imported `/openapi.json` covers every operation.
 
 ### M12a — Sessions, authentication, macros, request signing
-- [ ] All P0/P1 of F15 except SES-030/032 (recorded and passkey logins need the browser automation of M13a), including the **request-signing** session actions DPoP, HTTP Message Signatures and AWS SigV4 (SES-016…SES-018).
-- [ ] Wire the crawler's re-authentication (CRL-006) and authenticated scanning (SCN-035).
+- [x] Cookie jar, identities, macros, session rules (scope + actions), validity check, request signing (DPoP, RFC 9421, AWS SigV4). SES-001/002/010…013/016…018/020…022; SES-003/014/015/040/041 and GulpQL rule scope deferred (see below).
+- [x] Request signing runs as the engine's last hook; re-auth is single-flight under concurrency.
 - **DoD:** A scan of VulnLab's authenticated area stays logged in by re-running the login macro when the session expires; Repeater sends to the `/signed/*` fixtures succeed with the matching signing action and fail without it (F15 test 5).
+- *Implemented 2026-11-12 (`Scripts/m12a-dod.sh` PASS: each signing scheme verified by VulnLab's independent verifier, unsigned → 401; login-macro re-auth keeps /account at 200 across `/session/expire`). Deferred to a follow-up: jar import/export (SES-003), the rule tester (SES-014), per-rule Logger lines beyond the info log (SES-015), client certs per identity (SES-040), platform auth (SES-041), GulpQL rule-scope conditions (host/path/tool scope ships), and the macOS Sessions UI. Keys are passed in config rather than the Keychain yet. Recorded login + passkeys stay M13a.*
 
 ### M12b — Authz Matrix
 Moved up from M19 by the 2026-11-08 feature review: access-control testing is the most-used

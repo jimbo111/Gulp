@@ -329,6 +329,7 @@ public enum SigningError: Error, Sendable, CustomStringConvertible {
     /// A covered component isn't present in the request.
     case missingComponent(String)
 
+    /// A human-readable reason.
     public var description: String {
         switch self {
         case .wrongKey(let message): return message

@@ -65,6 +65,19 @@ touched by session rules.
 
 ## 4. Implementation notes
 
+- *As built (M12a, 2026-11-12, GulpSession + GulpWorkspace):* `CookieJar` (RFC 6265 parse/match),
+  `Identity` + `VariableExpansion`, `Macro`/`MacroRunner` (capture from cookie/header/regex/JSON-path),
+  `ValidityCheck`, `SessionRule`/`RuleApplication`, and `RequestSigner` (DPoP RFC 9449, HTTP Message
+  Signatures RFC 9421 over covered components with Content-Digest, AWS SigV4). The workspace registers
+  four engine hooks: `SessionRequestHook` (first; rules + single-flight re-auth), `SessionResponseHook`
+  (cookies, DPoP-Nonce per origin, staleness), `SessionSignerHook` (last; signs the final bytes), and
+  reuses `MatchReplaceHook` ordering. Config persists as a `SessionSettings` group. VulnLab verifies
+  each signature with an independent implementation (`SignedLab`), so the DoD proves interop.
+  Decisions: rule scope is tool-set + host-glob + path-prefix (GulpQL conditions deferred; the
+  workspace can pre-filter); signing keys are passed in config, not the Keychain yet; message-signature
+  RSA algorithms aren't supported (hmac-sha256 and ecdsa-p256-sha256 are). See doc 07.
+
+
 - `SessionService` exposes `RequestHook`/`ResponseHook` implementations registered with the engine;
   rule evaluation is ordered and short-circuits per the rule's scope. Keep it fast — it runs on
   every tool request.

@@ -113,6 +113,10 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/m11c-dod.sh
+      - name: M12a Definition of Done (request signing DPoP/RFC9421/SigV4 verified by VulnLab; login-macro re-auth across expiry)
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/m12a-dod.sh
       - name: Build Beacon
         run: swift build --package-path Beacon -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
       - name: Test Beacon

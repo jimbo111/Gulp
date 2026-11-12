@@ -157,6 +157,7 @@ enum VulnLab {
         if let rpc = GRPCLab.respond(request, path: path) { return rpc }
         if let crawl = CrawlLab.respond(path, query) { return crawl }
         if let scan = ScanLab.respond(request, path: path, query: query) { return scan }
+        if let signed = SignedLab.respond(request, path: path) { return signed }
         switch path {
         case "/lab/burst":
             return BurstLab.respond(query)
@@ -208,6 +209,7 @@ enum VulnLab {
             let body = request.bytes[request.parsed.body].string()
             return json(201, #"{"id":3,"order":\#(body.isEmpty ? "null" : body)}"#)
         case "/login": return AuthLab.login(request)
+        case "/session/expire": return AuthLab.expireAll()
         case "/account": return AuthLab.account(request)
         case "/admin", "/admin/": return AuthLab.admin(request)
         case "/api/me", "/safe/api/me":

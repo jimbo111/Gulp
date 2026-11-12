@@ -294,6 +294,11 @@ order; within a milestone, do P0 first.
   JSON/CLI); the Audit pane takes History rows only ("Actively scan" from the site map and
   Repeater come with crawl-and-audit, M11c); scan tasks aren't persisted across restarts (F08 §2.3's
   resumable task, with M11c's crawl-and-audit task).
+- **M12a status — implementation complete; macOS UI pending** (2026-11-12): GulpSession (cookie jar,
+  identities, macros, rules, validity, request signing) + GulpWorkspace hooks + VulnLab `/signed/*`
+  + `gulp-cli session sign|reauth`; `Scripts/m12a-dod.sh` PASS and in CI. Deferred: jar import/export
+  (SES-003), rule tester (SES-014), client certs/platform auth per identity (SES-040/041), GulpQL rule
+  scope, Keychain key storage, and the macOS Sessions UI; recorded login + passkeys stay M13a.
 - **M11c status — partial** (2026-11-12): done and in CI (`Scripts/m11c-dod.sh` PASS): GRP-005's
   Scanner half (protobuf-field insertion points; the gRPC-Web SQLi is found, the safe twin clean),
   crawl-and-audit (`scan crawl-audit`), the OpenAPI scan (`scan api`, all operations), SCN-036
@@ -696,6 +701,13 @@ for behavior.
   simulated timing; `Scripts/m11b-dod.sh` PASS. Deviation: canaries aren't seeded (F08 §5; doc 07).
   Fixed on the way: absolute-form detection in `DerivedFields`; case-sensitive multipart boundaries.
 
+
+- 2026-11-12 — **M12a implemented** (local Linux gate; macOS UI unverified): GulpSession cookie jar,
+  identities, macros + runner, session rules, validity check and request signing (DPoP RFC 9449, HTTP
+  Message Signatures RFC 9421, AWS SigV4); GulpWorkspace session hooks (rules first, signer last,
+  response-side cookie/nonce/staleness) with single-flight re-auth; VulnLab `/signed/*` independent
+  verifiers and `/session/expire`; `gulp-cli session sign|reauth`; `Scripts/m12a-dod.sh` PASS. ECCurve
+  is now Codable. Deviations and carry-overs in doc 07 and the status block above.
 
 ## How to pick up work (reminder)
 
