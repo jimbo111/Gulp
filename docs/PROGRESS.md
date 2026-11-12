@@ -294,6 +294,14 @@ order; within a milestone, do P0 first.
   JSON/CLI); the Audit pane takes History rows only ("Actively scan" from the site map and
   Repeater come with crawl-and-audit, M11c); scan tasks aren't persisted across restarts (F08 §2.3's
   resumable task, with M11c's crawl-and-audit task).
+- **M11c status — partial** (2026-11-12): done and in CI (`Scripts/m11c-dod.sh` PASS): GRP-005's
+  Scanner half (protobuf-field insertion points; the gRPC-Web SQLi is found, the safe twin clean),
+  crawl-and-audit (`scan crawl-audit`), the OpenAPI scan (`scan api`, all operations), SCN-036
+  consolidation, SCN-037 re-test (`scan retest`; still present → fixed after `/lab/patch`), SCN-038's
+  scan-wide budget. **Deferred (not built in this session):** the remaining P1 active checks of F08
+  §3.2 (CORS confirmation, host header, HPP, deserialization signpost, NoSQL/LDAP/XPath, CSS XSS
+  context), the passive vulnerable-JS-library and secret checks, SCN-070…074 and SCN-022 nested
+  decoding. They stay open in the roadmap.
 - **Next action**: when CI minutes return, run CI on the branch head, fix any macOS compile issues
   in the new SwiftUI code (M5…M11a views), then open the M5…M11a PRs and merge; the daily-driver
   beta's release work (signed + notarized build, real testers) needs macOS. Meanwhile continue with
@@ -406,7 +414,7 @@ for behavior.
 - [ ] M10b — gRPC & protobuf (F33) — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M11a — Crawler (static), Beacon client + dev Beacon, shared limiter + panic stop — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M11b — Active scan engine + P0 checks — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
-- [ ] M11c — Full check catalog (incl. SCN-070…074) + crawl-and-audit
+- [ ] M11c — Full check catalog (incl. SCN-070…074) + crawl-and-audit — *partial: crawl-and-audit, API scan, gRPC points, re-test done; the P1 check catalog deferred*
 - [ ] M12a — Sessions, auth, macros, request signing
 - [ ] M12b — Authz Matrix
 - [ ] M13a — Browser automation: CDP crawl, recorded logins, passkeys

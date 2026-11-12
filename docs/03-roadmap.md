@@ -194,7 +194,8 @@ discovery, Logger, GulpQL, search and Notebook.
 
 ### M11c — Full check catalog and crawl-and-audit
 - [ ] The remaining (P1) active checks of F08 §3.2 and the checks added by the 2026-11-08 review: server-side prototype pollution, client-side path traversal, mass assignment, upload bypasses and JWT checks (SCN-070…SCN-074).
-- [ ] "Crawl and audit" end-to-end (F09 + F08), "scan the whole API" for imported OpenAPI operations (ADV-050), and protobuf-field insertion points in the Scanner (GRP-005).
+- [x] "Crawl and audit" end-to-end (F09 + F08), "scan the whole API" for imported OpenAPI operations (ADV-050), and protobuf-field insertion points in the Scanner (GRP-005).
+- *2026-11-12: the second item is implemented (`Scripts/m11c-dod.sh` PASS, incl. SCN-036/037/038); the first (the P1 check catalog, SCN-070…074) is deferred.*
 - **DoD:** A "Crawl and audit" of VulnLab finds every planted vulnerability (the doc 06 §3 fixture manifest, including the M11c fixtures and the gRPC SQLi) with zero false positives on the safe twins — the scanner-accuracy test (doc 06 §3); a scan of the imported `/openapi.json` covers every operation.
 
 ### M12a — Sessions, authentication, macros, request signing
