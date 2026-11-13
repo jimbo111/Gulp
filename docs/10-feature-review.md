@@ -278,6 +278,22 @@ Each subsection: **what it does · module · proof (tests + DoD) · Burp verdict
   Burp's BApp ecosystem is far larger, and the in-process JS host + manager UI remain.
 - **Gaps:** in-process JS (JavaScriptCore, macOS), the Python/TS SDKs, and the extension-manager UI.
 
+### 3.23 AI assistant (provider abstraction + bounded agent) 🟡
+- **Does:** a provider-agnostic LLM layer (Claude via the Messages API) with a redaction pipeline that
+  masks secrets before egress, and a bounded agentic loop ("Investigate this endpoint") with hard
+  step/request budgets, a cancel/panic stop, and per-run grounding on Gulp's own tool surface.
+- **Module:** `GulpAI`. **Proof:** `GulpAITests` — "secrets are masked; header names are kept;
+  disabling is a no-op", "the loop runs a tool, feeds back a redacted result, and returns the final
+  answer", "the step budget stops a model that keeps calling tools", "the request budget blocks active
+  sends past the cap", "the kill switch / panic stop ends the run immediately", and the Anthropic
+  wire-format tests ("the request body carries system, messages, tool results and tools" / "a text +
+  tool_use response parses into an LLMResponse with usage"). All run against a scripted mock provider —
+  no key or network.
+- **Burp:** 🟡 — Burp AI exists; Gulp's assistant is grounded on its open MCP/CLI tool surface with
+  explicit budgets and secret redaction, but the consent/chat UI and live key wiring remain.
+- **Gaps:** the egress-consent + chat UI, Keychain key storage, and wiring the loop's executor to the
+  live F21 services are provider-/macOS-gated.
+
 ## 4. Cross-cutting quality evidence
 
 - **Scope safety (CLAUDE.md hard rule):** `GulpScannerTests` includes "SCN-012 / CLAUDE.md scope

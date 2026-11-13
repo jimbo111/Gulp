@@ -454,6 +454,12 @@ for behavior.
 
 ## Log
 
+- 2026-11-13 — **M18 AI assistant core (F22 AI-001/003/013)**: `GulpAI` gained the provider-agnostic
+  core — an `LLMProvider` protocol, a wire-format-tested `AnthropicProvider` (Messages API, tool use,
+  usage), a `Redactor` masking auth/cookies/tokens/keys before egress, and a bounded `Agent` loop with
+  step + request budgets, a cancel/panic stop, and redaction of every tool result. Verified against a
+  scripted mock provider (482 tests total). The live tool-surface wiring, Keychain key and consent/chat
+  UI are provider-/macOS-gated.
 - 2026-11-13 — **M15 out-of-process extension host (F18 EXT-002/003/004)**: `GulpExtensions` gained the
   JSON-RPC extension runtime — manifest + approved permissions enforced at the API boundary, LSP-style
   length-prefixed framing, the `ExtensionHost` actor (initialize → declared checks; passive-check

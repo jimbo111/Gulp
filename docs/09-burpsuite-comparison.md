@@ -88,7 +88,7 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 | Reporting (HTML/PDF/Markdown) | ✅ | ✅ | HTML + bug-bounty Markdown built (`gulp-cli report`); ⭐ SARIF too; PDF export remains. |
 | **MCP server (drive the tool from an AI agent)** | ⬜ | ⭐ | Gulp exposes an MCP server (read history, send requests, audited); Burp has no first-party agent interface. |
 | CLI / headless | 🟡 (Pro REST API) | ⭐ | Gulp is CLI-first (`gulp-cli`), every feature scriptable; Burp's headless is a limited REST API. |
-| AI assistance | 🟡 (Burp AI, Pro) | ⬜ | Specced (F22), not built (M18). |
+| AI assistance | 🟡 (Burp AI, Pro) | 🟡 | The **provider abstraction (Claude), redaction and a bounded agentic loop are built and tested (2026-11-13)**; grounded on Gulp's open MCP/CLI tool surface with per-run step/request budgets and secret masking. The consent/chat UI and the live key/tool wiring remain. |
 
 ## 8. Where Gulp already outperforms Burp
 

@@ -255,7 +255,8 @@ reused, so older references stay unambiguous.
 ## Phase E — Differentiators and release (M18–M20)
 
 ### M18 — Gulp Assistant (AI)
-- [ ] All P0/P1 of F22, including the **bounded agentic follow-up** "Investigate this endpoint" (AI-013). Payload crafting and report drafting (AI-007, AI-009) are P2.
+- [x] *2026-11-13:* **Provider abstraction + redaction + bounded agentic loop** (AI-001/003/013) — an `LLMProvider` protocol with a concrete, wire-format-tested `AnthropicProvider` (Messages API, tool use, usage), a `Redactor` that masks auth/cookies/tokens/keys before anything is sent, and an `Agent` loop with hard step/request budgets and a cancel/panic stop that redacts every tool result it feeds back. Verified against a scripted mock provider (no key/network). `GulpAI/*`.
+- [ ] Remaining F22: consent/egress UI (AI-002), the context actions + chat panel (AI-005/006), triage assist (AI-008) and the live wiring of the loop to the F21 tool surface + Keychain key — provider-/UI-gated. Payload crafting and report drafting (AI-007, AI-009) are P2.
 - **DoD:** With AI disabled no provider call is possible; enabled (with consent), "Explain this issue" on a VulnLab finding returns a grounded answer citing the real exchange with the auth cookie masked in the redaction preview; an AI-initiated out-of-scope active action is blocked and audit-logged as `.ai`; "Investigate this endpoint" stops at its request budget and every active step waits for approval.
 
 ### M19a — Param Discovery, secret scanner, JS Recon core
