@@ -555,6 +555,15 @@ for behavior.
   non-pass in the full run is the documented GulpDiff F13 perf flake under CPU contention, which passes
   in isolation at 0.42 s; unrelated to these changes). Burp needs an extension to understand WS
   sub-protocols.
+- 2026-11-13 — **Scripted WebSocket sequences (F15 §2.3, WSX-008)**: `WSScript`/`WSScriptMatch` (in
+  `GulpCodec`) model and evaluate a `send / expect / expect-regex` sequence (with optional per-step
+  `@<ms>` timeouts, `#` comments) — the "send A, await a frame matching X, then send B" shape stateful
+  protocols need (handshakes, subscribe/ack, login challenges). `gulp-cli ws-script` runs the script
+  over **one** `openWebSocket` connection via an ordered reply queue, matching each received frame in
+  order and stopping at the first miss. `WSScriptTests` (3) + `Scripts/wsscript-dod.sh` PASS (a full
+  send/expect run against VulnLab `/ws`, plus a deliberately wrong expectation that stops the run). This
+  completes the WebSocket workbench at the engine/CLI level (WSX-002 through WSX-008); only the macOS WS
+  workbench UI remains, which cannot be verified on Linux.
 - 2026-11-13 — **M20 release tooling (doc 02 §8)**: wrote the missing `Scripts/release.sh` (archive →
   sign helpers inside-out with Hardened Runtime + timestamp → notarize with notarytool → staple → build
   + notarize + staple the DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual

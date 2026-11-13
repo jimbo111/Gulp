@@ -185,6 +185,10 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/wsoast-dod.sh
+      - name: WS script Definition of Done (WSX-008: a send/expect sequence runs over one socket)
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/wsscript-dod.sh
       - name: Parameter Pollution Definition of Done (/pollute resolves duplicates last-wins, /safe/pollute first-wins)
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
