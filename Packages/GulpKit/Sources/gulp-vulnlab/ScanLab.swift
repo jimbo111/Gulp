@@ -163,6 +163,21 @@ enum ScanLab {
                 if let trace = query["trace"] { body += "trace=\(trace)\n" }
             }
             return text(body)
+        case "/recon/app.js":
+            // A bundle that exposes its source map, hidden params, and interesting literals.
+            let js =
+                "const cfg={debug:true,featureFlag:false,userId:0};"
+                + "fetch('https://gulp-assets.s3.amazonaws.com/x');"
+                + "const API_URL='http://api.internal/v1';new URLSearchParams(location.search).get('trace');"
+                + "\n//# sourceMappingURL=app.js.map\n"
+            return VulnReply(
+                bytes: VulnLab.response(200, body: Array(js.utf8), type: "application/javascript"))
+        case "/recon/app.js.map":
+            let map =
+                #"{"version":3,"file":"app.js","sources":["webpack://app/./src/secret.js"],"#
+                + #""sourcesContent":["const flags={betaFeature:true,internalApiKey:'AKIAIOSFODNN7EXAMPLE'};new URLSearchParams().get('resetToken');"]}"#
+            return VulnReply(
+                bytes: VulnLab.response(200, body: Array(map.utf8), type: "application/json"))
         case "/spa":
             // A client-side SPA with DOM XSS: the fragment flows into innerHTML (the DOM Probe's
             // target). The safe twin writes the same value with textContent.

@@ -454,6 +454,12 @@ for behavior.
 
 ## Log
 
+- 2026-11-13 — **JS Recon studio core (F27 JSR-003/006/008)**: `JSRecon` detects `sourceMappingURL`,
+  reconstructs the original file tree from a `.map`'s `sourcesContent`, mines candidate parameter names
+  (to feed Parameter Discovery, ADV-021) and flags interesting literals (cloud-storage URLs, internal
+  hostnames, API bases). `gulp-cli js-recon`, VulnLab `/recon/app.js` + `/recon/app.js.map`,
+  `Scripts/jsrecon-dod.sh` PASS (recovers `src/secret.js`, mines hidden params from the recovered
+  source, flags the S3/internal literals). 491 tests. Burp does source-map recovery only via extensions.
 - 2026-11-13 — **CSWSH probe (WSX-003, M22)**: `gulp-cli cswsh` replays a WebSocket handshake with an
   attacker `Origin` and reports endpoints that upgrade (101) without an Origin check — cross-site
   WebSocket hijacking. VulnLab's `/ws` was already Origin-blind (vulnerable); added an Origin-checking

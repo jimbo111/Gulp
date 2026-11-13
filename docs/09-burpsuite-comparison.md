@@ -33,6 +33,7 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 | Grep-match / extract / reflection analysis | ✅ | ✅ | |
 | **Protobuf/gRPC field fuzzing** | 🟡 | ⭐ | Burp needs an extension; Gulp fuzzes protobuf fields natively (re-encodes envelope + length). |
 | Parameter discovery (hidden params) | ✅ (Param Miner, ext) | ✅ | Built (2026-11-13): `gulp-cli discover-params` batches canary params and isolates processed ones (reflected / behaviour-changing); proven on VulnLab `/params`. |
+| JS recon: source-map recovery + param/literal mining | 🟡 (extensions) | ✅ | Built (2026-11-13): `gulp-cli js-recon` reconstructs original sources from a `.map`, mines candidate params (feeds param discovery) and flags cloud/internal/API literals; proven on VulnLab `/recon/app.js`. |
 
 ## 3. Scanner (active + passive)
 
