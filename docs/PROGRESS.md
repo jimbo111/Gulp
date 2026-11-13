@@ -454,6 +454,15 @@ for behavior.
 
 ## Log
 
+- 2026-11-13 — **Parameter Discovery (F23 ADV-020) + web cache poisoning (F28 WCP-001)**: `ParamMiner`
+  brute-forces hidden query parameters and reports the ones the server processes — a canary reflected
+  in the body (`reflected`) or a status/length change isolated by binary search (`behavior change`);
+  `gulp-cli discover-params` + VulnLab `/params` + `Scripts/paramdisc-dod.sh` (finds hidden
+  `debug`/`trace`, clean on the safe twin). `CachePoisoningCheck` flags an unkeyed header
+  (`X-Forwarded-Host`) reflected into a **cacheable** response (the cacheability is what separates it
+  from host-header injection); VulnLab `/cache` + a step in `m11c-checks-dod.sh`. 486 tests; the live
+  m11b DoD is unchanged (0 unexpected). Both are Param-Miner/cache-poisoning equivalents of Burp's
+  Param Miner and cache-poisoning scanner.
 - 2026-11-13 — **M20 release tooling (doc 02 §8)**: wrote the missing `Scripts/release.sh` (archive →
   sign helpers inside-out with Hardened Runtime + timestamp → notarize with notarytool → staple → build
   + notarize + staple the DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual

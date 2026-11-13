@@ -385,6 +385,11 @@ public enum IssueDefinitions {
             "Escape input for LDAP filters (RFC 4515) or use a parameterized directory API; validate against an allowlist and never build filters by string concatenation.",
             "- [OWASP LDAP injection prevention](\(owasp)LDAP_Injection_Prevention_Cheat_Sheet.html)"),
         def(
+            "active.cache-poisoning", "Web cache poisoning", "Cache poisoning", .high, .firm,
+            "An unkeyed header (such as `X-Forwarded-Host`) is reflected into a cacheable response, so an attacker can poison the cached copy served to other users of the same URL.",
+            "Don't reflect unkeyed request headers into responses; include every input the response depends on in the cache key (or `Vary`), and don't cache responses built from client-controlled host/scheme headers.",
+            "- [OWASP web cache poisoning](https://owasp.org/www-community/attacks/Cache_Poisoning)"),
+        def(
             "active.upload", "Unrestricted file upload", "File upload", .high, .firm,
             "A file upload accepted a dangerous type (such as `.php` or `.svg`) that a hardened endpoint would reject, so an attacker could upload a web shell or a stored-XSS SVG.",
             "Enforce a server-side allowlist of extensions and content types, verify the file's magic bytes, store uploads outside the web root (or on a separate domain), and never execute uploaded files.",

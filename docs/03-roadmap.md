@@ -261,7 +261,8 @@ reused, so older references stay unambiguous.
 
 ### M19a — Param Discovery, secret scanner, JS Recon core
 - [x] *2026-11-13:* **Secret & JS-endpoint recon** (F27 first increment) shipped — passive `recon.secret` (vendor ruleset + high-entropy) and `recon.endpoint` (JS endpoint mining), off by default, `gulp-cli scan passive --recon`; `Scripts/recon-dod.sh` PASS. The rest of M19 (param discovery, full JS recon studio) remains.
-- [ ] **Param Discovery** (F23 §3, ADV-020…ADV-022) and the **secret scanner** (F23 §7, ADV-060/061).
+- [x] *2026-11-13:* **Param Discovery** (ADV-020) shipped — `ParamMiner` brute-forces hidden query parameters in batches with canary values and reports the processed ones (reflected, or behaviour-changing via binary-search isolation); `gulp-cli discover-params`, VulnLab `/params`, `Scripts/paramdisc-dod.sh` PASS. ADV-021/022 (mine candidates from the app, SSPP quirks) remain.
+- [ ] The **secret scanner** (F23 §7, ADV-060/061) — the passive `recon.secret` check above covers response/JS secrets; the dedicated workbench view remains.
 - [ ] **JS Recon Studio core** — the review's "trimmed, earlier" F27: asset inventory with the scripts/comments view, beautify, source-map recovery, endpoint extraction and hand-off to the site map/scanner (JSR-001…JSR-005, ETL-004). JSR-006…JSR-009 stay post-1.0 (M23).
 - **DoD:** Param Discovery finds the hidden parameter planted in a VulnLab endpoint (F23 test 3); the secret scanner finds the planted key in a VulnLab JS file and reports it redacted (F23 test 7); JS Recon reconstructs the `src/` tree from the exposed `.map` and adds the JS-only `/api/internal/*` routes to the site map (F27 tests 1–2).
 
@@ -294,6 +295,10 @@ M22–M25.
 - [ ] The F27 requirements not built in M19a (JSR-006…JSR-009). **DoD:** library fingerprinting flags the bundled known-vulnerable library version and the asset diff surfaces a new endpoint between two VulnLab captures (F27 tests 3–4).
 
 ### M24 — Web cache poisoning & deception check family (merged from F28)
+*2026-11-13: the core **web cache poisoning** check (WCP-001) is built early as an active check —
+`active.cache-poisoning` flags an unkeyed header reflected into a cacheable response; VulnLab `/cache`,
+asserted in `Scripts/m11c-checks-dod.sh`. The rest of the family (WCP-002…008) remains.*
+
 - [ ] All P0/P1 of F08 §3.5 (WCP-001…WCP-008). **DoD:** confirms an `X-Forwarded-Host` poisoning vector victim-safely and a `/account.css` deception; safe twins clean.
 
 ### M25 — Issue retest (merged from F30)

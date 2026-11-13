@@ -30,6 +30,7 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 | Single-packet attack (HTTP/2 race) | ✅ | ✅ | Gulp does single-packet group send (HTTP-030…034). |
 | Grep-match / extract / reflection analysis | ✅ | ✅ | |
 | **Protobuf/gRPC field fuzzing** | 🟡 | ⭐ | Burp needs an extension; Gulp fuzzes protobuf fields natively (re-encodes envelope + length). |
+| Parameter discovery (hidden params) | ✅ (Param Miner, ext) | ✅ | Built (2026-11-13): `gulp-cli discover-params` batches canary params and isolates processed ones (reflected / behaviour-changing); proven on VulnLab `/params`. |
 
 ## 3. Scanner (active + passive)
 

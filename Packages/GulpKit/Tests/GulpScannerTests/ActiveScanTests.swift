@@ -112,6 +112,14 @@ struct FakeApp: Sendable {
         case "/hosthdr":
             let host = safe ? "app.test" : (request.headerValue("x-forwarded-host")?.string() ?? "app.test")
             return (Self.text("Reset: http://\(host)/r"), 0.01)
+        case "/cache":
+            // Reflects X-Forwarded-Host into a cacheable response (web cache poisoning).
+            let host = safe ? "app.test" : (request.headerValue("x-forwarded-host")?.string() ?? "app.test")
+            return (
+                Self.response(
+                    200, headers: ["Cache-Control: public, max-age=60"],
+                    body: "<link href=\"http://\(host)/t.css\">"), 0.01
+            )
         case "/me":
             // JWT auth: the vulnerable twin accepts alg:none; the safe twin requires a real signature.
             let token = (request.headerValue("authorization")?.string() ?? "").replacingOccurrences(
@@ -472,6 +480,14 @@ struct ActiveScanTests {
         #expect(!safe.contains { $0.typeID == "active.prototype-pollution" })
     }
 
+    @Test("M11c: web cache poisoning — an unkeyed header reflected into a cacheable response is flagged")
+    func test_M11c_cachePoisoning() async {
+        let (findings, _) = await scan([get("/cache")], app: FakeApp())
+        #expect(findings.contains { $0.typeID == "active.cache-poisoning" }, "\(pairs(findings))")
+        let (safe, _) = await scan([get("/cache")], app: FakeApp(safe: true))
+        #expect(!safe.contains { $0.typeID == "active.cache-poisoning" })
+    }
+
     @Test("M11c: NoSQL, XPath and LDAP injection fire on the vulnerable twins and nothing on the safe ones")
     func test_M11c_injectionFamilies() async {
         let cases: [(RawRequest, String)] = [
@@ -545,7 +561,7 @@ struct ActiveScanTests {
         var config = ScanConfig.preset(.balanced)
         config.maxRequestsPerPoint = 5
         // Disable the request-level families so only the `id` insertion point's budget is measured.
-        config.disabledFamilies = ["cors", "host-header", "jwt", "mass-assignment"]
+        config.disabledFamilies = ["cors", "host-header", "jwt", "mass-assignment", "cache-poisoning"]
         let (_, summary) = await scan([get("/item?id=1")], app: FakeApp(), config: config)
         // The one insertion point is capped at 5 probes; the request-level unit now sends nothing.
         #expect((summary?.probes ?? 99) <= 5)

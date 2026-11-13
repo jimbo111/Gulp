@@ -136,6 +136,23 @@ enum ScanLab {
             // Sequencer rates it Poor (most of it never changes; the rest only counts up).
             let token = String(format: "a1b2c3d4%08x", tokenCounter.next())
             return text("ok\n", headers: ["Set-Cookie: SID=\(token); Path=/; HttpOnly"])
+        case "/cache":
+            // Web cache poisoning: the vulnerable twin reflects X-Forwarded-Host into a cacheable
+            // response; the safe twin uses a canonical host, so there is nothing to poison.
+            let forwarded = request.headerValue("x-forwarded-host")?.string()
+            let host = safe ? "vulnlab.test" : (forwarded ?? "vulnlab.test")
+            return text(
+                "<link rel=\"stylesheet\" href=\"http://\(host)/theme.css\">\n",
+                headers: ["Cache-Control: public, max-age=60"])
+        case "/params":
+            // Hidden parameters: the vulnerable twin processes `debug` (behavior) and `trace`
+            // (reflected); the safe twin ignores everything but the advertised ones.
+            var body = "Welcome\n"
+            if !safe {
+                if query["debug"] != nil { body += "DEBUG: on\n" }
+                if let trace = query["trace"] { body += "trace=\(trace)\n" }
+            }
+            return text(body)
         case "/spa":
             // A client-side SPA with DOM XSS: the fragment flows into innerHTML (the DOM Probe's
             // target). The safe twin writes the same value with textContent.

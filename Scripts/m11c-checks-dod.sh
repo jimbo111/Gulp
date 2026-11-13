@@ -99,6 +99,11 @@ scan_get_expect "/ldap/login?uid=alice" "active.ldapi" yes
 scan_get_expect "/safe/ldap/login?uid=alice" "active.ldapi" no
 echo "PASS 5: LDAP injection flagged on /ldap/login, clean on the safe twin"
 
+# 7. Web cache poisoning (request-level; the check injects X-Forwarded-Host itself).
+scan_get_expect "/cache" "active.cache-poisoning" yes
+scan_get_expect "/safe/cache" "active.cache-poisoning" no
+echo "PASS 7: web cache poisoning flagged on /cache, clean on the safe twin"
+
 # scan a raw multipart upload of <path> and assert the issue type fires (or not).
 scan_upload_expect() {  # <path> <issue-type> <should-fire:yes|no>
   local path="$1" want="$2" fire="$3"

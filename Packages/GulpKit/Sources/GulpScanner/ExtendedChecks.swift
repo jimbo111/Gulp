@@ -12,7 +12,47 @@ enum ExtendedChecks {
     static let all: [any ActiveCheck] = [
         CORSCheck(), HostHeaderCheck(), JWTScanCheck(), MassAssignmentCheck(), PrototypePollutionCheck(),
         NoSQLInjectionCheck(), LDAPInjectionCheck(), XPathInjectionCheck(), UploadBypassCheck(),
+        CachePoisoningCheck(),
     ]
+}
+
+/// Web cache poisoning (F28 WCP-001): an unkeyed header (e.g. `X-Forwarded-Host`) is reflected into a
+/// response that is cacheable, so a poisoned copy could be served to other users. It fires only when
+/// the reflection lands in a response the cache would store — the cacheability is what separates it
+/// from plain host-header injection.
+struct CachePoisoningCheck: ActiveCheck {
+    let id = "active.cache-poisoning"
+    let family = "cache-poisoning"
+    let intensity = CheckIntensity.light
+    let kinds: Set<InsertionPointKind> = []  // request-level
+
+    func run(_ point: InsertionPoint?, baseline: Baseline?, context: AuditContext) async -> [IssueFinding] {
+        let canary = "\(context.token(8)).gulp-cache.test"
+        let probe = await context.send(context.base.settingHeader("X-Forwarded-Host", to: canary))
+        guard Self.cacheable(probe) else { return [] }
+        let inLocation = probe.header("location")?.contains(canary) == true
+        let inBody = ["//\(canary)", "http://\(canary)", "https://\(canary)"].contains {
+            probe.body.contains($0)
+        }
+        guard inLocation || inBody else { return [] }
+        return [
+            context.finding(
+                id, point: nil, variant: inLocation ? "redirect" : "body",
+                detail:
+                    "`X-Forwarded-Host: \(canary)` was reflected into a **cacheable** response (`\(probe.header("cache-control") ?? "Age present")`), so a poisoned copy keyed on the URL alone could be served to other users — web cache poisoning.",
+                evidence: probe, marker: canary, confidence: .firm)
+        ]
+    }
+
+    /// Whether the response looks like something a shared cache would store.
+    static func cacheable(_ probe: Probe) -> Bool {
+        if probe.header("age") != nil { return true }
+        guard let control = probe.header("cache-control")?.lowercased() else { return false }
+        if control.contains("no-store") || control.contains("private") || control.contains("no-cache") {
+            return false
+        }
+        return control.contains("public") || control.contains("max-age")
+    }
 }
 
 /// CORS misconfiguration: the server reflects an arbitrary `Origin` (or `null`) and allows
