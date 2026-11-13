@@ -27,6 +27,8 @@ public struct PassiveScanConfig: SettingsGroup, Hashable {
     public var disabledChecks: [String] = []
     /// Run the secret & JS-endpoint recon checks (F27; off by default).
     public var recon = false
+    /// User-authored Check Recipes stored with the project (SCN-064).
+    public var recipes: [CheckRecipe] = []
 
     /// Defaults.
     public init() {}
@@ -187,6 +189,7 @@ public actor PassiveScanService {
         var settings = PassiveScanSettings()
         settings.disabled = Set(config.disabledChecks)
         settings.recon = config.recon
+        settings.recipes = config.recipes
         return settings
     }
 }

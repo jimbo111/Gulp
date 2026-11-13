@@ -12,6 +12,14 @@ enum ReconLab {
 
     static func respond(_ path: String) -> VulnReply? {
         switch path {
+        case "/recipe/leak":
+            // A verbose stack header a Check Recipe can flag.
+            return VulnReply(
+                bytes: VulnLab.response(
+                    200, body: Array("ok\n".utf8),
+                    headers: ["X-Powered-By: Express/4.17.1", "X-Debug-Token: 9f2c"]))
+        case "/safe/recipe/leak":
+            return VulnReply(bytes: VulnLab.response(200, body: Array("ok\n".utf8)))
         case "/recon/app.js":
             let js = """
                 const API_BASE = "/api/v2";

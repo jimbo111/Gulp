@@ -736,6 +736,13 @@ for behavior.
   GulpScanner's 3 unused deps); Burp Suite comparison (`docs/09-burpsuite-comparison.md`); first
   outperformance increments shipped — secret & JS recon (F27) and formatted reporting (F19).
 
+- 2026-11-13 — **Check Recipes (SCN-060/061/064, passive) implemented**: declarative no-code checks
+  (`CheckRecipe`/`RecipeMatcher`) with path/content gates, header/body/status/regex matchers and OR
+  groups, and a templated issue; they join the passive scan via `PassiveScanSettings.recipes`;
+  `gulp-cli scan passive --recipes <file|dir>` loads a JSON recipe library; `Scripts/recipe-dod.sh`
+  PASS (added to CI/gate). Recipes are JSON (YAML a thin future layer); active recipes + editor remain.
+  Closes Burp-comparison gap #3 for the no-code-check half.
+
 ## How to pick up work (reminder)
 
 1. Read `CLAUDE.md` §1 (reading order) and this file.

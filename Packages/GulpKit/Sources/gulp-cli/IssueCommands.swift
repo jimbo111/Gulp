@@ -208,12 +208,14 @@ struct ScanCommand: AsyncParsableCommand {
         @Option(help: "Also scan these tools' traffic, comma-separated (repeater,fuzzer…).") var tools:
             String?
         @Flag(help: "Enable the secret & JS-endpoint recon checks (F27).") var recon = false
+        @Option(help: "Load Check Recipes from this JSON file or directory (SCN-060).") var recipes: String?
 
         func run() async throws {
             let session = try await openSession(project)
             var config = await session.passiveScanConfig()
             if allTraffic { config.allTraffic = true }
             if recon { config.recon = true }
+            if let recipes { config.recipes = try loadRecipes(recipes) }
             if let tools { config.extraTools = tools.split(separator: ",").map(String.init) }
             try await session.setPassiveScanConfig(config)
             if all { try await session.passiveScan.rescanAll() }
@@ -224,4 +226,27 @@ struct ScanCommand: AsyncParsableCommand {
             try await session.close()
         }
     }
+}
+
+/// Load Check Recipes from a JSON file or a directory of `.json` files (SCN-062 library folder).
+func loadRecipes(_ path: String) throws -> [CheckRecipe] {
+    let fm = FileManager.default
+    var isDir: ObjCBool = false
+    guard fm.fileExists(atPath: path, isDirectory: &isDir) else {
+        throw ValidationError("No recipes at \(path)")
+    }
+    var files: [String] = []
+    if isDir.boolValue {
+        files = (try fm.contentsOfDirectory(atPath: path)).filter { $0.hasSuffix(".json") }.map {
+            "\(path)/\($0)"
+        }
+    } else {
+        files = [path]
+    }
+    var recipes: [CheckRecipe] = []
+    for file in files {
+        guard let data = fm.contents(atPath: file) else { continue }
+        recipes += try CheckRecipes.decode(data)
+    }
+    return recipes
 }

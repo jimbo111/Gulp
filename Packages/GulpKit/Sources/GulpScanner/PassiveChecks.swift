@@ -13,6 +13,8 @@ public struct PassiveScanSettings: Sendable, Hashable, Codable {
     public var disabled: Set<String> = []
     /// Run the secret & JS-endpoint recon checks (F27). Off by default (it is noisier and opt-in).
     public var recon: Bool = false
+    /// User-authored Check Recipes to run alongside the built-ins (SCN-064).
+    public var recipes: [CheckRecipe] = []
 
     /// All checks on.
     public init() {}
@@ -42,6 +44,7 @@ public struct PassiveScanner: Sendable {
         findings += PassiveChecks.caching(message)
         findings += PassiveChecks.transport(message)
         if settings.recon { findings += ReconChecks.scan(message) }
+        if !settings.recipes.isEmpty { findings += CheckRecipes.scan(settings.recipes, message) }
         return findings.filter { !settings.disabled.contains($0.typeID) }
     }
 }
