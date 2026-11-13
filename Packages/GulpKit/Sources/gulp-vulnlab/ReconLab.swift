@@ -12,6 +12,16 @@ enum ReconLab {
 
     static func respond(_ path: String) -> VulnReply? {
         switch path {
+        case "/libs/old":
+            let html =
+                "<!doctype html><html><head><script src=\"/assets/jquery-3.4.1.min.js\"></script></head><body>old libs</body></html>"
+            return VulnReply(
+                bytes: VulnLab.response(200, body: Array(html.utf8), type: "text/html; charset=utf-8"))
+        case "/safe/libs/old":
+            let html =
+                "<!doctype html><html><head><script src=\"/assets/jquery-3.7.1.min.js\"></script></head><body>current libs</body></html>"
+            return VulnReply(
+                bytes: VulnLab.response(200, body: Array(html.utf8), type: "text/html; charset=utf-8"))
         case "/recipe/leak":
             // A verbose stack header a Check Recipe can flag.
             return VulnReply(

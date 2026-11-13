@@ -743,6 +743,10 @@ for behavior.
   PASS (added to CI/gate). Recipes are JSON (YAML a thin future layer); active recipes + editor remain.
   Closes Burp-comparison gap #3 for the no-code-check half.
 
+- 2026-11-13 — **Vulnerable JS libraries** passive check (`passive.vuln-js-library`): fingerprints
+  jQuery/lodash/Bootstrap/Moment/Handlebars/AngularJS/DOMPurify versions from filenames, banners and
+  VERSION strings against a bundled advisory dataset, always-on; VulnLab `/libs/old`(+safe). 446 tests.
+
 ## How to pick up work (reminder)
 
 1. Read `CLAUDE.md` §1 (reading order) and this file.

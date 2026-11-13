@@ -231,6 +231,12 @@ public enum IssueDefinitions {
             "URLs and API paths were found hard-coded in JavaScript. They widen the known attack surface (hidden or admin endpoints) even when nothing links to them.",
             "Informational — review the endpoints for ones that should not be reachable or that lack authorization.",
             "- [OWASP testing guide](https://owasp.org/www-project-web-security-testing-guide/)"),
+        def(
+            "passive.vuln-js-library", "Vulnerable JavaScript library", "Vulnerable library", .medium, .firm,
+            "The page loads a JavaScript library whose version has a known, publicly-documented vulnerability. Even if nothing on this page triggers it, shipping a vulnerable library is a finding and often an easy win.",
+            "Upgrade the library to a fixed version; remove unused libraries; track dependencies with an SCA tool.",
+            "- [OWASP: using components with known vulnerabilities](https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components/)"
+        ),
     ]
 
     static let other: [IssueDefinition] = [

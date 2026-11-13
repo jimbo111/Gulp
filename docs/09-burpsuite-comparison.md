@@ -102,6 +102,10 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 5. **Agent-native + CLI-first:** an MCP server and a complete headless CLI make Gulp automatable and
    drivable by an AI agent in ways Burp is not.
 6. **Self-hostable OAST** that is also interactsh-compatible — not tied to a vendor Collaborator.
+8. **Always-on vulnerable-JS-library detection** with a bundled advisory dataset (jQuery, lodash,
+   Bootstrap, Moment, Handlebars, AngularJS, DOMPurify) — no network calls at scan time; Burp needs
+   its Pro scanner / an extension.
+
 7. **Not paywalled:** no Community-tier throttle on Intruder/Scanner; the limiter is a user-controlled
    safety cap.
 

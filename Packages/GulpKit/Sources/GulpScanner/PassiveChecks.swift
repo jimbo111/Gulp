@@ -43,6 +43,7 @@ public struct PassiveScanner: Sendable {
         findings += PassiveChecks.cors(message)
         findings += PassiveChecks.caching(message)
         findings += PassiveChecks.transport(message)
+        findings += VulnLibraryCheck.scan(message)
         if settings.recon { findings += ReconChecks.scan(message) }
         if !settings.recipes.isEmpty { findings += CheckRecipes.scan(settings.recipes, message) }
         return findings.filter { !settings.disabled.contains($0.typeID) }
