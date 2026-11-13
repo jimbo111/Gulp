@@ -186,6 +186,14 @@ struct ProjectWindow: View {
             SequencerView()
         case .jsRecon:
             JSReconView()
+        case .domProbe:
+            DOMProbeView()
+        case .graphql:
+            GraphQLWorkbenchView()
+        case .extensions:
+            ExtensionsView()
+        case .assistant:
+            AssistantView()
         default:
             ContentUnavailableView(
                 selection?.title ?? "Gulp", systemImage: selection?.symbol ?? "network",

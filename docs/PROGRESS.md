@@ -579,6 +579,22 @@ for behavior.
   **macOS CI leg**, which cannot run in this Linux environment. Remaining macOS-gated UI: Assistant
   (needs an AI provider + key), DOM-probe (needs a live browser), the GraphQL / Authz-Matrix /
   Extensions screens, and the in-process JavaScriptCore extension host.
+- 2026-11-13 — **macOS UI: Assistant, GraphQL, Extensions and DOM-Probe screens + a latent dependency
+  fix**: added `AssistantView` (F18 — the pre-send redaction gate over the pure `GulpAI.Redactor`,
+  showing exactly what is masked before a prompt leaves the machine), `GraphQLWorkbenchView` (F23 §5 —
+  introspection → `GulpCodec.GraphQLSchema.parse`, rendered SDL, query/mutation surface),
+  `ExtensionsView` (M15 — `GulpExtensions.ExtensionManifest.decode`, auditing declared runtime,
+  permissions and hooks) and `DOMProbeView` (M13a — the shipped `GulpBrowser.DOMProbe.instrumentation`
+  plus decoding a captured `__gulpReport` into a source→sink finding). All four are self-contained over
+  **pure, already-tested** engine entry points. Wired into the `Tool` enum and `ProjectWindow` (the
+  `domProbe` tool is new; `assistant`/`graphql`/`extensions` replace their placeholder). **Found and
+  fixed a real latent bug:** `GulpFeatures` did not declare `GulpScanner`, `GulpSequencer`,
+  `GulpExtensions`, `GulpCrawler` or `GulpBrowser` as dependencies, yet its own existing views (Scanner,
+  Crawler, …) and these new ones import them — so the macOS build of this target would have failed on a
+  missing-module error; added all five to the target's `dependencies`. Linux build and arch-check pass
+  (these compile to empty on Linux); the SwiftUI bodies and the dependency fix are compiled for real
+  only by the macOS CI leg. Only the Authz-Matrix screen (which needs live multi-identity sending via
+  the workspace) and the in-process JavaScriptCore extension host remain macOS-gated.
 - 2026-11-13 — **M20 release tooling (doc 02 §8)**: wrote the missing `Scripts/release.sh` (archive →
   sign helpers inside-out with Hardened Runtime + timestamp → notarize with notarytool → staple → build
   + notarize + staple the DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual

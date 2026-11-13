@@ -162,6 +162,9 @@ let package = Package(
             dependencies: [
                 "GulpCore", "GulpCodec", "GulpStore", "GulpProxy", "GulpTLS", "GulpWorkspace", "GulpUI",
                 "GulpAI", "GulpHTTP", "GulpRepeater", "GulpDiff", "GulpFuzzer", "GulpQuery",
+                // These are imported by GulpFeatures' own views (Scanner, Crawler, Sequencer,
+                // Extensions, JS-Recon, DOM-probe); without them the macOS build of this target fails.
+                "GulpScanner", "GulpSequencer", "GulpExtensions", "GulpCrawler", "GulpBrowser",
             ]),
 
         // ---- Executables ----
