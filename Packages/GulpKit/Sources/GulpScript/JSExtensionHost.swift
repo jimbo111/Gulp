@@ -82,7 +82,7 @@ public final class JSExtensionHost: @unchecked Sendable {
             let object = result.toDictionary(),
             let checks = object["passiveChecks"] as? [[String: Any]]
         else { return [] }
-        return checks.compactMap { entry in
+        return checks.compactMap { (entry: [String: Any]) -> ExtensionCheck? in
             guard let id = entry["id"] as? String, let name = entry["name"] as? String else { return nil }
             return ExtensionCheck(id: id, name: name)
         }

@@ -151,7 +151,15 @@ GulpFeatures     → the engines it surfaces + GulpWorkspace + GulpUI   # UI (ma
    missing dependency or an API-signature error behind an Apple-framework guard (see §2) only shows up
    on the macOS leg. Mitigation applied: every macOS view/host in this round was written against the
    engines' *verified* public signatures (read from source) and the Apple-framework surface is kept to
-   constructs already proven elsewhere in the module.
+   constructs already proven elsewhere in the module. **Further, for the one piece of genuinely new
+   Apple-framework logic — the in-process JavaScriptCore host — the gap is now partly closed by
+   `Scripts/jsc-host-typecheck.sh`:** it type-checks the host body against a faithful shim of the
+   JavaScriptCore subset it uses, linked against the *real* `GulpExtensions`, so the class of error the
+   `#if canImport` guard hides is caught on Linux CI too. Writing that harness immediately found two
+   real defects — a `compactMap` result-type inference problem and, more importantly, that
+   `ExtensionCheck`'s synthesized memberwise initializer is *internal* to `GulpExtensions` and so was
+   inaccessible from the host's module (`GulpScript`); a public `init` was added. The SwiftUI views
+   have no equivalent shim (SwiftUI's surface is too large), so they remain macOS-CI-verified.
 2. **All milestone modules are now built**; no stubs remain. The post-1.0 breadth (further WS
    sub-protocol coverage, richer AI tool-use) is enhancement, not missing structure.
 3. **Signing keys not yet in the Keychain** (see §3).

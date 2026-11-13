@@ -17,6 +17,13 @@ public protocol ExtensionTransport: Sendable {
 public struct ExtensionCheck: Sendable, Codable, Equatable {
     public let id: String
     public let name: String
+
+    /// A check. (Public so hosts in other modules — e.g. the in-process JS host in GulpScript — can
+    /// build one; the synthesized memberwise initializer would be internal to this module.)
+    public init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
 }
 
 /// Drives one out-of-process extension.
