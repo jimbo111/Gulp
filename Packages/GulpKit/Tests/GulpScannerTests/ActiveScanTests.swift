@@ -89,6 +89,16 @@ struct FakeApp: Sendable {
             )
         case "/fetch":
             return (Self.text("fetched"), 0.01)
+        case "/cors":
+            let origin = request.headerValue("origin")?.string() ?? ""
+            let allow = safe ? (origin == "https://trusted.test") : !origin.isEmpty
+            let headers =
+                allow
+                ? ["Access-Control-Allow-Origin: \(origin)", "Access-Control-Allow-Credentials: true"] : []
+            return (Self.response(200, headers: headers, body: "{}"), 0.01)
+        case "/hosthdr":
+            let host = safe ? "app.test" : (request.headerValue("x-forwarded-host")?.string() ?? "app.test")
+            return (Self.text("Reset: http://\(host)/r"), 0.01)
         case "/ping":
             let host = query["host"] ?? ""
             var seconds = 0.01 + slow
@@ -288,6 +298,19 @@ struct ActiveScanTests {
         let xss = findings.first { $0.typeID == "active.xss.reflected" }
         #expect(xss?.evidence.responseMarkers.isEmpty == false)
         #expect(xss?.insertionPoint == "url param q")
+    }
+
+    @Test("M11c: CORS reflection with credentials and host-header injection are flagged")
+    func test_M11c_corsAndHostHeader() async {
+        let cors = get("/cors", extra: ["Origin: https://caller.test"])
+        let host = get("/hosthdr")
+        let (findings, _) = await scan([cors, host], app: FakeApp())
+        let found = pairs(findings)
+        #expect(found.contains("/cors active.cors"), "\(found)")
+        #expect(found.contains("/hosthdr active.host-header"), "\(found)")
+        // Safe twins are clean.
+        let (safe, _) = await scan([cors, host], app: FakeApp(safe: true))
+        #expect(!safe.contains { $0.typeID == "active.cors" || $0.typeID == "active.host-header" })
     }
 
     @Test("SCN-030: the safe twins produce nothing")

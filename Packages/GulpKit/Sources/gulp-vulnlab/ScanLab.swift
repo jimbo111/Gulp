@@ -91,6 +91,28 @@ enum ScanLab {
             return text("Language set.\n", headers: ["Content-Language: \(lang)"])
         case "/guestbook":
             return guestbook(request, body: body, safe: safe)
+        case "/cors":
+            // Vulnerable: reflect any Origin with credentials. Safe: a fixed allowlist.
+            let origin = request.headerValue("origin")?.string() ?? ""
+            if safe {
+                let allowed = origin == "https://trusted.vulnlab.test"
+                let headers =
+                    allowed
+                    ? ["Access-Control-Allow-Origin: \(origin)", "Access-Control-Allow-Credentials: true"]
+                    : []
+                return text("{}\n", headers: headers)
+            }
+            return text(
+                "{}\n",
+                headers: origin.isEmpty
+                    ? []
+                    : ["Access-Control-Allow-Origin: \(origin)", "Access-Control-Allow-Credentials: true"])
+        case "/hosthdr":
+            // Vulnerable: build the reset link from X-Forwarded-Host. Safe: a canonical host.
+            let forwarded = request.headerValue("x-forwarded-host")?.string()
+            let host =
+                safe ? "vulnlab.test" : (forwarded ?? request.headerValue("host")?.string() ?? "vulnlab.test")
+            return text("Reset link: http://\(host)/reset?token=abc\n")
         default:
             return nil
         }

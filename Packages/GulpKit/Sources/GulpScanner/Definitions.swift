@@ -344,5 +344,17 @@ public enum IssueDefinitions {
             "Line breaks in the input end up in a response header, so an attacker can add headers (cookies, redirects) or split the response.",
             "Reject or strip CR and LF from anything placed in headers; use framework APIs that refuse them.",
             "- [OWASP CRLF injection](https://owasp.org/www-community/vulnerabilities/CRLF_Injection)"),
+        def(
+            "active.cors", "CORS allows an untrusted origin with credentials", "CORS", .high, .certain,
+            "The server reflects an arbitrary `Origin` (or `null`) into `Access-Control-Allow-Origin` and allows credentials, so any website can read this response with the user's cookies.",
+            "Compare `Origin` against an exact allowlist; never reflect it, and never allow `null` with credentials.",
+            "- [OWASP HTML5 security: CORS](\(owasp)HTML5_Security_Cheat_Sheet.html#cross-origin-resource-sharing)"
+        ),
+        def(
+            "active.host-header", "Host header injection", "Host header", .medium, .firm,
+            "The application builds absolute URLs from a client-supplied host (`X-Forwarded-Host`). Password-reset links, cache keys and redirects can then point at an attacker's host.",
+            "Build absolute URLs from a configured canonical host; trust forwarding headers only from your own proxies.",
+            "- [OWASP: testing for host header injection](https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/17-Testing_for_Host_Header_Injection)"
+        ),
     ]
 }

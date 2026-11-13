@@ -259,5 +259,35 @@
       "active.open-redirect",
       "active.crlf"
     ]
+  },
+  {
+    "method": "GET",
+    "path": "/cors",
+    "headers": [
+      "Origin: https://probe.example"
+    ],
+    "expect": [
+      "active.cors"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/safe/cors",
+    "headers": [
+      "Origin: https://probe.example"
+    ],
+    "expect": []
+  },
+  {
+    "method": "GET",
+    "path": "/hosthdr",
+    "expect": [
+      "active.host-header"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/safe/hosthdr",
+    "expect": []
   }
 ]
