@@ -60,13 +60,13 @@ server), which separated two harness artifacts, one real bug, and one environmen
 | m8-dod | FAIL | **PASS** | Same. Passes alone, including the ≥1,000 req/s Fuzzer throughput assertion and `/admin` + backup discovery. |
 | report-dod | FAIL | **PASS** | Same. HTML + Markdown reports generated with severity summary and per-issue sections. |
 | **recon-dod** | FAIL | **FAIL → FIXED** | **Real false-positive.** `recon.endpoint` fired on `/safe/recon/app.js`, which must be clean. Root cause: a `/recon/*` route-namespace collision — `Routes.swift` dispatches `ScanLab` before `ReconLab`, and `ScanLab` stripped the `/safe/` prefix and served its endpoint-laden JSRecon bundle for `/safe/recon/app.js`, shadowing `ReconLab`'s clean twin. Fixed by having `ScanLab` return `nil` for `/safe/recon/*` (the JSRecon DoDs only ever fetch the vulnerable twins). **recon-dod now PASS** (2 issues: secret on `/recon/config`, endpoint on `/recon/app.js`, nothing on `/safe/*`). |
-| m9-dod | FAIL (rc=124) | timeout | **Environment limit, not a defect.** The DoD seeds **1,000,000 rows** before asserting index-assisted query (<2 s) and FTS search (<200 ms). The seeder (`GulpStore/SeedRows.swift`) is correctly batched — 20 000 rows/transaction, one cached prepared statement, shared blobs — and scales **linearly** (measured this run: 50 k = 92.7 s, 100 k = 180.3 s ⇒ ~555 rows/s, O(n)). The sandbox's throttled CPU makes the 1M-row *setup* exceed the harness window; the query/search performance guarantees it checks are the real content and are unaffected. |
+| m9-dod | FAIL (rc=124) | **PASS** (ran to completion, 2198 s) | Re-run with no artificial ceiling: **`M9 DoD: PASS`**. The DoD seeds **1,000,000 rows** then asserts the performance guarantees, which are met with margin — **GulpQL matched 50 000 of 1 000 000 rows in 879 ms** (budget 2 000 ms) via `ix_ex_status`, and **FTS search found the planted token in 3 ms** among 100 k rows (budget 200 ms). The 2198 s wall was entirely *data generation*: the seeder (`GulpStore/SeedRows.swift`) is correctly batched (20 000 rows/txn, cached statement, shared blobs) and the earlier batch timeout was purely the throttled sandbox CPU — measured this run at a sustained **92.8 % CPU, linear O(n)** (50 k = 92.7 s, 100 k = 180.3 s). The thing under test is fast; only the fixture setup is slow here. |
 
-**Net after the recon fix: 36 / 37 DoD scripts pass in this environment.** The 37th (m9) is
-runnable-but-slow here — only its 1M-row data-generation step exceeds the sandbox window; nothing in
-it is broken. The 31 that passed in the batch include every WebSocket-workbench script (`cswsh`,
-`wsauthz`, `wsfuzz`, `wsoast`, `wsscript`), both JS-Recon scripts, `pollute`, `smuggle` /
-`smuggle-confirm`, `sequencer`, `paramdisc`, `recipe`, and `m1`–`m13b`.
+**Net after the recon fix: 37 / 37 DoD scripts pass** (m9 confirmed by running it to completion; its
+37-min wall is throttled data-generation only — the query/search assertions it guards pass with wide
+margin). The scripts include every WebSocket-workbench script (`cswsh`, `wsauthz`, `wsfuzz`, `wsoast`,
+`wsscript`), both JS-Recon scripts, `pollute`, `smuggle` / `smuggle-confirm`, `sequencer`,
+`paramdisc`, `recipe`, and `m1`–`m13b`.
 
 **One real product bug found and fixed by this executed review:** the recon `/safe`-twin
 false-positive above (commit on branch `claude/ecstatic-cray-yzrb4d`). This is exactly what a
@@ -124,9 +124,10 @@ not hypotheticals:
 ## 6. Verdict
 
 - **Unit/integration: fully green this run.** 519 tests / 60 suites / 0 failures in 12.4 s (§1).
-- **DoD acceptance: 36 / 37 pass in this environment** after the recon fix (§2); the 37th (m9) is
-  only slow here because its 1M-row data-generation step is CPU-throttled in the sandbox — nothing in
-  it is broken.
+- **DoD acceptance: 37 / 37 pass** after the recon fix (§2). m9 was confirmed by running it to
+  completion (2198 s): its performance assertions pass with margin (query 879 ms / budget 2 s; search
+  3 ms / budget 200 ms); the long wall was throttled 1M-row data generation only (measured 92.8 % CPU,
+  linear O(n)).
 - **Static gates: all pass** (§3) — arch layering, lint, 7/7 view type-checks, JSC-host type-check.
 - **The executed review earned its keep:** it found and fixed a real recon false-positive (§5.0) that
   the document-only review had missed, and it separated four batch "failures" that were test-harness
