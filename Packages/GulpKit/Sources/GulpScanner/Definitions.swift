@@ -356,5 +356,15 @@ public enum IssueDefinitions {
             "Build absolute URLs from a configured canonical host; trust forwarding headers only from your own proxies.",
             "- [OWASP: testing for host header injection](https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/17-Testing_for_Host_Header_Injection)"
         ),
+        def(
+            "active.jwt", "JWT signature not verified", "JWT", .high, .firm,
+            "The server accepted a JSON Web Token whose signature was removed or weakened (for example `alg: none`, or an HMAC signed with a guessable secret), so an attacker can mint tokens for any user.",
+            "Verify the signature with a fixed algorithm and key; reject `alg: none`; use a strong, random HMAC secret or asymmetric keys.",
+            "- [OWASP JWT cheat sheet](\(owasp)JSON_Web_Token_for_Java_Cheat_Sheet.html)"),
+        def(
+            "active.mass-assignment", "Mass assignment / overposting", "Mass assignment", .high, .firm,
+            "A create/update endpoint accepted a privileged property (such as `role` or `isAdmin`) that was not part of the intended input, so a user can set fields the UI does not expose.",
+            "Bind only an explicit allowlist of properties on the server; never bind request bodies straight onto domain objects.",
+            "- [OWASP mass assignment cheat sheet](\(owasp)Mass_Assignment_Cheat_Sheet.html)"),
     ]
 }

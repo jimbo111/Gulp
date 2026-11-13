@@ -99,6 +99,33 @@ struct FakeApp: Sendable {
         case "/hosthdr":
             let host = safe ? "app.test" : (request.headerValue("x-forwarded-host")?.string() ?? "app.test")
             return (Self.text("Reset: http://\(host)/r"), 0.01)
+        case "/me":
+            // JWT auth: the vulnerable twin accepts alg:none; the safe twin requires a real signature.
+            let token = (request.headerValue("authorization")?.string() ?? "").replacingOccurrences(
+                of: "Bearer ", with: "")
+            let segments = token.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+            let headerJSON = segments.first.flatMap { Data(base64Encoded: Self.pad($0)) }
+                .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let alg = (headerJSON?["alg"] as? String ?? "").lowercased()
+            let valid =
+                safe
+                ? (alg == "hs256" && !segments.last!.isEmpty)
+                : (alg == "none" || (alg == "hs256" && !segments.last!.isEmpty))
+            return (
+                valid
+                    ? Self.text("{\"user\":\"alice\"}")
+                    : Self.response(401, headers: [], body: "unauthorized"), 0.01
+            )
+        case "/profile/update":
+            let object =
+                (try? JSONSerialization.jsonObject(with: Data(request.bytes.rawBytes[request.parsed.body])))
+                as? [String: Any] ?? [:]
+            let bound = safe ? object.filter { ["name"].contains($0.key) } : object
+            let json =
+                (try? JSONSerialization.data(withJSONObject: bound)).map {
+                    String(decoding: $0, as: UTF8.self)
+                } ?? "{}"
+            return (Self.response(200, headers: ["Content-Type: application/json"], body: json), 0.01)
         case "/ping":
             let host = query["host"] ?? ""
             var seconds = 0.01 + slow
@@ -138,6 +165,12 @@ struct FakeApp: Sendable {
             return text
         }
         return text.replacingCharacters(in: match.range, with: String(a * b))
+    }
+
+    static func pad(_ s: String) -> String {
+        var t = s.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while t.count % 4 != 0 { t += "=" }
+        return t
     }
 
     static func escape(_ text: String) -> String {
@@ -313,6 +346,37 @@ struct ActiveScanTests {
         #expect(!safe.contains { $0.typeID == "active.cors" || $0.typeID == "active.host-header" })
     }
 
+    @Test("M11c: a JWT with alg:none accepted by the server is flagged, not on the safe twin")
+    func test_M11c_jwt() async {
+        // A real-looking HS256 token: header {alg:HS256}, payload {user:alice}, a dummy signature.
+        func b64(_ s: String) -> String {
+            Data(s.utf8).base64EncodedString().replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        }
+        let token = "\(b64(#"{"alg":"HS256","typ":"JWT"}"#)).\(b64(#"{"user":"alice"}"#)).c2ln"
+        let request = get("/me", extra: ["Authorization: Bearer \(token)"])
+        let (findings, _) = await scan([request], app: FakeApp())
+        #expect(
+            findings.contains { $0.typeID == "active.jwt" && $0.variant == "alg:none" }, "\(pairs(findings))")
+        let (safe, _) = await scan([request], app: FakeApp(safe: true))
+        #expect(!safe.contains { $0.typeID == "active.jwt" })
+    }
+
+    @Test("M11c: mass assignment is flagged only with the unsafe gate, not on the safe twin")
+    func test_M11c_massAssignment() async {
+        let request = post("/profile/update", type: "application/json", body: #"{"name":"bob"}"#)
+        var unsafeConfig = ScanConfig.preset(.balanced)
+        unsafeConfig.unsafe = true
+        let (findings, _) = await scan([request], app: FakeApp(), config: unsafeConfig)
+        #expect(findings.contains { $0.typeID == "active.mass-assignment" }, "\(pairs(findings))")
+        // Off without the unsafe gate.
+        let (safeGate, _) = await scan([request], app: FakeApp(), config: .preset(.balanced))
+        #expect(!safeGate.contains { $0.typeID == "active.mass-assignment" })
+        // The /safe twin only binds name, so role isn't echoed.
+        let (safe, _) = await scan([request], app: FakeApp(safe: true), config: unsafeConfig)
+        #expect(!safe.contains { $0.typeID == "active.mass-assignment" })
+    }
+
     @Test("SCN-030: the safe twins produce nothing")
     func test_SCN030_safeTwinsQuiet() async {
         let (findings, _) = await scan(plantedRequests, app: FakeApp(safe: true, oast: FakeOAST()))
@@ -344,8 +408,10 @@ struct ActiveScanTests {
     func test_SCN038_budget() async {
         var config = ScanConfig.preset(.balanced)
         config.maxRequestsPerPoint = 5
+        // Disable the request-level families so only the `id` insertion point's budget is measured.
+        config.disabledFamilies = ["cors", "host-header", "jwt", "mass-assignment"]
         let (_, summary) = await scan([get("/item?id=1")], app: FakeApp(), config: config)
-        // One insertion point, plus the request-level unit which sends nothing.
+        // The one insertion point is capped at 5 probes; the request-level unit now sends nothing.
         #expect((summary?.probes ?? 99) <= 5)
     }
 

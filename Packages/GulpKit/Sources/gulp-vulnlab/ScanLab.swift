@@ -113,6 +113,15 @@ enum ScanLab {
             let host =
                 safe ? "vulnlab.test" : (forwarded ?? request.headerValue("host")?.string() ?? "vulnlab.test")
             return text("Reset link: http://\(host)/reset?token=abc\n")
+        case "/profile/update":
+            // Mass assignment: the vulnerable twin echoes every field it received (role included);
+            // the safe twin binds only name and email.
+            let object = (try? JSONSerialization.jsonObject(with: Data(body.utf8))) as? [String: Any] ?? [:]
+            let bound = safe ? object.filter { ["name", "email"].contains($0.key) } : object
+            let json =
+                (try? JSONSerialization.data(withJSONObject: bound.merging(["id": 1]) { a, _ in a }))
+                .map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+            return VulnReply(bytes: VulnLab.response(200, body: Array(json.utf8), type: "application/json"))
         default:
             return nil
         }
