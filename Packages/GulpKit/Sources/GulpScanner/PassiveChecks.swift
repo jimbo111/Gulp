@@ -11,6 +11,8 @@ import GulpCore
 public struct PassiveScanSettings: Sendable, Hashable, Codable {
     /// Issue type ids not to report.
     public var disabled: Set<String> = []
+    /// Run the secret & JS-endpoint recon checks (F27). Off by default (it is noisier and opt-in).
+    public var recon: Bool = false
 
     /// All checks on.
     public init() {}
@@ -39,6 +41,7 @@ public struct PassiveScanner: Sendable {
         findings += PassiveChecks.cors(message)
         findings += PassiveChecks.caching(message)
         findings += PassiveChecks.transport(message)
+        if settings.recon { findings += ReconChecks.scan(message) }
         return findings.filter { !settings.disabled.contains($0.typeID) }
     }
 }

@@ -220,6 +220,17 @@ public enum IssueDefinitions {
             "Enforce authorization in the resolver for every field that returns user- or tenant-scoped data, not just at the query root.",
             "- [OWASP GraphQL cheat sheet: authorization](https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html#authorization)"
         ),
+        def(
+            "recon.secret", "Secret or credential in a response", "Recon", .high, .firm,
+            "A response (or a JavaScript file it serves) contains what looks like a real secret — an API key, token, private key or high-entropy credential. Anything a client can fetch is not a secret.",
+            "Remove the secret from client-delivered content, rotate it, and move it server-side; scan build output for secrets in CI.",
+            "- [OWASP secrets management](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html)"
+        ),
+        def(
+            "recon.endpoint", "Endpoints discovered in JavaScript", "Recon", .info, .certain,
+            "URLs and API paths were found hard-coded in JavaScript. They widen the known attack surface (hidden or admin endpoints) even when nothing links to them.",
+            "Informational — review the endpoints for ones that should not be reachable or that lack authorization.",
+            "- [OWASP testing guide](https://owasp.org/www-project-web-security-testing-guide/)"),
     ]
 
     static let other: [IssueDefinition] = [

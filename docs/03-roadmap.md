@@ -256,6 +256,7 @@ reused, so older references stay unambiguous.
 - **DoD:** With AI disabled no provider call is possible; enabled (with consent), "Explain this issue" on a VulnLab finding returns a grounded answer citing the real exchange with the auth cookie masked in the redaction preview; an AI-initiated out-of-scope active action is blocked and audit-logged as `.ai`; "Investigate this endpoint" stops at its request budget and every active step waits for approval.
 
 ### M19a — Param Discovery, secret scanner, JS Recon core
+- [x] *2026-11-13:* **Secret & JS-endpoint recon** (F27 first increment) shipped — passive `recon.secret` (vendor ruleset + high-entropy) and `recon.endpoint` (JS endpoint mining), off by default, `gulp-cli scan passive --recon`; `Scripts/recon-dod.sh` PASS. The rest of M19 (param discovery, full JS recon studio) remains.
 - [ ] **Param Discovery** (F23 §3, ADV-020…ADV-022) and the **secret scanner** (F23 §7, ADV-060/061).
 - [ ] **JS Recon Studio core** — the review's "trimmed, earlier" F27: asset inventory with the scripts/comments view, beautify, source-map recovery, endpoint extraction and hand-off to the site map/scanner (JSR-001…JSR-005, ETL-004). JSR-006…JSR-009 stay post-1.0 (M23).
 - **DoD:** Param Discovery finds the hidden parameter planted in a VulnLab endpoint (F23 test 3); the secret scanner finds the planted key in a VulnLab JS file and reports it redacted (F23 test 7); JS Recon reconstructs the `src/` tree from the exposed `.map` and adds the JS-only `/api/internal/*` routes to the site map (F27 tests 1–2).

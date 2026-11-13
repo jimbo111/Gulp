@@ -25,6 +25,8 @@ public struct PassiveScanConfig: SettingsGroup, Hashable {
     public var extraTools: [String] = []
     /// Issue types not to report.
     public var disabledChecks: [String] = []
+    /// Run the secret & JS-endpoint recon checks (F27; off by default).
+    public var recon = false
 
     /// Defaults.
     public init() {}
@@ -184,6 +186,7 @@ public actor PassiveScanService {
     func settings(_ config: PassiveScanConfig) -> PassiveScanSettings {
         var settings = PassiveScanSettings()
         settings.disabled = Set(config.disabledChecks)
+        settings.recon = config.recon
         return settings
     }
 }

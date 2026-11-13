@@ -207,11 +207,13 @@ struct ScanCommand: AsyncParsableCommand {
         @Flag(help: "Include out-of-scope traffic.") var allTraffic = false
         @Option(help: "Also scan these tools' traffic, comma-separated (repeater,fuzzer…).") var tools:
             String?
+        @Flag(help: "Enable the secret & JS-endpoint recon checks (F27).") var recon = false
 
         func run() async throws {
             let session = try await openSession(project)
             var config = await session.passiveScanConfig()
             if allTraffic { config.allTraffic = true }
+            if recon { config.recon = true }
             if let tools { config.extraTools = tools.split(separator: ",").map(String.init) }
             try await session.setPassiveScanConfig(config)
             if all { try await session.passiveScan.rescanAll() }
