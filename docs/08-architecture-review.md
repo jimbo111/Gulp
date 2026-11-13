@@ -158,8 +158,18 @@ GulpFeatures     → the engines it surfaces + GulpWorkspace + GulpUI   # UI (ma
    `#if canImport` guard hides is caught on Linux CI too. Writing that harness immediately found two
    real defects — a `compactMap` result-type inference problem and, more importantly, that
    `ExtensionCheck`'s synthesized memberwise initializer is *internal* to `GulpExtensions` and so was
-   inaccessible from the host's module (`GulpScript`); a public `init` was added. The SwiftUI views
-   have no equivalent shim (SwiftUI's surface is too large), so they remain macOS-CI-verified.
+   inaccessible from the host's module (`GulpScript`); a public `init` was added. The same technique was
+   then applied to the **seven new SwiftUI tool screens** with a loose SwiftUI/AppKit/Observation type
+   shim: five type-check cleanly against it (Assistant, GraphQL, Extensions, DOM-Probe, Authz-Matrix);
+   the other two (Sequencer, JS-Recon) fail only on a nested-closure inference limit of the loose shim
+   (`Table(… .enumerated().map { … })`), not on any engine-API error — and this surfaced a **third real
+   bug**: `SequencerView` called `GulpSequencer.analyze` when the function lives on the `Sequencer` enum
+   (`Sequencer.analyze`); fixed. SwiftUI *layout* correctness still needs the macOS CI leg (that shim was
+   a throwaway harness, not a kept CI gate, because it does not model enough of SwiftUI for the mature
+   views), but the model↔engine wiring — the actual risk — is now checked for all seven. Net of this
+   session: three real cross-platform defects the Linux `#if canImport` guard had hidden
+   (`ExtensionCheck` access, `compactMap` inference, `Sequencer.analyze`) plus the `GulpFeatures`
+   missing-dependency bug were found and fixed.
 2. **All milestone modules are now built**; no stubs remain. The post-1.0 breadth (further WS
    sub-protocol coverage, richer AI tool-use) is enhancement, not missing structure.
 3. **Signing keys not yet in the Keychain** (see §3).

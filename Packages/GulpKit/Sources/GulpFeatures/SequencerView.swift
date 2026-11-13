@@ -41,7 +41,7 @@ public final class SequencerModel {
             return
         }
         note = nil
-        report = GulpSequencer.analyze(tokens: tokens, alpha: alpha)
+        report = Sequencer.analyze(tokens: tokens, alpha: alpha)
     }
 }
 
