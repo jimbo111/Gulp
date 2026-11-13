@@ -303,6 +303,10 @@ order; within a milestone, do P0 first.
   (replay as identities, verdicts, bypass issues) + VulnLab enforcing twin + `gulp-cli authz orders`;
   `Scripts/m12b-dod.sh` PASS and in CI. Carry-overs: ADV-004 live mode, ADV-005 per-identity CSRF,
   ADV-006 id-walking, the `/admin` self-granted-role case, and the macOS matrix view.
+- **M13b status — GraphQL done; DOM Probe deferred** (2026-11-13): the GraphQL Workbench (detection,
+  introspection + schema model + render, query build, variable insertion points, introspection-exposed
+  and broken-object-authz checks) + VulnLab `/graphql`(+safe) + `gulp-cli graphql`; `Scripts/m13b-graphql-dod.sh`
+  PASS and in CI. The DOM Probe half (BRW-010…015) needs the managed browser/CDP and ships with M13a.
 - **M11c status — partial** (2026-11-12): done and in CI (`Scripts/m11c-dod.sh` PASS): GRP-005's
   Scanner half (protobuf-field insertion points; the gRPC-Web SQLi is found, the safe twin clean),
   crawl-and-audit (`scan crawl-audit`), the OpenAPI scan (`scan api`, all operations), SCN-036
@@ -717,6 +721,11 @@ for behavior.
   logic, `runAuthzMatrix` orchestration (replay as identities under ScopeGuard, raise
   `authz.broken-access-control`), VulnLab `/safe/api/orders/{id}` enforcing twin, `gulp-cli authz
   orders`; `Scripts/m12b-dod.sh` PASS. Carry-overs above.
+
+- 2026-11-13 — **M13b GraphQL implemented** (local Linux gate): GulpCodec GraphQL (detect, introspect,
+  schema parse/render, body build), Scanner GraphQL-variable insertion points, workbench checks
+  (introspection-enabled, broken-object-authz), VulnLab `/graphql`+`/safe/graphql`, `gulp-cli graphql
+  introspect|scan`; `Scripts/m13b-graphql-dod.sh` PASS. DOM Probe deferred to M13a's browser work.
 
 ## How to pick up work (reminder)
 

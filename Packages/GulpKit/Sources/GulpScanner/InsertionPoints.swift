@@ -220,7 +220,15 @@ public enum InsertionPoints {
             } else if type.contains("json") || text.first == UInt8(ascii: "{")
                 || text.first == UInt8(ascii: "[")
             {
-                points += JSONScanner.values(bytes, in: body)
+                var jsonPoints = JSONScanner.values(bytes, in: body)
+                // GraphQL (ADV-043): test only the operation's variables, never the query text itself.
+                if GraphQL.isGraphQL(request: request) {
+                    jsonPoints = jsonPoints.filter {
+                        $0.name == "variables" || $0.name.hasPrefix("variables.")
+                            || $0.name.hasPrefix("variables[")
+                    }
+                }
+                points += jsonPoints
             } else if type.contains("xml") || text.first == UInt8(ascii: "<") {
                 points += XMLScanner.values(bytes, in: body)
                 points.append(

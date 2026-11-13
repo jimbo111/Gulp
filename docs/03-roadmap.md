@@ -217,9 +217,10 @@ bug-bounty tool and only needs identities (M12a).
 - **DoD:** The SPA in VulnLab is crawled through the browser and its client-side routes appear in the site map; a browser-recorded login replays to a valid session (F15 test 4); a passkey login to `/webauthn/login` is recorded and replayed with the virtual authenticator (F15 test 6, F16 test 5).
 
 ### M13b — DOM Probe and GraphQL Workbench
-- [ ] DOM Probe (BRW-010…BRW-015; now P1). Frame Kit (BRW-020…022) is cut.
-- [ ] **GraphQL Workbench** (all P0/P1 of F23 §5, ADV-040…ADV-043), moved up from M19 to ship with the browser.
+- [ ] DOM Probe (BRW-010…BRW-015; now P1) — needs the managed browser/CDP (M13a); deferred with the browser work.
+- [x] **GraphQL Workbench** (ADV-040…043): endpoint detection, introspection + schema model + text render, query build/parse, variable insertion points, and the checks (introspection exposed, broken object/field authz). The browser schema view is the macOS half.
 - **DoD:** DOM Probe finds the planted DOM XSS on `/spa` and nothing on `/safe/spa` (F16 test 2); the GraphQL Workbench introspects `/graphql`, renders the schema and flags the field-level authz bug (F23 test 5).
+- *GraphQL implemented 2026-11-13 (`Scripts/m13b-graphql-dod.sh` PASS: introspect + render, introspection-enabled and broken-object-authz issues on `/graphql`, clean `/safe/graphql`). DOM Probe stays with M13a's browser automation (Chromium/CDP, macOS).*
 
 ### M14 — (retired)
 Was the Sequencer (F11). The 2026-11-08 feature review moved F11 out of v1 (it rarely finds bugs

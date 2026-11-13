@@ -207,6 +207,19 @@ public enum IssueDefinitions {
             "A request succeeded for an identity that should not be allowed to make it: a lower-privilege or unauthenticated user received the same response as the authorized user. The server is not checking who is asking (IDOR / missing authorization).",
             "Enforce an ownership/role check on the server for every request, not just in the UI; deny by default and verify the caller owns or may access the object.",
             "- [OWASP broken access control](https://owasp.org/Top10/A01_2021-Broken_Access_Control/)"),
+        def(
+            "graphql.introspection-enabled", "GraphQL introspection enabled", "GraphQL", .low, .certain,
+            "The GraphQL endpoint answers introspection queries, so anyone can read the full schema (types, queries, mutations and arguments) and map the API's attack surface.",
+            "Disable introspection in production, or restrict it to trusted clients.",
+            "- [OWASP GraphQL cheat sheet](https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html)"
+        ),
+        def(
+            "graphql.broken-object-authz", "GraphQL broken object/field authorization", "GraphQL", .high,
+            .firm,
+            "A GraphQL field returned another object's or user's data to a caller who should not see it (object- or field-level authorization is missing). GraphQL hides many objects behind one endpoint, so a missing check exposes them all.",
+            "Enforce authorization in the resolver for every field that returns user- or tenant-scoped data, not just at the query root.",
+            "- [OWASP GraphQL cheat sheet: authorization](https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html#authorization)"
+        ),
     ]
 
     static let other: [IssueDefinition] = [
