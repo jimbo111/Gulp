@@ -454,6 +454,13 @@ for behavior.
 
 ## Log
 
+- 2026-11-13 — **M20 release tooling (doc 02 §8)**: wrote the missing `Scripts/release.sh` (archive →
+  sign helpers inside-out with Hardened Runtime + timestamp → notarize with notarytool → staple → build
+  + notarize + staple the DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual
+  signing), closing the `make release` gap. It runs on macOS with the release secrets as environment
+  variables; `bash -n` syntax-checks it here and the plist validates. The remaining M20/M17 items
+  (system-proxy toggle, Sparkle UI, accessibility audit) are in the macOS app (`GulpFeatures`), which
+  can't be built or verified on Linux.
 - 2026-11-13 — **M18 AI assistant core (F22 AI-001/003/013)**: `GulpAI` gained the provider-agnostic
   core — an `LLMProvider` protocol, a wire-format-tested `AnthropicProvider` (Messages API, tool use,
   usage), a `Redactor` masking auth/cookies/tokens/keys before egress, and a bounded `Agent` loop with

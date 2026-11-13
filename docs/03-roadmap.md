@@ -271,7 +271,7 @@ reused, so older references stay unambiguous.
 
 ### M20 — macOS polish, packaging, release
 - [ ] Remaining items of F24 (system proxy toggle, dock and notifications, Sparkle UI, iOS Simulator CA install; the menu bar extra, Services and App Intents are P2 since 2026-11-08).
-- [ ] Sparkle, signing, notarization, DMG, release workflow (doc 02 §8) — signing and notarization already work since the beta gate.
+- [x] *2026-11-13:* **Release tooling written** — `Scripts/release.sh` (archive → sign inside-out with Hardened Runtime + timestamp → notarize → staple → DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual signing), per doc 02 §8, wired to `make release`. Runs on macOS with the release secrets; syntax-checked here.
 - [ ] Accessibility audit (VoiceOver labels, keyboard navigation), localization-ready strings.
 - [ ] Performance budget verification (doc 01 §9).
 - **DoD:** A notarized DMG installs and auto-updates from a test appcast.
