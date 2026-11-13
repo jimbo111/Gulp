@@ -131,6 +131,17 @@ enum ScanLab {
             // File upload: the vulnerable twin stores any filename; the safe twin allows only image
             // extensions, so a renamed `.php`/`.svg` is rejected.
             return upload(body, safe: safe)
+        case "/token/weak":
+            // A predictable session token: 8 constant hex + an 8-hex incrementing counter. The
+            // Sequencer rates it Poor (most of it never changes; the rest only counts up).
+            let token = String(format: "a1b2c3d4%08x", tokenCounter.next())
+            return text("ok\n", headers: ["Set-Cookie: SID=\(token); Path=/; HttpOnly"])
+        case "/token/strong":
+            // A CSPRNG session token: 16 random hex characters. The Sequencer rates it Excellent.
+            var generator = SystemRandomNumberGenerator()
+            let hex = "0123456789abcdef"
+            let token = String((0..<16).map { _ in hex.randomElement(using: &generator)! })
+            return text("ok\n", headers: ["Set-Cookie: SID=\(token); Path=/; HttpOnly"])
         case "/profile/update":
             // Mass assignment: the vulnerable twin echoes every field it received (role included);
             // the safe twin binds only name and email.
@@ -338,6 +349,7 @@ enum ScanLab {
     private static let book = NSLockedMessages()
     private static let patched = LockedRoutes()
     private static let polluted = LockedPrototype()
+    private static let tokenCounter = LockedCounter()
 
     /// Naive recursive merge: the vulnerable twin follows `__proto__` into a shared store, so a later
     /// empty request inherits the polluted keys; the safe twin ignores `__proto__`.
@@ -471,6 +483,18 @@ final class LockedPrototype: @unchecked Sendable {
     private var store: [String: String] = [:]
     func set(_ key: String, _ value: String) { lock.withLock { store[key] = value } }
     func all() -> [String: String] { lock.withLock { store } }
+}
+
+/// A monotonic counter behind a lock, for the predictable-token lab.
+final class LockedCounter: @unchecked Sendable {
+    // @unchecked: `value` is only touched while holding `lock`.
+    private let lock = NSLock()
+    private var value: UInt64 = 0
+    func next() -> UInt64 {
+        lock.withLock {
+            defer { value += 1 }; return value
+        }
+    }
 }
 
 /// Routes patched with `/lab/patch`.

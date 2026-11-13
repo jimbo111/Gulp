@@ -75,6 +75,7 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 | **Query language over history (GulpQL)** | 🟡 (Bambdas) | ⭐ | Burp added Bambdas (Java snippets); Gulp has a real query language (GulpQL) with FTS, saved filters, and push-down to SQL — usable by non-programmers and reused in intercept/M&R rules. |
 | Logger / capture | ✅ | ✅ | |
 | Notebook / coverage index | 🟡 | ⭐ | Gulp's Notebook + coverage index is richer than Burp's "Organizer". |
+| **Sequencer (token randomness)** | ✅ | ✅⭐ | Built (2026-11-13): NIST SP 800-22 + FIPS battery with an open, reference-tested method (Burp's is a black box); CSPRNG rates Excellent, a counter Extremely poor, proven by `Scripts/sequencer-dod.sh`. The Swift-Charts UI is a macOS carry-over. |
 | Import HAR/Postman/other-proxy history | ✅ | ✅ | |
 
 ## 7. Extensibility, reporting, automation

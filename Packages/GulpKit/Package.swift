@@ -168,7 +168,7 @@ let package = Package(
             dependencies: [
                 "GulpWorkspace", "GulpAutomation", "GulpHTTP", "GulpProxy", "GulpStore", "GulpTLS",
                 "GulpCodec", "GulpCore", "GulpBrowser", "GulpDiff", "GulpRepeater", "GulpFuzzer",
-                "GulpReport", "GulpScanner",
+                "GulpReport", "GulpScanner", "GulpSequencer",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),
         .executableTarget(

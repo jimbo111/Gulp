@@ -454,6 +454,17 @@ for behavior.
 
 ## Log
 
+- 2026-11-13 — **Sequencer built (F11) — outperformance increment**: `GulpSequencer`, a pure-Swift,
+  Linux-testable token-randomness analyzer closing a whole named Burp tool Gulp lacked. Token → symbols
+  and bits (with constant prefix/suffix stripping), a NIST SP 800-22-style battery (monobit, block
+  frequency, runs, longest run, approximate entropy, cumulative sums) + a FIPS poker χ² + a per-position
+  character χ², each with a p-value from an in-house regularized incomplete gamma (unit-tested against
+  `Q(1,x)=e^-x` and `Q(½,x)=erfc(√x)`). Headline effective entropy = per-position Shannon × battery
+  pass-rate. `gulp-cli sequencer` captures (cookie/regex) or loads a token list; VulnLab `/token/weak`
+  (counter) rates Extremely poor and `/token/strong` (CSPRNG) Excellent (`Scripts/sequencer-dod.sh`, in
+  CI). 11 new tests (462 total). This reverses product decision #7's deprioritization under the owner's
+  standing goal to outperform Burp's full feature set (recorded in docs/07). The Swift-Charts UI and
+  project-saved runs stay macOS/post-1.0 carry-overs.
 - 2026-11-13 — **M11c check catalog — unrestricted file upload (SCN-073)**: `active.upload` re-sends a
   multipart upload with a dangerous extension + content-type (`.php`/`.svg`/`.html`/`.jsp`) and raises
   when the server accepts it exactly as it accepted the benign file. The body is rewritten through a

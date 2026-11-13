@@ -45,7 +45,8 @@ Legend for the verdict column: ✅ parity · ⭐ Gulp advantage over Burp · �
 | 17 | Recon (secrets + JS endpoints + vuln JS libs) | GulpScanner | `GulpScannerTests` | `recon` | ⭐ |
 | 18 | Reporting (HTML + Markdown) + Check Recipes | GulpReport, GulpScanner | `GulpReportTests` (4) | `report`, `recipe` | ✅ |
 | 19 | Automation: CLI, MCP server | gulp-cli, GulpWorkspace | `GulpAutomationTests` (5) | `m6b` | ⭐ |
-| 20 | Workspace orchestration (the glue) | GulpWorkspace | `GulpWorkspaceTests` (60) | all live DoDs | — |
+| 20 | Sequencer (token randomness) | GulpSequencer | `GulpSequencerTests` (11) | `sequencer` | ✅⭐ |
+| 21 | Workspace orchestration (the glue) | GulpWorkspace | `GulpWorkspaceTests` (60) | all live DoDs | — |
 
 Not built / platform-gated (honest status, §5): browser automation & DOM probe (M13a), extensions/JS
 API (M15), AI assistant (M18), Sequencer (post-1.0), the macOS SwiftUI UI (`GulpFeatures`, 7.2k LOC,
@@ -227,6 +228,22 @@ Each subsection: **what it does · module · proof (tests + DoD) · Burp verdict
   history/send/scan to an AI agent with an audit log.
 - **Module:** `gulp-cli`, `GulpWorkspace`. **Proof:** `GulpAutomationTests` (5); `m6b` DoD (MCP).
   **Burp:** ⭐ — first-party agent interface and a complete CLI (Burp's headless is a limited REST API).
+
+### 3.20 Sequencer — token randomness ✅⭐
+- **Does:** collects many security-sensitive tokens (by cookie name or a regex capture) and estimates
+  their effective entropy with a statistical battery — NIST SP 800-22-style bit tests (monobit, block
+  frequency, runs, longest run, approximate entropy, cumulative sums), a FIPS poker χ², and a
+  per-position character χ² — returning a verdict (Excellent…Extremely poor) and the estimated bits.
+  Constant framing is stripped (SEQ-007); non-power-of-two alphabets fall back to the character test.
+- **Module:** `GulpSequencer` (pure Swift, Linux-testable). **Proof:** `GulpSequencerTests` (11),
+  including reference-vector checks of the incomplete-gamma p-value ("regularizedGammaQ matches closed
+  forms: Q(1,x)=e^-x and Q(½,x)=erfc(√x)"), "a high-quality pseudo-random stream passes every bit
+  test", "a biased (70% ones) stream fails the frequency tests", and the verdicts "CSPRNG hex tokens
+  are rated Excellent…" / "a counter-derived token is rated Poor…". The `sequencer` DoD captures live
+  from VulnLab: `/token/weak` (a counter) rates Extremely poor (~0 of 12 bits), `/token/strong`
+  (CSPRNG) rates Excellent (~63.9 of 64 bits).
+- **Burp:** ✅ parity with Burp's Sequencer, and ⭐ the method is open and reference-tested rather than
+  a black box. **Gaps:** the Swift-Charts UI and project-saved runs are macOS/post-1.0 carry-overs.
 
 ## 4. Cross-cutting quality evidence
 
