@@ -10,7 +10,7 @@ import GulpHTTP
 /// The non-P0 active checks.
 enum ExtendedChecks {
     static let all: [any ActiveCheck] = [
-        CORSCheck(), HostHeaderCheck(), JWTScanCheck(), MassAssignmentCheck(),
+        CORSCheck(), HostHeaderCheck(), JWTScanCheck(), MassAssignmentCheck(), PrototypePollutionCheck(),
     ]
 }
 
@@ -176,5 +176,48 @@ struct MassAssignmentCheck: ActiveCheck {
             object[name] = nil
         }
         return []
+    }
+}
+
+/// Server-side prototype pollution: inject a benign marker under `__proto__` into a JSON body, then
+/// send a clean request; if the marker appears on an object that never set it, a merge followed
+/// `__proto__`. Non-destructive (a random marker property) and unsafe-gated (it writes server state).
+struct PrototypePollutionCheck: ActiveCheck {
+    let id = "active.prototype-pollution"
+    let family = "prototype-pollution"
+    let intensity = CheckIntensity.balanced
+    let kinds: Set<InsertionPointKind> = []  // request-level
+
+    func run(_ point: InsertionPoint?, baseline: Baseline?, context: AuditContext) async -> [IssueFinding] {
+        guard context.unsafe else { return [] }  // writes to the server's object graph
+        let method = context.base.bytes[context.base.parsed.method].string().uppercased()
+        guard ["POST", "PUT", "PATCH"].contains(method) else { return [] }
+        guard context.base.headerValue("content-type")?.string().lowercased().contains("json") == true else {
+            return []
+        }
+        let bodyBytes = Array(context.base.bytes.rawBytes[context.base.parsed.body])
+        guard var object = (try? JSONSerialization.jsonObject(with: Data(bodyBytes))) as? [String: Any] else {
+            return []
+        }
+
+        let marker = context.token(10)
+        // A clean baseline must not already contain the marker.
+        let clean = await context.send(context.base)
+        guard !clean.body.contains(marker) else { return [] }
+        // Pollute `__proto__` with the marker, then re-send the clean request and look for leakage.
+        object["__proto__"] = ["gulpPoll": marker]
+        guard let polluted = try? JSONSerialization.data(withJSONObject: object) else { return [] }
+        _ = await context.send(
+            context.base.replacing(context.base.parsed.body, with: Bytes(Array(polluted)))
+                .updatingContentLength())
+        let confirm = await context.send(context.base)
+        guard confirm.body.contains(marker) else { return [] }
+        return [
+            context.finding(
+                id, point: nil, variant: "__proto__",
+                detail:
+                    "A marker injected under `__proto__` appeared in a later clean response (`\(marker)`), so a server-side merge follows `__proto__` — prototype pollution.",
+                evidence: confirm, marker: marker, confidence: .firm)
+        ]
     }
 }

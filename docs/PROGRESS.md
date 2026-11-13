@@ -430,7 +430,7 @@ for behavior.
 - [ ] M10b — gRPC & protobuf (F33) — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M11a — Crawler (static), Beacon client + dev Beacon, shared limiter + panic stop — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M11b — Active scan engine + P0 checks — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
-- [ ] M11c — Full check catalog (incl. SCN-070…074) + crawl-and-audit — *partial: crawl-and-audit, API scan, gRPC points, re-test done; the P1 check catalog deferred*
+- [ ] M11c — Full check catalog (incl. SCN-070…074) + crawl-and-audit — *partial: crawl-and-audit, API scan, gRPC points, re-test done; P1 active checks landed — CORS, host-header, JWT (alg:none/weak-secret), mass assignment (SCN-072), server-side prototype pollution (SCN-070); remaining: CSPT (SCN-071, browser-gated), upload bypass (SCN-073), NoSQL/LDAP/XPath injection families*
 - [ ] M12a — Sessions, auth, macros, request signing
 - [ ] M12b — Authz Matrix
 - [ ] M13a — Browser automation: CDP crawl, recorded logins, passkeys
@@ -454,6 +454,15 @@ for behavior.
 
 ## Log
 
+- 2026-11-13 — **M11c check catalog — prototype pollution (SCN-070) + mass assignment (SCN-072)**:
+  added `PrototypePollutionCheck` (unsafe-gated; injects a random marker under `__proto__`, re-sends a
+  clean request, confirms the marker leaks on an object that never set it) alongside the already-landed
+  CORS, host-header, JWT and mass-assignment checks. VulnLab gained `/pp/merge` + `/profile/update`
+  with `/safe/` twins. New `Scripts/m11c-checks-dod.sh` (differential: the vuln routes fire, the safe
+  twins stay clean) wired into CI and the local gate; unit tests in `ActiveScanTests` for both. A
+  `set -u` bug in the DoD harness (a command substitution read `$path` before it was assigned, so every
+  scan collapsed onto one shared project and the safe twin inherited the vuln finding) was the only
+  real defect — the scanner's per-project issue isolation, the lab and the check were all correct.
 - 2026-11-06 — Specs written: core docs (00–07) + all feature specs (F01–F24) + this tracker.
   Repository is spec-only; no source yet. Next action: M0 scaffolding.
 - 2026-11-07 — Spec review pass: fixed layering (BrowserDriver injection, ADR-010), scope precedence

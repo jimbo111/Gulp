@@ -366,5 +366,12 @@ public enum IssueDefinitions {
             "A create/update endpoint accepted a privileged property (such as `role` or `isAdmin`) that was not part of the intended input, so a user can set fields the UI does not expose.",
             "Bind only an explicit allowlist of properties on the server; never bind request bodies straight onto domain objects.",
             "- [OWASP mass assignment cheat sheet](\(owasp)Mass_Assignment_Cheat_Sheet.html)"),
+        def(
+            "active.prototype-pollution", "Server-side prototype pollution", "Prototype pollution", .high,
+            .firm,
+            "A JSON merge on the server followed `__proto__`, so a property injected under `__proto__` appeared on an object that never set it. This can change later behaviour app-wide and sometimes lead to remote code execution.",
+            "Reject `__proto__`/`constructor`/`prototype` keys in input; use a safe merge (null-prototype objects, `Map`), and freeze prototypes.",
+            "- [OWASP prototype pollution prevention](\(owasp)Prototype_Pollution_Prevention_Cheat_Sheet.html)"
+        ),
     ]
 }

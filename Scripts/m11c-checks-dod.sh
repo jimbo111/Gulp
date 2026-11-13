@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# M11c check-catalog Definition of Done (the P1/A6 active checks that need server state or the
+# unsafe gate, so they aren't in the balanced m11b manifest):
+#   - Server-side prototype pollution (SCN-070) on /pp/merge, clean on /safe/pp/merge.
+#   - Mass assignment (SCN-072) on /profile/update, clean on /safe/profile/update.
+# Both run `gulp-cli scan active --raw` with --unsafe; the safe twins must stay clean.
+# Usage: Scripts/m11c-checks-dod.sh   (SWIFTPM_FLAGS may carry extra swift-build flags)
+set -euo pipefail
+cd "$(dirname "$0")/.."
+PKG=Packages/GulpKit
+# shellcheck disable=SC2086
+swift build --package-path "$PKG" ${SWIFTPM_FLAGS:-} --product gulp-vulnlab
+# shellcheck disable=SC2086
+swift build --package-path "$PKG" ${SWIFTPM_FLAGS:-} --product gulp-cli
+# shellcheck disable=SC2086
+BIN=$(swift build --package-path "$PKG" ${SWIFTPM_FLAGS:-} --show-bin-path)
+WORK=$(mktemp -d)
+export GULP_SUPPORT_DIR="$WORK/support"
+LAB=http://127.0.0.1:8088
+GULP="$BIN/gulp-cli"
+
+fail() {
+  echo "FAIL: $*" >&2
+  exit 1
+}
+wait_port() {
+  for _ in $(seq 1 300); do
+    if (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; then return 0; fi
+    sleep 0.1
+  done
+  echo "port $1 never opened" >&2
+  return 1
+}
+
+"$BIN/gulp-vulnlab" > "$WORK/vulnlab.log" 2>&1 &
+VULNLAB=$!
+trap 'kill $VULNLAB 2>/dev/null || true; rm -rf "$WORK"' EXIT
+wait_port 8088
+
+# scan a raw POST and return whether the given issue type was raised.
+scan_expect() {  # <path> <body> <issue-type> <should-fire:yes|no>
+  local path="$1" body="$2" want="$3" fire="$4"
+  # NB: compute proj on its own line — a command substitution that reads $path must come after
+  # $path is assigned, or `set -u` sees it unbound and every call collapses onto one shared project.
+  local proj="$WORK/$(echo "$path" | tr '/' '_').gulp"
+  printf 'POST %s HTTP/1.1\r\nHost: 127.0.0.1:8088\r\nContent-Type: application/json\r\nContent-Length: %s\r\n\r\n%s' \
+    "$path" "${#body}" "$body" > "$WORK/req.txt"
+  "$GULP" scope --project "$proj" --add "$LAB/" > /dev/null
+  "$GULP" scan active --project "$proj" --raw "$WORK/req.txt" --target "$LAB" --config balanced --unsafe > "$WORK/scan.txt"
+  local issues
+  issues=$("$GULP" issues --project "$proj")
+  echo "$issues" | grep -E "$want" || true
+  if [ "$fire" = "yes" ]; then
+    echo "$issues" | grep -q "$want" || fail "$want not raised on $path"
+  else
+    if echo "$issues" | grep -q "$want"; then fail "$want wrongly raised on $path"; fi
+  fi
+}
+
+# 1. Prototype pollution.
+scan_expect "/pp/merge" '{}' "active.prototype-pollution" yes
+scan_expect "/safe/pp/merge" '{}' "active.prototype-pollution" no
+echo "PASS 1: server-side prototype pollution flagged on /pp/merge, clean on the safe twin"
+
+# 2. Mass assignment.
+scan_expect "/profile/update" '{"name":"bob"}' "active.mass-assignment" yes
+scan_expect "/safe/profile/update" '{"name":"bob"}' "active.mass-assignment" no
+echo "PASS 2: mass assignment flagged on /profile/update, clean on the safe twin"
+echo "M11c checks DoD: PASS"

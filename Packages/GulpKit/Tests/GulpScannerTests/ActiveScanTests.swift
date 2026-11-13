@@ -26,6 +26,17 @@ actor FakeOAST: OASTProvider {
     func hit(_ host: String) { hits.insert(host) }
 }
 
+/// The shared key→value store the `/pp/merge` prototype-pollution twin writes into. A reference type
+/// so a value-type `FakeApp` copy still sees the writes made across the check's three sends, while a
+/// fresh `FakeApp()` starts with an empty store (per-scan isolation).
+final class PollutionBox: @unchecked Sendable {
+    // @unchecked: `store` is only touched while holding `lock`.
+    private let lock = NSLock()
+    private var store: [String: String] = [:]
+    func set(_ key: String, _ value: String) { lock.withLock { store[key] = value } }
+    func all() -> [String: String] { lock.withLock { store } }
+}
+
 /// A tiny vulnerable application (and its safe twin). Returns the response and the seconds a real
 /// server would have taken.
 struct FakeApp: Sendable {
@@ -33,6 +44,8 @@ struct FakeApp: Sendable {
     var oast: FakeOAST?
     /// Delay every request containing "sleep" by a constant (a slow endpoint, not an injection).
     var constantSlowness: Double = 0
+    /// Shared mutable store the `/pp/merge` prototype-pollution twin writes into; one per `FakeApp`.
+    let pollution = PollutionBox()
 
     static let products = ["1": "Gulp T-shirt", "2": "Gulp mug"]
 
@@ -116,6 +129,22 @@ struct FakeApp: Sendable {
                     ? Self.text("{\"user\":\"alice\"}")
                     : Self.response(401, headers: [], body: "unauthorized"), 0.01
             )
+        case "/pp/merge":
+            // Server-side prototype pollution: the vulnerable twin follows `__proto__` into a shared
+            // store and enriches later responses with the inherited keys; the safe twin ignores it.
+            let input =
+                (try? JSONSerialization.jsonObject(with: Data(request.bytes.rawBytes[request.parsed.body])))
+                as? [String: Any] ?? [:]
+            if !safe, let proto = input["__proto__"] as? [String: Any] {
+                for (key, value) in proto { pollution.set(key, "\(value)") }
+            }
+            var object = input.filter { $0.key != "__proto__" }
+            if !safe { for (key, value) in pollution.all() where object[key] == nil { object[key] = value } }
+            let merged =
+                (try? JSONSerialization.data(withJSONObject: object)).map {
+                    String(decoding: $0, as: UTF8.self)
+                } ?? "{}"
+            return (Self.response(200, headers: ["Content-Type: application/json"], body: merged), 0.01)
         case "/profile/update":
             let object =
                 (try? JSONSerialization.jsonObject(with: Data(request.bytes.rawBytes[request.parsed.body])))
@@ -375,6 +404,21 @@ struct ActiveScanTests {
         // The /safe twin only binds name, so role isn't echoed.
         let (safe, _) = await scan([request], app: FakeApp(safe: true), config: unsafeConfig)
         #expect(!safe.contains { $0.typeID == "active.mass-assignment" })
+    }
+
+    @Test("M11c: server-side prototype pollution is flagged only with the unsafe gate, not on the safe twin")
+    func test_M11c_prototypePollution() async {
+        let request = post("/pp/merge", type: "application/json", body: "{}")
+        var unsafeConfig = ScanConfig.preset(.balanced)
+        unsafeConfig.unsafe = true
+        let (findings, _) = await scan([request], app: FakeApp(), config: unsafeConfig)
+        #expect(findings.contains { $0.typeID == "active.prototype-pollution" }, "\(pairs(findings))")
+        // Off without the unsafe gate (it writes server state).
+        let (safeGate, _) = await scan([request], app: FakeApp(), config: .preset(.balanced))
+        #expect(!safeGate.contains { $0.typeID == "active.prototype-pollution" })
+        // The safe twin ignores `__proto__`, so a later clean response never inherits the marker.
+        let (safe, _) = await scan([request], app: FakeApp(safe: true), config: unsafeConfig)
+        #expect(!safe.contains { $0.typeID == "active.prototype-pollution" })
     }
 
     @Test("SCN-030: the safe twins produce nothing")

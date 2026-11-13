@@ -113,6 +113,8 @@ enum ScanLab {
             let host =
                 safe ? "vulnlab.test" : (forwarded ?? request.headerValue("host")?.string() ?? "vulnlab.test")
             return text("Reset link: http://\(host)/reset?token=abc\n")
+        case "/pp/merge":
+            return prototypePollution(body, safe: safe)
         case "/profile/update":
             // Mass assignment: the vulnerable twin echoes every field it received (role included);
             // the safe twin binds only name and email.
@@ -319,6 +321,23 @@ enum ScanLab {
 
     private static let book = NSLockedMessages()
     private static let patched = LockedRoutes()
+    private static let polluted = LockedPrototype()
+
+    /// Naive recursive merge: the vulnerable twin follows `__proto__` into a shared store, so a later
+    /// empty request inherits the polluted keys; the safe twin ignores `__proto__`.
+    static func prototypePollution(_ body: String, safe: Bool) -> VulnReply {
+        let input = (try? JSONSerialization.jsonObject(with: Data(body.utf8))) as? [String: Any] ?? [:]
+        if !safe, let proto = input["__proto__"] as? [String: Any] {
+            for (key, value) in proto { polluted.set(key, "\(value)") }
+        }
+        // Echo a fresh object; the vulnerable twin enriches it with the polluted (inherited) keys.
+        var object: [String: Any] = input.filter { $0.key != "__proto__" }
+        if !safe { for (key, value) in polluted.all() where object[key] == nil { object[key] = value } }
+        let json =
+            (try? JSONSerialization.data(withJSONObject: object)).map { String(decoding: $0, as: UTF8.self) }
+            ?? "{}"
+        return VulnReply(bytes: VulnLab.response(200, body: Array(json.utf8), type: "application/json"))
+    }
 
     /// POST stores `message`; GET renders the messages — unencoded here, encoded on the safe twin.
     static func guestbook(_ request: RawRequest, body: String, safe: Bool) -> VulnReply {
@@ -356,6 +375,15 @@ final class NSLockedMessages: @unchecked Sendable {
     }
 
     func messages(safe isSafe: Bool) -> [String] { lock.withLock { isSafe ? safe : vulnerable } }
+}
+
+/// The shared store the prototype-pollution lab writes into.
+final class LockedPrototype: @unchecked Sendable {
+    // @unchecked: `store` is only touched while holding `lock`.
+    private let lock = NSLock()
+    private var store: [String: String] = [:]
+    func set(_ key: String, _ value: String) { lock.withLock { store[key] = value } }
+    func all() -> [String: String] { lock.withLock { store } }
 }
 
 /// Routes patched with `/lab/patch`.
