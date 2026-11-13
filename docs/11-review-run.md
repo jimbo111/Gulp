@@ -92,11 +92,19 @@ engine modules — which is what caught the five bugs below — but that is not 
 with Apple's actual AppKit/SwiftUI/JavaScriptCore and launching the app.
 
 That final step needs either a Mac or a green `macos-15` CI job. Neither is available in this
-environment: there is no Mac here, and the private repository's GitHub Actions minutes are exhausted,
-so **both** the `macos` and `core-linux` CI jobs currently fail at runner provisioning (0 steps, ~2s)
-— an owner-level billing limit, not a code defect. The workflow itself parses and is correct (the
-earlier YAML quoting bug is fixed). The moment minutes are added, the existing `macos` job compiles
-these files for real. This is tracked in `08-architecture-review.md` and is the sole open item.
+environment: there is no Mac here, Swift cannot cross-compile to Darwin from Linux (Apple's AppKit /
+SwiftUI / JavaScriptCore SDK is not present and is not redistributable to Linux), and the private
+repository's GitHub Actions minutes are exhausted, so the `macos-15` runner cannot provision.
+
+**Re-confirmed this turn (2026-11-13):** a fresh `workflow_dispatch` run (#181, run id 43391057594)
+on this branch failed immediately — the "App + full test (macOS)" job completed **3 s** after
+creation and its logs return **HTTP 404** (a runner that never started produces no logs), and the
+Linux job failed the same way in 4 s. The same instant-provisioning-failure held for runs #179 and
+#180. This is an owner-level **billing** limit (not reset by the new month, and not a code defect):
+the workflow parses and is correct (the earlier YAML quoting bug is fixed). The moment Actions
+minutes are restored, the existing `macos` job compiles these files for real. This is the **sole open
+item**, tracked here and in `08-architecture-review.md`; no code change in this environment can close
+it — it is on the repository owner to restore CI billing.
 
 ## 5. Bugs this review run (and the shim type-checks it includes) actually found and fixed
 
