@@ -123,9 +123,7 @@ let package = Package(
         .target(name: "GulpCrawler", dependencies: ["GulpCore", "GulpHTTP", "GulpSession"]),
         .target(
             name: "GulpScanner",
-            dependencies: [
-                "GulpCore", "GulpCodec", "GulpHTTP", "GulpOAST", "GulpCrawler", "GulpSession",
-            ]),
+            dependencies: ["GulpCore", "GulpCodec", "GulpHTTP"]),  // OAST/Crawler/Session were unused (arch review 2026-11-13)
         .target(name: "GulpSequencer", dependencies: ["GulpCore", "GulpHTTP"]),
         .target(name: "GulpReport", dependencies: ["GulpCore"]),
         .target(name: "GulpExtensions", dependencies: ["GulpCore", "GulpHTTP"]),

@@ -1,0 +1,143 @@
+# 08 — Architecture review (2026-11-13)
+
+A higher-level, architectural review of the Gulp codebase as it stands after M13b, judged against
+the ideal the project set for itself in `docs/01-architecture.md` and the hard rules in `CLAUDE.md`.
+It is backed by an executable check (`Scripts/arch-check.sh`) so the conclusions stay true as the
+code changes, not just on the day they were written.
+
+## 1. Scope and method
+
+- **Size**: ~61k lines of Swift across 20 real modules plus two executables (`gulp-cli`,
+  `gulp-vulnlab`) and five still-stub modules (`GulpSequencer`, `GulpScript`, `GulpReport`,
+  `GulpExtensions`, `GulpAI` — their milestones are not built yet).
+- **Method**: static inspection of the module/import graph, the concurrency surface
+  (`actor`/`Sendable`/`@unchecked`), the invariants `CLAUDE.md` calls non-negotiable, and the test
+  and DoD coverage. Each structural claim is re-checkable: the dependency rules now run as
+  `Scripts/arch-check.sh` in the gate and CI.
+
+## 2. Layering and the dependency graph
+
+The intended layering (`docs/01-architecture.md` §3) is **Foundation → Services → Engines →
+Orchestration → UI**, with engines allowed a short list of sideways imports. The *actual* import
+graph, extracted from the sources, matches it:
+
+```
+GulpCore         → (nothing)                                   # foundation
+GulpCodec        → GulpCore                                    # services
+GulpTLS          → GulpCore
+GulpQuery        → GulpCore
+GulpStore        → GulpCore GulpQuery
+GulpHTTP         → GulpCore GulpTLS
+GulpDiff         → GulpCore
+GulpProxy        → GulpCore GulpHTTP GulpQuery GulpTLS         # engines
+GulpRepeater     → GulpCore GulpHTTP
+GulpFuzzer       → GulpCore GulpHTTP GulpCodec
+GulpScanner      → GulpCore GulpHTTP GulpCodec
+GulpCrawler      → GulpCore GulpHTTP                           # NOT GulpBrowser (ADR-010 ✓)
+GulpSession      → GulpCore GulpHTTP GulpCodec
+GulpOAST         → GulpCore GulpHTTP
+GulpWorkspace    → every engine + services + GulpBrowser       # orchestration
+GulpAutomation   → GulpCore GulpHTTP GulpStore GulpWorkspace
+GulpFeatures     → the engines it surfaces + GulpWorkspace + GulpUI   # UI (macOS)
+```
+
+**Findings**
+
+- **The dependency direction holds everywhere.** No engine imports an orchestration or UI module;
+  no service imports an engine; `GulpCore` imports nothing. This is now enforced by
+  `Scripts/arch-check.sh`, which parses every module's imports, assigns a layer rank, and fails on an
+  upward import, on `GulpCore` importing anything, on `GulpCrawler` importing `GulpBrowser`
+  (ADR-010), or on an engine/service importing AppKit/SwiftUI/JavaScriptCore/WebKit (rule 2). It is
+  a static grep, so it runs in milliseconds on every push.
+- **ADR-010 (browser injected, never imported) is respected.** `GulpCrawler` reaches browser-backed
+  crawling through a `BrowserDriver` protocol it defines; the concrete CDP driver lives in
+  `GulpBrowser` and is injected by `GulpWorkspace` on macOS. The Linux build keeps compiling because
+  nothing pulls AppKit into a lower layer.
+- **Only `GulpUI` and `GulpFeatures` import the Apple UI frameworks.** Platform code in
+  `GulpBrowser`/`GulpScript` is behind `#if canImport(...)`; on Linux those compile to empty shells,
+  so the whole core graph builds and tests on Linux (verified: the gate runs in a Swift-on-Linux
+  container).
+- **Fixed during this review:** `GulpScanner` declared package dependencies on `GulpOAST`,
+  `GulpCrawler` and `GulpSession` that it never imported (its `OASTProvider` is a protocol defined in
+  the module itself, and crawl-and-audit lives in `GulpWorkspace`). Removed — three fewer edges in
+  the build graph and a dependency list that now tells the truth.
+
+## 3. The hard invariants
+
+`CLAUDE.md` names a few invariants as non-negotiable. Each was checked, not assumed:
+
+- **"Raw bytes are the truth."** No engine module (`GulpHTTP`, `GulpProxy`, `GulpRepeater`,
+  `GulpScanner`) imports `URLSession` or `URLRequest`; a grep returns nothing. Request edits across
+  the codebase (`settingHeader`, `updatingContentLength`, `settingQueryParameter`, the scanner's
+  insertion-point splice, the signer) all operate on the byte buffer and recompute only what a
+  documented option says to. The one place bytes are re-serialized — Content-Length after hooks — is
+  explicit and ordered after the request hooks, and the request signer re-runs it itself so the
+  signature covers the sent bytes.
+- **The main thread never waits on the network or the database.** Every I/O boundary is an `actor`
+  (32 of them) or an async NIO path; UI reads go through paged async store queries; the write
+  coalescer batches history writes; the passive scanner reads from a persisted cursor rather than
+  blocking on traffic. The UI-coalescing rule (≤100 ms) is honoured in every live view
+  (`CrawlerModel`, `ActiveScanModel`, history).
+- **Strict concurrency.** The package is Swift 6 language mode. There are 14 `@unchecked Sendable`
+  declarations and **every one carries a justifying comment** (an `NSLock`-guarded box, an immutable
+  post-init value, or thread-safe Foundation handles), exactly as `CLAUDE.md` requires. No bare
+  `@unchecked`.
+- **Scope safety.** Active tools (Scanner, Crawler, Fuzzer, Authz Matrix, Beacon injection) check
+  `ScopeGuard` before sending and expose an explicit per-action override that is surfaced in the CLI
+  and the UI; the matrix and scans refuse out-of-scope hosts unless overridden (tested).
+- **Secrets.** CA private keys go to the Keychain (macOS) or a 0600 file; API keys are Keychain-only.
+  *Gap:* request-signing keys (M12a) are currently passed in config rather than the Keychain — a
+  tracked carry-over, noted in `docs/07-decisions.md` and PROGRESS.
+
+## 4. Concurrency and data-flow model
+
+- The **engine** (`NIOHTTPEngine`) is the single choke point for outbound traffic: request hooks →
+  line-ending/Content-Length fixers → send → response hooks → record. Every tool (proxy, repeater,
+  fuzzer, scanner, crawler, session macros, OAST, authz) sends through it, so cross-cutting concerns
+  — the shared rate/concurrency limiter (`ResourcePool`), the panic stop, recording, session rules,
+  signing, Transform Tags, match & replace — are applied uniformly in one place rather than
+  re-implemented per tool. This is the codebase's strongest structural decision.
+- **Hooks are ordered by array position, typed by `HookSet`.** Session rules run first, signing last
+  (so it sees the final bytes); the engine filters per send via `SendOptions.applyHooks`. The design
+  scales: M12a added signing as a late hook without touching any other tool.
+- **State that outlives a request** (cookie jar, DPoP nonces, limiter counters, OAST correlations)
+  lives in actors; value types (`CookieJar`, `Identity`, `ScanConfig`, `IssueFinding`) flow through
+  the async boundaries by copy, which keeps the concurrency reasoning local.
+
+## 5. Test and verification posture
+
+- **430 unit/integration tests** (`swift-testing`) covering every module, plus **~16 milestone
+  "Definition of Done" scripts** (`Scripts/mN-dod.sh`) that run the real `gulp-cli` and `gulp-vulnlab`
+  end to end and assert observable behaviour (the scanner finds exactly the planted bugs with no
+  false positives on the `/safe/*` twins; signing verifies against an independent implementation; the
+  authz matrix flags the IDOR; GraphQL introspection and the field-authz bug are detected). Both the
+  tests and the DoDs run in CI on every push, on Linux for the core and macOS for the app.
+- **VulnLab as a differential oracle.** The DoD scripts assert against a controlled vulnerable app
+  with safe twins, so "the tool is correct" is a reproducible claim, not a vibe. The signing and
+  authz DoDs deliberately verify with a *second, independent* implementation in VulnLab, so a pass
+  proves interoperability, not just self-consistency.
+- **Gap:** no coverage numbers are collected, and the macOS UI layer (`GulpFeatures`) is unverifiable
+  in the Linux cloud environment — its views are compiled but not exercised here; they rely on the
+  macOS CI job.
+
+## 6. Risks and technical debt
+
+1. **macOS-gated surfaces are unverified in cloud sessions.** The browser automation (CDP),
+   notarized packaging, and the live AI provider can't be exercised on Linux; they depend on the
+   macOS CI job that is currently starved of minutes. This is a process risk, not a design flaw.
+2. **Five stub modules** (`GulpSequencer`, `GulpScript`, `GulpReport`, `GulpExtensions`, `GulpAI`)
+   are placeholders for unbuilt milestones; the package graph is ready for them.
+3. **Signing keys not yet in the Keychain** (see §3).
+4. **`GulpWorkspace` is large (~5k lines)** and imports nearly everything by design (it is the
+   composition root). It is cohesive but worth watching; the service-per-file split keeps it
+   navigable.
+5. **GraphQL/gRPC parsing is hand-rolled** (no schema libraries) to avoid dependencies; it is tested
+   but covers the common shapes, not every spec corner.
+
+## 7. Verdict
+
+The architecture is sound and, more importantly, *enforced*: the layering the design promised is the
+layering the code has, and that is now a CI gate rather than a convention. The single-engine
+choke-point, the actor-per-boundary concurrency model, the raw-bytes discipline, and the
+VulnLab-backed DoDs are the load-bearing decisions, and they hold up. The open items are breadth
+(unbuilt milestones) and environment (macOS verification), not structural debt.
