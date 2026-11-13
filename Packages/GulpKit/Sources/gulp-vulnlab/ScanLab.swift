@@ -154,6 +154,19 @@ enum ScanLab {
             return text(
                 "<link rel=\"stylesheet\" href=\"http://\(host)/theme.css\">\n",
                 headers: ["Cache-Control: public, max-age=60"])
+        case "/pollute":
+            // Server-side parameter pollution: the vulnerable twin is last-wins (a WAF that checks the
+            // first value can be bypassed by a second); the safe twin is first-wins.
+            let rawTarget = request.bytes[request.parsed.target].string()
+            let rawQuery =
+                rawTarget.split(separator: "?", maxSplits: 1).dropFirst().first.map(String.init) ?? ""
+            var values: [String] = []
+            for pair in rawQuery.split(separator: "&") {
+                let kv = pair.split(separator: "=", maxSplits: 1)
+                if kv.first.map(String.init) == "name" { values.append(kv.count > 1 ? String(kv[1]) : "") }
+            }
+            let chosen = safe ? values.first : values.last
+            return text("name=\(chosen ?? "none")\n")
         case "/params":
             // Hidden parameters: the vulnerable twin processes `debug` (behavior) and `trace`
             // (reflected); the safe twin ignores everything but the advertised ones.

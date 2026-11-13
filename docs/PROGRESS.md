@@ -482,6 +482,17 @@ for behavior.
   from host-header injection); VulnLab `/cache` + a step in `m11c-checks-dod.sh`. 486 tests; the live
   m11b DoD is unchanged (0 unexpected). Both are Param-Miner/cache-poisoning equivalents of Burp's
   Param Miner and cache-poisoning scanner.
+- 2026-11-13 — **Server-side parameter pollution (F23 ADV-022)**: `ParamPollution.classify` duplicates
+  each query parameter with a canary and labels how the server resolves the collision — `first-wins`,
+  `last-wins`, `concatenated`, or `both` reflected. A last-wins/concatenated quirk is the primitive
+  that smuggles a value past a front-end/WAF that only inspects the first occurrence. `gulp-cli pollute`,
+  VulnLab `/pollute` (last-wins, vulnerable) vs `/safe/pollute` (first-wins), `ParamPollutionTests`,
+  `Scripts/pollute-dod.sh` PASS. 491 tests. Deliberately a dedicated CLI analysis tool, not a scanner
+  family, so it never adds probes to the differential-scan budget or false-fires on reflecting routes.
+  Deviation: the first unit-test fixtures used a one-letter firstValue (`a`) that was an incidental
+  substring of the surrounding `name=` text, misclassifying last-wins as both; fixtures now use distinct
+  non-overlapping tokens. ADV-021 (mine candidates from the app) is already covered by JS Recon's param
+  mining feeding `discover-params`.
 - 2026-11-13 — **M20 release tooling (doc 02 §8)**: wrote the missing `Scripts/release.sh` (archive →
   sign helpers inside-out with Hardened Runtime + timestamp → notarize with notarytool → staple → build
   + notarize + staple the DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual
