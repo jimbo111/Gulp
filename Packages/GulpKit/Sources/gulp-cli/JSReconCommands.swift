@@ -16,6 +16,7 @@ struct JSReconCommand: AsyncParsableCommand {
 
     @Option(help: "The server, e.g. http://127.0.0.1:8088.") var target: String
     @Option(help: "The JavaScript path, e.g. /app.js.") var path: String
+    @Option(help: "An older version of the asset to diff against (JSR-009).") var baseline: String?
 
     func run() async throws {
         guard let destination = HTTPTarget(url: target) else {
@@ -34,32 +35,47 @@ struct JSReconCommand: AsyncParsableCommand {
             return (try? result.exchange.response?.decodedBody()).flatMap { $0 }.map { $0.string() }
         }
 
-        guard let js = await fetch(path) else { throw ValidationError("Couldn't fetch \(path)") }
-
-        var mined = JSRecon.mineParameters(from: js)
-        var literals = JSRecon.mineLiterals(from: js)
-
-        if let mapURL = JSRecon.sourceMapURL(in: js) {
-            let mapPath =
-                mapURL.hasPrefix("/") || mapURL.hasPrefix("http")
-                ? mapURL : (path as NSString).deletingLastPathComponent + "/" + mapURL
-            if let mapBody = await fetch(mapPath), let data = mapBody.data(using: .utf8) {
-                let sources = JSRecon.reconstruct(sourceMap: data)
-                print("sources recovered from \(mapPath): \(sources.count)")
-                for source in sources { print("  \(source.path)") }
-                // Mine the recovered sources too.
-                for source in sources {
-                    mined += JSRecon.mineParameters(from: source.content)
-                    literals += JSRecon.mineLiterals(from: source.content)
-                }
+        /// Fetch an asset and its source map (if it points at one) and build its recon inventory.
+        func inventory(of assetPath: String) async -> ReconInventory? {
+            guard let js = await fetch(assetPath) else { return nil }
+            var mapData: Data?
+            if let mapURL = JSRecon.sourceMapURL(in: js) {
+                let mapPath =
+                    mapURL.hasPrefix("/") || mapURL.hasPrefix("http")
+                    ? mapURL : (assetPath as NSString).deletingLastPathComponent + "/" + mapURL
+                mapData = (await fetch(mapPath))?.data(using: .utf8)
             }
+            return JSRecon.inventory(js: js, sourceMap: mapData)
         }
 
-        let params = Set(mined).sorted()
-        print("candidate parameters (\(params.count)): \(params.prefix(40).joined(separator: ", "))")
-        var seen = Set<String>()
-        let uniqueLiterals = literals.filter { seen.insert("\($0.kind)|\($0.value)").inserted }
-        print("interesting literals (\(uniqueLiterals.count)):")
-        for literal in uniqueLiterals { print("  [\(literal.kind)] \(literal.value)") }
+        guard let current = await inventory(of: path) else {
+            throw ValidationError("Couldn't fetch \(path)")
+        }
+
+        if let baseline {
+            guard let old = await inventory(of: baseline) else {
+                throw ValidationError("Couldn't fetch baseline \(baseline)")
+            }
+            let diff = JSRecon.diff(from: old, to: current)
+            print("js-recon diff \(baseline) → \(path):")
+            if diff.isEmpty { print("  no change") }
+            for param in diff.addedParameters { print("  + param \(param)") }
+            for param in diff.removedParameters { print("  - param \(param)") }
+            for literal in diff.addedLiterals { print("  + literal [\(literal.kind)] \(literal.value)") }
+            for literal in diff.removedLiterals { print("  - literal [\(literal.kind)] \(literal.value)") }
+            for source in diff.addedSources { print("  + source \(source)") }
+            for source in diff.removedSources { print("  - source \(source)") }
+            return
+        }
+
+        if !current.sources.isEmpty {
+            print("sources recovered: \(current.sources.count)")
+            for source in current.sources { print("  \(source)") }
+        }
+        print(
+            "candidate parameters (\(current.parameters.count)): "
+                + current.parameters.prefix(40).joined(separator: ", "))
+        print("interesting literals (\(current.literals.count)):")
+        for literal in current.literals { print("  [\(literal.kind)] \(literal.value)") }
     }
 }

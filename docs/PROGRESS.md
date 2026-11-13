@@ -515,6 +515,14 @@ for behavior.
   reply lines up with the first send), `WSFuzzerTests` (4) + `Scripts/wsfuzz-dod.sh` PASS (3 payloads
   over one socket, only the grep-matching reply flagged, echoed value extracted). 500 tests. Burp's
   Intruder does not fuzz WS messages natively.
+- 2026-11-13 — **JS Recon asset diff (F27 JSR-009, test 4)**: `JSRecon.inventory(js:sourceMap:)` builds
+  a recon surface (mined params, interesting literals, recovered source paths) for one asset, and
+  `JSRecon.diff(from:to:)` reports what a redeploy added or removed — the newly-added endpoints/params
+  are the under-tested surface a new release introduces. `gulp-cli js-recon --baseline <old>` diffs two
+  live assets (refactored to build inventories via the new helper); VulnLab `/recon/app.v2.js` (+ map)
+  is a superset of `/recon/app.js` adding `adminPanel`, `ssoToken` and an `admin.corp` host.
+  `JSReconDiffTests` (3) + `Scripts/jsrecon-diff-dod.sh` PASS (added surface surfaces, nothing falsely
+  removed). 503 tests.
 - 2026-11-13 — **M20 release tooling (doc 02 §8)**: wrote the missing `Scripts/release.sh` (archive →
   sign helpers inside-out with Hardened Runtime + timestamp → notarize with notarytool → staple → build
   + notarize + staple the DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual

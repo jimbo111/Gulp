@@ -165,6 +165,10 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/jsrecon-dod.sh
+      - name: JS Recon asset-diff Definition of Done (app.v2.js vs app.js surfaces new params/literals)
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/jsrecon-diff-dod.sh
       - name: WS per-message authz Definition of Done (/ws/authz handshake-only, /safe/ws/authz per-message)
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib

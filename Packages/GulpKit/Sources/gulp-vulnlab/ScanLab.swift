@@ -191,6 +191,24 @@ enum ScanLab {
                 + #""sourcesContent":["const flags={betaFeature:true,internalApiKey:'AKIAIOSFODNN7EXAMPLE'};new URLSearchParams().get('resetToken');"]}"#
             return VulnReply(
                 bytes: VulnLab.response(200, body: Array(map.utf8), type: "application/json"))
+        case "/recon/app.v2.js":
+            // A later deploy of app.js (JSR-009): a superset — keeps the old params/literals and adds a
+            // new `adminPanel` param and a new internal host, so an asset diff surfaces the new surface.
+            let js =
+                "const cfg={debug:true,featureFlag:false,userId:0};"
+                + "fetch('https://gulp-assets.s3.amazonaws.com/x');"
+                + "const API_URL='http://api.internal/v1';new URLSearchParams(location.search).get('trace');"
+                + "new URLSearchParams(location.search).get('adminPanel');"
+                + "fetch('http://admin.corp/ops');"
+                + "\n//# sourceMappingURL=app.v2.js.map\n"
+            return VulnReply(
+                bytes: VulnLab.response(200, body: Array(js.utf8), type: "application/javascript"))
+        case "/recon/app.v2.js.map":
+            let map =
+                #"{"version":3,"file":"app.v2.js","sources":["webpack://app/./src/secret.js"],"#
+                + #""sourcesContent":["const flags={betaFeature:true,internalApiKey:'AKIAIOSFODNN7EXAMPLE'};new URLSearchParams().get('resetToken');new URLSearchParams().get('ssoToken');"]}"#
+            return VulnReply(
+                bytes: VulnLab.response(200, body: Array(map.utf8), type: "application/json"))
         case "/spa":
             // A client-side SPA with DOM XSS: the fragment flows into innerHTML (the DOM Probe's
             // target). The safe twin writes the same value with textContent.

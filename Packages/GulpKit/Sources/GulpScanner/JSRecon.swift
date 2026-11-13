@@ -19,6 +19,59 @@ public struct ReconLiteral: Sendable, Equatable {
     public let value: String
 }
 
+/// The recon surface of one JS asset (JSR-009): recovered source paths, mined parameters, and
+/// interesting literals.
+public struct ReconInventory: Sendable, Equatable {
+    /// Candidate parameter names (sorted, deduplicated).
+    public let parameters: [String]
+    /// Interesting literals (deduplicated by kind+value).
+    public let literals: [ReconLiteral]
+    /// Reconstructed source paths from the asset's source map (sorted).
+    public let sources: [String]
+
+    /// An inventory.
+    public init(parameters: [String], literals: [ReconLiteral], sources: [String]) {
+        self.parameters = parameters
+        self.literals = literals
+        self.sources = sources
+    }
+}
+
+/// What changed between two inventories of the same JS asset (JSR-009).
+public struct ReconDiff: Sendable, Equatable {
+    /// Parameters present only in the new asset.
+    public let addedParameters: [String]
+    /// Parameters present only in the old asset.
+    public let removedParameters: [String]
+    /// Literals present only in the new asset.
+    public let addedLiterals: [ReconLiteral]
+    /// Literals present only in the old asset.
+    public let removedLiterals: [ReconLiteral]
+    /// Source paths present only in the new asset.
+    public let addedSources: [String]
+    /// Source paths present only in the old asset.
+    public let removedSources: [String]
+
+    /// Nothing changed.
+    public var isEmpty: Bool {
+        addedParameters.isEmpty && removedParameters.isEmpty && addedLiterals.isEmpty
+            && removedLiterals.isEmpty && addedSources.isEmpty && removedSources.isEmpty
+    }
+
+    /// A diff.
+    public init(
+        addedParameters: [String], removedParameters: [String], addedLiterals: [ReconLiteral],
+        removedLiterals: [ReconLiteral], addedSources: [String], removedSources: [String]
+    ) {
+        self.addedParameters = addedParameters
+        self.removedParameters = removedParameters
+        self.addedLiterals = addedLiterals
+        self.removedLiterals = removedLiterals
+        self.addedSources = addedSources
+        self.removedSources = removedSources
+    }
+}
+
 /// JavaScript recon.
 public enum JSRecon {
     /// JSR-003: the `sourceMappingURL` a script points at (`//# sourceMappingURL=app.js.map`), if any.
@@ -103,6 +156,46 @@ public enum JSRecon {
         // Dedup by (kind, value).
         var seen = Set<String>()
         return out.filter { seen.insert("\($0.kind)|\($0.value)").inserted }
+    }
+
+    // MARK: JSR-009 asset diff
+
+    /// The recon surface of one JS asset: the sources recovered from its map (by path), the candidate
+    /// parameters mined, and the interesting literals.
+    public static func inventory(js: String, sourceMap: Data? = nil) -> ReconInventory {
+        var parameters = mineParameters(from: js)
+        var literals = mineLiterals(from: js)
+        var sources: [String] = []
+        if let sourceMap {
+            for source in reconstruct(sourceMap: sourceMap) {
+                sources.append(source.path)
+                parameters += mineParameters(from: source.content)
+                literals += mineLiterals(from: source.content)
+            }
+        }
+        var seenLiteral = Set<String>()
+        let uniqueLiterals = literals.filter { seenLiteral.insert("\($0.kind)|\($0.value)").inserted }
+        return ReconInventory(
+            parameters: Set(parameters).sorted(), literals: uniqueLiterals, sources: Set(sources).sorted())
+    }
+
+    /// JSR-009: what changed between two inventories of the same asset (old → new). Newly-added
+    /// endpoints/params/literals are the attack surface a redeploy introduced.
+    public static func diff(from old: ReconInventory, to new: ReconInventory) -> ReconDiff {
+        let oldParams = Set(old.parameters)
+        let newParams = Set(new.parameters)
+        let oldSources = Set(old.sources)
+        let newSources = Set(new.sources)
+        func key(_ literal: ReconLiteral) -> String { "\(literal.kind)|\(literal.value)" }
+        let oldLiteralKeys = Set(old.literals.map(key))
+        let newLiteralKeys = Set(new.literals.map(key))
+        return ReconDiff(
+            addedParameters: newParams.subtracting(oldParams).sorted(),
+            removedParameters: oldParams.subtracting(newParams).sorted(),
+            addedLiterals: new.literals.filter { !oldLiteralKeys.contains(key($0)) },
+            removedLiterals: old.literals.filter { !newLiteralKeys.contains(key($0)) },
+            addedSources: newSources.subtracting(oldSources).sorted(),
+            removedSources: oldSources.subtracting(newSources).sorted())
     }
 
     // MARK: regex helper
