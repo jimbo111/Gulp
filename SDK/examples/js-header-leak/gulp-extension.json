@@ -1,0 +1,11 @@
+{
+  "id": "com.gulp.examples.js-header-leak",
+  "name": "Debug-header leak finder (in-process JS)",
+  "version": "1.0.0",
+  "author": "Gulp examples",
+  "runtime": "js",
+  "entry": "ext.js",
+  "minAPIVersion": 1,
+  "permissions": ["read-traffic", "create-issues"],
+  "hooks": ["passive-check"]
+}

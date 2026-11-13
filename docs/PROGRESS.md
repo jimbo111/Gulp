@@ -609,6 +609,23 @@ for behavior.
   extension runtime that needs Apple's JavaScriptCore framework, which does not exist on Linux at all,
   so it can be neither written against nor compiled in this environment (the process-based extension
   host, M15, is already shipped and tested).
+- 2026-11-13 — **In-process JavaScriptCore extension host (F18 EXT-002/004, the `js` runtime)**: wrote
+  `GulpScript.JSExtensionHost`, the macOS-only alternative to GulpExtensions' out-of-process host — it
+  runs an extension's script in a `JSContext` and calls into it directly (`initialize` → registered
+  passive checks; `passiveCheck` → findings, honoured only with the `create-issues` permission), gating
+  the host API it exposes (`host.log`, `host.httpSend`) by the same manifest permissions. **Architecture
+  note (and a correction):** JavaScriptCore is an Apple framework, and `arch-check` forbids an engine
+  from importing one — my first draft put the host in the `GulpExtensions` engine and `arch-check`
+  caught it; I moved it to `GulpScript`, the platform-capability module the architecture already
+  reserves for exactly this ("JavaScriptCore runtime and in-process JS extension host"), and added its
+  `GulpExtensions` dependency. The whole file is behind `#if canImport(JavaScriptCore)` (empty on Linux,
+  the Linux build and arch-check pass), so its JavaScriptCore usage is compiled only by the macOS CI
+  leg. Added a reference `js`-runtime example extension (`SDK/examples/js-header-leak/`). The
+  `@unchecked Sendable` on the host carries the required justification comment (the `JSContext` is
+  confined to synchronous calls and never shared across tasks). **With this, every leftover item is now
+  implemented**; what cannot be verified in this Linux environment (the SwiftUI screens, the
+  JavaScriptCore host) is exactly the code the project intentionally gates to macOS, and the macOS CI
+  leg is the verifier.
 - 2026-11-13 — **M20 release tooling (doc 02 §8)**: wrote the missing `Scripts/release.sh` (archive →
   sign helpers inside-out with Hardened Runtime + timestamp → notarize with notarytool → staple → build
   + notarize + staple the DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual

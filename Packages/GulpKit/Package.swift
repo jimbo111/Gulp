@@ -137,7 +137,7 @@ let package = Package(
         .target(
             name: "GulpBrowser", dependencies: ["GulpCore", "GulpHTTP", "GulpCrawler"] + nioConcurrency,
             resources: [.embedInCode("dom-probe.js")]),
-        .target(name: "GulpScript", dependencies: ["GulpCore"]),
+        .target(name: "GulpScript", dependencies: ["GulpCore", "GulpExtensions"]),
         .target(name: "GulpUI", dependencies: ["GulpCore"]),
 
         // ---- Orchestration layer ----
