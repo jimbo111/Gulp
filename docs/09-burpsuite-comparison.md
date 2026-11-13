@@ -43,7 +43,7 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 | Re-test an issue / verdict history | ✅ | 🟡 | Gulp re-tests (still-present/fixed); no stored verdict history yet. |
 | Confidence/severity, dedup, SARIF export | ✅ | ✅ | ⭐ SARIF out of the box (Burp needs an extension). |
 | **Scanner methodology is open & testable** | ⬜ | ⭐ | Burp's checks are closed; Gulp's are documented (F08 §3.4) and proven against VulnLab with safe twins in CI — a reproducible precision/recall claim per check. |
-| Remaining P1 check catalog (prototype pollution, mass assignment, upload, NoSQL/LDAP/XPath, JWT) | ✅ | ⬜ | **Gap** — deferred in this build. |
+| P1 check catalog (prototype pollution, mass assignment, NoSQL/LDAP/XPath, JWT, CORS, host-header) | ✅ | 🟡 | Prototype pollution (SCN-070), mass assignment (SCN-072), NoSQL/`$where`, XPath (via `string-length()`, so it is distinguished from SQLi on real targets), LDAP (wildcard), JWT (alg:none/weak-secret), CORS and host-header injection are **built and tested against VulnLab safe twins** (2026-11-13). Remaining: CSPT (SCN-071, browser-gated) and file-upload bypass (SCN-073). |
 
 ## 4. Access control, sessions, auth
 
@@ -114,7 +114,7 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 | # | Gap | Milestone | Why it matters |
 |---|---|---|---|
 | 1 | **Secret scanner + JS recon** (find secrets/endpoints in responses & JS) | M19 (F27) | High-signal, always-on; a daily bug-bounty win. **Built next (§10).** |
-| 2 | Remaining P1 active checks (prototype pollution, mass assignment, upload, NoSQL/LDAP/XPath, JWT-in-scan) | M11c | Breadth parity with Burp's scanner. |
+| 2 | P1 active checks | M11c | **Prototype pollution, mass assignment, NoSQL/LDAP/XPath, JWT-in-scan, CORS, host-header shipped (2026-11-13);** only CSPT (browser-gated) and upload bypass remain. |
 | 3 | Extension ecosystem (JS API) + active Check Recipes | M15 | **Passive Check Recipes shipped (2026-11-13);** the JS extension API + active recipes remain. |
 | 4 | Formatted reporting (HTML/PDF, bug-bounty Markdown) | M16 | **HTML + Markdown shipped (2026-11-13); PDF + UI remain.** |
 | 5 | Recorded browser login + DOM/DOM-XSS probe | M13a | JS-heavy apps and client-side bugs. |

@@ -454,6 +454,13 @@ for behavior.
 
 ## Log
 
+- 2026-11-13 — **Per-feature review written** (`docs/10-feature-review.md`): a feature-by-feature
+  review of every shipped area, each backed by the specific `@Test` cases and the executable DoD that
+  prove it (451 tests across 25 targets; 24 DoD scripts). Complements `08` (architecture) and `09`
+  (Burp comparison). It also records an honest test-coverage gap list found while writing it —
+  `IntegrationTests` is a stub (no end-to-end flow), DB upgrade migrations are untested, and a few
+  suite-advertised requirement IDs (GOV-003, BCN-005, CRL-009/010, HIS-023) have no dedicated named
+  test. `09` was refreshed to mark the P1 check catalog as landed.
 - 2026-11-13 — **M11c check catalog — NoSQL / XPath / LDAP injection families**: added three boolean-
   differential active checks. NoSQL (`$where`) uses JavaScript `&& '1'=='1'` / `'1'=='2'` pairs; XPath
   uses `string-length()` (a function a SQL engine rejects, so it is distinguished from SQL injection on
