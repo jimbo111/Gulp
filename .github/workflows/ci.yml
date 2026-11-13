@@ -131,6 +131,10 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/recon-dod.sh
+      - name: Reporting Definition of Done (HTML + Markdown report from issues)
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/report-dod.sh
       - name: Build Beacon
         run: swift build --package-path Beacon -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
       - name: Test Beacon

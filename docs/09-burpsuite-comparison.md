@@ -83,7 +83,7 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 |---|---|---|---|
 | Extension API (in-process) | ✅ (BApp store, Java/Python) | 🟡 | Gulp's in-process JS extensions + out-of-process JSON-RPC are specced (F18) but not built (M15). **Gap vs Burp's huge ecosystem.** |
 | Check Recipes / custom checks (no-code) | 🟡 (Bambdas) | ⬜ | Specced (SCN-060…064), not built. **Gap.** |
-| Reporting (HTML/PDF) | ✅ | 🟡 | Issues export to JSON/SARIF; a formatted report is M16 (not built). **Gap.** |
+| Reporting (HTML/PDF/Markdown) | ✅ | ✅ | HTML + bug-bounty Markdown built (`gulp-cli report`); ⭐ SARIF too; PDF export remains. |
 | **MCP server (drive the tool from an AI agent)** | ⬜ | ⭐ | Gulp exposes an MCP server (read history, send requests, audited); Burp has no first-party agent interface. |
 | CLI / headless | 🟡 (Pro REST API) | ⭐ | Gulp is CLI-first (`gulp-cli`), every feature scriptable; Burp's headless is a limited REST API. |
 | AI assistance | 🟡 (Burp AI, Pro) | ⬜ | Specced (F22), not built (M18). |
@@ -112,7 +112,7 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 | 1 | **Secret scanner + JS recon** (find secrets/endpoints in responses & JS) | M19 (F27) | High-signal, always-on; a daily bug-bounty win. **Built next (§10).** |
 | 2 | Remaining P1 active checks (prototype pollution, mass assignment, upload, NoSQL/LDAP/XPath, JWT-in-scan) | M11c | Breadth parity with Burp's scanner. |
 | 3 | Extension ecosystem + Check Recipes (no-code checks) | M15 | Burp's moat is BApps; Check Recipes + a JS API narrow it. |
-| 4 | Formatted reporting (HTML/PDF, bug-bounty Markdown) | M16 | Deliverables for clients. |
+| 4 | Formatted reporting (HTML/PDF, bug-bounty Markdown) | M16 | **HTML + Markdown shipped (2026-11-13); PDF + UI remain.** |
 | 5 | Recorded browser login + DOM/DOM-XSS probe | M13a | JS-heavy apps and client-side bugs. |
 | 6 | HTTP/3 client | post-1.0 | Niche but a visible checkbox. |
 | 7 | AI triage/assist | M18 | Burp AI exists; Gulp's agent surface is a stronger base. |

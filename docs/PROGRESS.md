@@ -727,6 +727,15 @@ for behavior.
   (introspection-enabled, broken-object-authz), VulnLab `/graphql`+`/safe/graphql`, `gulp-cli graphql
   introspect|scan`; `Scripts/m13b-graphql-dod.sh` PASS. DOM Probe deferred to M13a's browser work.
 
+- 2026-11-13 — **Reporting (F19/M16) implemented**: `GulpReport` HTML + bug-bounty Markdown renderers
+  over the issue model; `ProjectSession.generateReport`; `gulp-cli report`; `Scripts/report-dod.sh`
+  PASS (added to CI/gate). PDF export and the macOS report view remain. The GulpReport stub is now
+  real content.
+- 2026-11-13 — **Capstone progress**: architecture review (`docs/08-architecture-review.md`) backed
+  by `Scripts/arch-check.sh` (dependency-direction + platform rules enforced in CI; removed
+  GulpScanner's 3 unused deps); Burp Suite comparison (`docs/09-burpsuite-comparison.md`); first
+  outperformance increments shipped — secret & JS recon (F27) and formatted reporting (F19).
+
 ## How to pick up work (reminder)
 
 1. Read `CLAUDE.md` §1 (reading order) and this file.

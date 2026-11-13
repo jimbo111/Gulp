@@ -168,6 +168,7 @@ let package = Package(
             dependencies: [
                 "GulpWorkspace", "GulpAutomation", "GulpHTTP", "GulpProxy", "GulpStore", "GulpTLS",
                 "GulpCodec", "GulpCore", "GulpBrowser", "GulpDiff", "GulpRepeater", "GulpFuzzer",
+                "GulpReport",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),
         .executableTarget(
@@ -232,7 +233,7 @@ let package = Package(
             ]),
         .testTarget(name: "GulpScannerTests", dependencies: ["GulpScanner", "GulpCore", "GulpCodec"]),
         .testTarget(name: "GulpSequencerTests", dependencies: ["GulpSequencer"]),
-        .testTarget(name: "GulpReportTests", dependencies: ["GulpReport"]),
+        .testTarget(name: "GulpReportTests", dependencies: ["GulpReport", "GulpCore"]),
         .testTarget(name: "GulpExtensionsTests", dependencies: ["GulpExtensions"]),
         .testTarget(name: "GulpAITests", dependencies: ["GulpAI"]),
         .testTarget(name: "GulpBrowserTests", dependencies: ["GulpBrowser"]),

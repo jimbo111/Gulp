@@ -235,6 +235,7 @@ reused, so older references stay unambiguous.
 - **DoD:** The sample extensions in `SDK/examples` (header injector, custom passive check, custom tab) work in both runtimes; a YAML Check Recipe for a custom header leak detects it on VulnLab and renders the templated issue (F08 §7).
 
 ### M16a — Reporting
+- [x] *2026-11-13:* **Reporting** (F19) shipped — `GulpReport` renders issues to a self-contained HTML report and a bug-bounty Markdown report; `gulp-cli report --format html|markdown`; `Scripts/report-dod.sh` PASS. (PDF export and the macOS report UI remain.)
 - [ ] All P0/P1 of F19, including the **bug-bounty Markdown** export (RPT-012, promoted to P1) and the **CSRF PoC generator** (ETL-007, moved from F17). PDF and branding (RPT-009, RPT-005) are P2.
 - [ ] Notebook items in reports (NB-007).
 - **DoD:** A self-contained HTML report of the VulnLab scan opens offline; a bug-bounty Markdown export reproduces a finding with its cURL line (F19 test 6); a CSRF PoC is generated for a VulnLab form (F19 test 5).
