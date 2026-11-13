@@ -165,6 +165,10 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/jsrecon-dod.sh
+      - name: WS per-message authz Definition of Done (/ws/authz handshake-only, /safe/ws/authz per-message)
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/wsauthz-dod.sh
       - name: Parameter Pollution Definition of Done (/pollute resolves duplicates last-wins, /safe/pollute first-wins)
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib

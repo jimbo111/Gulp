@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CSWSH Definition of Done (F23 WSX-004): the probe flags VulnLab's /ws (which upgrades regardless of
+# CSWSH Definition of Done (F23 WSX-003): the probe flags VulnLab's /ws (which upgrades regardless of
 # Origin) as cross-site-WebSocket-hijackable from an attacker Origin, and /safe/ws (which checks Origin)
 # as not.
 set -euo pipefail

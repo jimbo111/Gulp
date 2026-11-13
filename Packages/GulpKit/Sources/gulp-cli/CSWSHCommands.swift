@@ -1,4 +1,4 @@
-// gulp-cli — Cross-Site WebSocket Hijacking probe (F23 WSX-004). A WebSocket endpoint that authorizes
+// gulp-cli — Cross-Site WebSocket Hijacking probe (F23 WSX-003). A WebSocket endpoint that authorizes
 // only at the HTTP handshake and does not check `Origin` can be opened from any site with the victim's
 // cookies. This replays the handshake with an attacker `Origin`; if it still upgrades (101), the
 // endpoint is CSWSH-vulnerable.

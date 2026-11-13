@@ -493,6 +493,18 @@ for behavior.
   substring of the surrounding `name=` text, misclassifying last-wins as both; fixtures now use distinct
   non-overlapping tokens. ADV-021 (mine candidates from the app) is already covered by JS Recon's param
   mining feeding `discover-params`.
+- 2026-11-13 — **WebSocket per-message authorization (F23 WSX-004, acceptance test 8)**: `WSAuthzProbe`
+  (a pure classifier in `GulpScanner`) + `gulp-cli ws-authz` replay a privileged WS message over two
+  fresh `openWebSocket` connections — one under a privileged identity, one under a stripped identity
+  (both set via `Cookie: sid=…` on the handshake) — and report whether the privileged action still
+  succeeds for the stripped identity (`missing` / `enforced` / `inconclusive`). VulnLab gained two
+  differential sockets: `/ws/authz` authorizes only at the handshake (every upgraded connection gets
+  the secret → flagged) and `/safe/ws/authz` re-checks identity per message (a non-admin is refused →
+  enforced). `WSAuthzProbeTests` (4) + `Scripts/wsauthz-dod.sh` PASS end-to-end against live VulnLab.
+  496 tests. This is the WS-level twin of the Authz Matrix and has no built-in Burp equivalent (there
+  it is a manual Repeater exercise). Also fixed two mislabeled requirement IDs: the CSWSH command and
+  DoD were commented `WSX-004`; CSWSH is `WSX-003`. Remaining WS items (WS Fuzzer WSX-002/005/007,
+  sub-protocol decode WSX-006, scripted sequences WSX-008) stay post-1.0.
 - 2026-11-13 — **M20 release tooling (doc 02 §8)**: wrote the missing `Scripts/release.sh` (archive →
   sign helpers inside-out with Hardened Runtime + timestamp → notarize with notarytool → staple → build
   + notarize + staple the DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual

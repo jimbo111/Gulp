@@ -69,6 +69,19 @@ struct VulnLabServer: Sendable {
     }
 }
 
+/// How an upgraded WebSocket answers messages.
+enum WSHandlerMode: Equatable {
+    /// `/ws`, `/safe/ws`: echo every message as `echo: …` (M4b).
+    case echo
+    /// `/ws/authz` (WSX-004): authorizes only at the handshake, so the privileged `secret` action
+    /// succeeds on *any* upgraded connection — a replayed privileged message under a stripped identity
+    /// still works.
+    case authzHandshakeOnly
+    /// `/safe/ws/authz` (WSX-004): re-checks identity on *each* message, so only an admin connection
+    /// gets the secret; a stripped identity is refused per message.
+    case authzPerMessage
+}
+
 /// Reads HTTP/1 requests (header block + Content-Length body) and writes routed replies.
 final class AppHandler: ChannelInboundHandler {
     typealias InboundIn = ByteBuffer
@@ -77,6 +90,10 @@ final class AppHandler: ChannelInboundHandler {
     private var buffer: [UInt8] = []
     /// Set once `/ws` switched the connection to WebSocket.
     private var webSocket: WSFrameParser?
+    /// How this upgraded socket answers messages (plain echo, or the per-message-authz twins).
+    private var wsMode: WSHandlerMode = .echo
+    /// Whether the handshake carried the `admin` identity (`Cookie: sid=admin`).
+    private var wsIsAdmin = false
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         if webSocket != nil {
@@ -94,11 +111,13 @@ final class AppHandler: ChannelInboundHandler {
             }
             let isWS = target == "/ws" || target.hasPrefix("/ws?")
             let isSafeWS = target == "/safe/ws" || target.hasPrefix("/safe/ws?")
-            if isWS || isSafeWS,
+            let isAuthzWS = target == "/ws/authz" || target.hasPrefix("/ws/authz?")
+            let isSafeAuthzWS = target == "/safe/ws/authz" || target.hasPrefix("/safe/ws/authz?")
+            if isWS || isSafeWS || isAuthzWS || isSafeAuthzWS,
                 let key = request.headerValue("sec-websocket-key")?.string(),
                 request.hasHeaderToken("upgrade", "websocket")
             {
-                // CSWSH (WSX-004): the vulnerable `/ws` upgrades regardless of Origin; the safe
+                // CSWSH (WSX-003): the vulnerable `/ws` upgrades regardless of Origin; the safe
                 // `/safe/ws` rejects a cross-site handshake (its Origin isn't the lab's own host).
                 let origin = request.headerValue("origin")?.string()
                 if isSafeWS, let origin, !origin.hasSuffix("127.0.0.1:8088"),
@@ -111,6 +130,11 @@ final class AppHandler: ChannelInboundHandler {
                         .whenComplete { _ in bound.value.close(promise: nil) }
                     return
                 }
+                // WSX-004: both authz twins upgrade *any* connection (handshake is open); the identity
+                // for per-message authorization is read from `Cookie: sid=…`.
+                if isAuthzWS { wsMode = .authzHandshakeOnly }
+                if isSafeAuthzWS { wsMode = .authzPerMessage }
+                wsIsAdmin = Self.cookieValue(request, "sid") == "admin"
                 acceptWebSocket(key: key, context: context)
                 let rest = buffer
                 buffer = []
@@ -167,9 +191,45 @@ final class AppHandler: ChannelInboundHandler {
         let head =
             "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
             + "Sec-WebSocket-Accept: \(WebSocketWire.accept(forKey: key))\r\n\r\n"
-        let greeting = WebSocketWire.frame(opcode: .text, payload: Array("hello from VulnLab".utf8))
+        // The echo sockets greet; the authz twins stay silent so the first frame a client reads is the
+        // reply to its own message.
+        let greeting =
+            wsMode == .echo
+            ? WebSocketWire.frame(opcode: .text, payload: Array("hello from VulnLab".utf8)) : []
         let out = context.channel.allocator.buffer(bytes: Array(head.utf8) + greeting)
         context.writeAndFlush(NIOAny(out), promise: nil)
+    }
+
+    /// WSX-004: answer a message on an authz socket. `{"action":"whoami"}` echoes the handshake
+    /// identity; `{"action":"secret"}` returns the secret. On the handshake-only twin every upgraded
+    /// connection gets the secret (authorization happened once, at the handshake); on the per-message
+    /// twin the server re-checks the connection's identity and refuses a non-admin — so a privileged
+    /// message replayed under a stripped identity succeeds against the vulnerable socket and fails
+    /// against the safe one.
+    private func authzReply(to payload: [UInt8]) -> String {
+        let text = String(decoding: payload, as: UTF8.self)
+        if text.contains("whoami") {
+            return "{\"identity\":\"\(wsIsAdmin ? "admin" : "guest")\"}"
+        }
+        if text.contains("secret") {
+            let granted = wsMode == .authzHandshakeOnly || wsIsAdmin
+            return granted
+                ? "{\"secret\":\"TOP-SECRET-FLAG-7781\"}"
+                : "{\"error\":\"forbidden\",\"need\":\"admin\"}"
+        }
+        return "{\"ok\":true}"
+    }
+
+    /// The value of a cookie by name from the request's `Cookie` header, or nil.
+    static func cookieValue(_ request: RawRequest, _ name: String) -> String? {
+        guard let header = request.headerValue("cookie")?.string() else { return nil }
+        for pair in header.split(separator: ";") {
+            let kv = pair.split(separator: "=", maxSplits: 1)
+            if kv.count == 2, kv[0].trimmingCharacters(in: .whitespaces) == name {
+                return kv[1].trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return nil
     }
 
     private func echoFrames(_ bytes: [UInt8], context: ChannelHandlerContext) {
@@ -178,6 +238,11 @@ final class AppHandler: ChannelInboundHandler {
             let reply: [UInt8]
             switch WSOpcode(rawValue: frame.opcode) {
             case .text, .binary, .continuation:
+                if wsMode != .echo, frame.opcode == WSOpcode.text.rawValue {
+                    let answer = authzReply(to: frame.payload)
+                    reply = WebSocketWire.frame(opcode: .text, payload: Array(answer.utf8), fin: frame.fin)
+                    break
+                }
                 let prefix = frame.opcode == WSOpcode.continuation.rawValue ? [] : Array("echo: ".utf8)
                 let opcode = WSOpcode(rawValue: frame.opcode) ?? .binary
                 reply = WebSocketWire.frame(opcode: opcode, payload: prefix + frame.payload, fin: frame.fin)
