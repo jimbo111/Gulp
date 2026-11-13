@@ -54,6 +54,11 @@ public final class JSReconModel {
             diff = JSRecon.diff(from: inventory(baselineJS, baselineMap), to: current)
         }
     }
+
+    /// The current asset's literals as identifiable rows for the table (projection owned by the model).
+    var literalRows: [ReconLiteralRow] {
+        (inventory?.literals ?? []).enumerated().map { ReconLiteralRow(id: $0.offset, literal: $0.element) }
+    }
 }
 
 /// The JS Recon studio: paste an asset, recover its sources, mine parameters and literals, diff deploys.
@@ -97,11 +102,7 @@ public struct JSReconView: View {
                         .font(.caption).textSelection(.enabled)
                     Divider()
                     Text("Interesting literals (\(inventory.literals.count))").font(.headline)
-                    Table(
-                        inventory.literals.enumerated().map {
-                            ReconLiteralRow(id: $0.offset, literal: $0.element)
-                        }
-                    ) {
+                    Table(model.literalRows) {
                         TableColumn("Kind") { Text($0.literal.kind) }.width(120)
                         TableColumn("Value") { Text($0.literal.value).textSelection(.enabled) }
                     }

@@ -160,16 +160,19 @@ GulpFeatures     → the engines it surfaces + GulpWorkspace + GulpUI   # UI (ma
    `ExtensionCheck`'s synthesized memberwise initializer is *internal* to `GulpExtensions` and so was
    inaccessible from the host's module (`GulpScript`); a public `init` was added. The same technique was
    then applied to the **seven new SwiftUI tool screens** with a loose SwiftUI/AppKit/Observation type
-   shim: five type-check cleanly against it (Assistant, GraphQL, Extensions, DOM-Probe, Authz-Matrix);
-   the other two (Sequencer, JS-Recon) fail only on a nested-closure inference limit of the loose shim
-   (`Table(… .enumerated().map { … })`), not on any engine-API error — and this surfaced a **third real
-   bug**: `SequencerView` called `GulpSequencer.analyze` when the function lives on the `Sequencer` enum
-   (`Sequencer.analyze`); fixed. SwiftUI *layout* correctness still needs the macOS CI leg (that shim was
-   a throwaway harness, not a kept CI gate, because it does not model enough of SwiftUI for the mature
-   views), but the model↔engine wiring — the actual risk — is now checked for all seven. Net of this
-   session: three real cross-platform defects the Linux `#if canImport` guard had hidden
-   (`ExtensionCheck` access, `compactMap` inference, `Sequencer.analyze`) plus the `GulpFeatures`
-   missing-dependency bug were found and fixed.
+   shim compiled against the real engine modules: **all seven type-check cleanly** (Sequencer, JS-Recon,
+   Assistant, GraphQL, Extensions, DOM-Probe, Authz-Matrix). Getting there surfaced a **third real bug**:
+   `SequencerView` called `GulpSequencer.analyze` when the function lives on the `Sequencer` enum
+   (`Sequencer.analyze`); fixed. Two views initially failed the check on an inline
+   `Table(… .enumerated().map { … })` that the loose shim (and SwiftUI's own type-checker, notoriously)
+   struggles to infer; the fix moved the row projection onto the model (`model.testRows`,
+   `model.literalRows`) — the same pattern the GraphQL view already used — which is a genuine
+   improvement, not shim-appeasement. SwiftUI *layout* correctness still ultimately rests on the macOS CI
+   leg (the shim was a throwaway harness, not a kept CI gate, since it does not model enough of SwiftUI
+   for the mature views), but the model↔engine wiring — the actual risk behind the guard — is now
+   type-checked clean for all seven. Net of this session: **three real cross-platform defects the Linux
+   `#if canImport` guard had hidden** (`ExtensionCheck` access, `compactMap` inference,
+   `Sequencer.analyze`) plus the `GulpFeatures` missing-dependency bug were found and fixed.
 2. **All milestone modules are now built**; no stubs remain. The post-1.0 breadth (further WS
    sub-protocol coverage, richer AI tool-use) is enhancement, not missing structure.
 3. **Signing keys not yet in the Keychain** (see §3).

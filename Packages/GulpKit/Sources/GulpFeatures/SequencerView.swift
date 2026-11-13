@@ -43,6 +43,12 @@ public final class SequencerModel {
         note = nil
         report = Sequencer.analyze(tokens: tokens, alpha: alpha)
     }
+
+    /// The battery as identifiable rows for the table (projection owned by the model, so the view body
+    /// stays a simple property access — kinder to SwiftUI's type-checker than an inline `.map`).
+    var testRows: [SequencerTestRow] {
+        (report?.tests ?? []).enumerated().map { SequencerTestRow(id: $0.offset, test: $0.element) }
+    }
 }
 
 /// An identifiable wrapper so the battery can fill a `Table` (matches the other views' row pattern).
@@ -99,8 +105,7 @@ public struct SequencerView: View {
                     .font(.callout)
                     Divider()
                     Text("Randomness tests").font(.headline)
-                    Table(report.tests.enumerated().map { SequencerTestRow(id: $0.offset, test: $0.element) })
-                    {
+                    Table(model.testRows) {
                         TableColumn("Test") { Text($0.test.name) }
                         TableColumn("p-value") { row in
                             Text(row.test.pValue.map { String(format: "%.4f", $0) } ?? "—")
