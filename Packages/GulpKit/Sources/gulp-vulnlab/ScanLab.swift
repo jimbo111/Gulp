@@ -127,6 +127,10 @@ enum ScanLab {
             // LDAP: the vulnerable twin interpolates into `(uid=<input>)`, so `*` is a wildcard that
             // matches; the safe twin escapes the value (RFC 4515), so `*` matches nothing.
             return ldapLookup(query["uid"] ?? "", safe: safe)
+        case "/upload":
+            // File upload: the vulnerable twin stores any filename; the safe twin allows only image
+            // extensions, so a renamed `.php`/`.svg` is rejected.
+            return upload(body, safe: safe)
         case "/profile/update":
             // Mass assignment: the vulnerable twin echoes every field it received (role included);
             // the safe twin binds only name and email.
@@ -370,6 +374,24 @@ enum ScanLab {
         return VulnReply(
             bytes: VulnLab.response(
                 200, body: Array((matched ? foundBody : notFoundBody).utf8), type: "application/json"))
+    }
+
+    /// A multipart file upload. The vulnerable twin stores whatever filename it is given; the safe
+    /// twin accepts only an allowlist of image extensions and rejects anything else (a renamed shell).
+    static let uploadAllowlist = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
+    static func upload(_ body: String, safe: Bool) -> VulnReply {
+        guard let start = body.range(of: "filename=\""),
+            let end = body.range(of: "\"", range: start.upperBound..<body.endIndex)
+        else {
+            return VulnReply(bytes: VulnLab.response(400, body: Array("No file.\n".utf8)))
+        }
+        let filename = String(body[start.upperBound..<end.lowerBound])
+        let ext = filename.contains(".") ? String(filename[filename.lastIndex(of: ".")!...]).lowercased() : ""
+        if safe && !uploadAllowlist.contains(ext) {
+            return VulnReply(
+                bytes: VulnLab.response(400, body: Array("Rejected: only images are allowed.\n".utf8)))
+        }
+        return text("Stored at /uploads/\(filename)\n")
     }
 
     /// LDAP filter lookup. The vulnerable twin interpolates into `(uid=<input>)`, so `*` is a

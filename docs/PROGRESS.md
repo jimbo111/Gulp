@@ -430,7 +430,7 @@ for behavior.
 - [ ] M10b — gRPC & protobuf (F33) — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M11a — Crawler (static), Beacon client + dev Beacon, shared limiter + panic stop — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M11b — Active scan engine + P0 checks — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
-- [ ] M11c — Full check catalog (incl. SCN-070…074) + crawl-and-audit — *partial: crawl-and-audit, API scan, gRPC points, re-test done; P1 active checks landed — CORS, host-header, JWT (alg:none/weak-secret), mass assignment (SCN-072), server-side prototype pollution (SCN-070), NoSQL/`$where`, XPath (via `string-length()`) and LDAP (wildcard) injection; remaining: CSPT (SCN-071, browser-gated), upload bypass (SCN-073)*
+- [ ] M11c — Full check catalog (incl. SCN-070…074) + crawl-and-audit — *partial: crawl-and-audit, API scan, gRPC points, re-test done; P1 active checks landed — CORS, host-header, JWT (alg:none/weak-secret), mass assignment (SCN-072), server-side prototype pollution (SCN-070), NoSQL/`$where`, XPath (via `string-length()`), LDAP (wildcard) and unrestricted file upload (SCN-073); only remaining: CSPT (SCN-071, browser-gated)*
 - [ ] M12a — Sessions, auth, macros, request signing
 - [ ] M12b — Authz Matrix
 - [ ] M13a — Browser automation: CDP crawl, recorded logins, passkeys
@@ -454,6 +454,14 @@ for behavior.
 
 ## Log
 
+- 2026-11-13 — **M11c check catalog — unrestricted file upload (SCN-073)**: `active.upload` re-sends a
+  multipart upload with a dangerous extension + content-type (`.php`/`.svg`/`.html`/`.jsp`) and raises
+  when the server accepts it exactly as it accepted the benign file. The body is rewritten through a
+  lossless Latin-1 round-trip so binary file content survives, and the acceptance test strips both
+  filenames so a reflected name doesn't defeat the comparison. VulnLab `/upload` (stores anything) vs
+  `/safe/upload` (image-extension allowlist, 400 otherwise). DoD `m11c-checks` step 6 + a unit test;
+  m11b DoD still 0 unexpected. This completes the Linux-buildable P1 catalog — only CSPT (browser-
+  gated) remains.
 - 2026-11-13 — **Per-feature review written** (`docs/10-feature-review.md`): a feature-by-feature
   review of every shipped area, each backed by the specific `@Test` cases and the executable DoD that
   prove it (451 tests across 25 targets; 24 DoD scripts). Complements `08` (architecture) and `09`

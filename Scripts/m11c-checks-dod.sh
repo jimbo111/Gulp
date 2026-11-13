@@ -99,4 +99,35 @@ scan_get_expect "/ldap/login?uid=alice" "active.ldapi" yes
 scan_get_expect "/safe/ldap/login?uid=alice" "active.ldapi" no
 echo "PASS 5: LDAP injection flagged on /ldap/login, clean on the safe twin"
 
+# scan a raw multipart upload of <path> and assert the issue type fires (or not).
+scan_upload_expect() {  # <path> <issue-type> <should-fire:yes|no>
+  local path="$1" want="$2" fire="$3"
+  local proj="$WORK/$(echo "$path" | tr -c 'a-zA-Z0-9' '_').gulp"
+  local b="GulpBoundary123"
+  # A benign image upload (file part + a form field), with CRLF line endings.
+  { printf -- '--%s\r\n' "$b"
+    printf 'Content-Disposition: form-data; name="file"; filename="photo.jpg"\r\n'
+    printf 'Content-Type: image/jpeg\r\n\r\n'
+    printf 'JPEGDATA\r\n'
+    printf -- '--%s--\r\n' "$b"; } > "$WORK/mp.bin"
+  local len; len=$(wc -c < "$WORK/mp.bin")
+  { printf 'POST %s HTTP/1.1\r\nHost: 127.0.0.1:8088\r\nContent-Type: multipart/form-data; boundary=%s\r\nContent-Length: %s\r\n\r\n' "$path" "$b" "$len"
+    cat "$WORK/mp.bin"; } > "$WORK/req.txt"
+  "$GULP" scope --project "$proj" --add "$LAB/" > /dev/null
+  "$GULP" scan active --project "$proj" --raw "$WORK/req.txt" --target "$LAB" --config balanced --unsafe > "$WORK/scan.txt"
+  local issues
+  issues=$("$GULP" issues --project "$proj")
+  echo "$issues" | grep -E "$want" || true
+  if [ "$fire" = "yes" ]; then
+    echo "$issues" | grep -q "$want" || fail "$want not raised on $path"
+  else
+    if echo "$issues" | grep -q "$want"; then fail "$want wrongly raised on $path"; fi
+  fi
+}
+
+# 6. Unrestricted file upload.
+scan_upload_expect "/upload" "active.upload" yes
+scan_upload_expect "/safe/upload" "active.upload" no
+echo "PASS 6: file-upload bypass flagged on /upload, clean on the safe twin"
+
 echo "M11c checks DoD: PASS"

@@ -385,6 +385,11 @@ public enum IssueDefinitions {
             "Escape input for LDAP filters (RFC 4515) or use a parameterized directory API; validate against an allowlist and never build filters by string concatenation.",
             "- [OWASP LDAP injection prevention](\(owasp)LDAP_Injection_Prevention_Cheat_Sheet.html)"),
         def(
+            "active.upload", "Unrestricted file upload", "File upload", .high, .firm,
+            "A file upload accepted a dangerous type (such as `.php` or `.svg`) that a hardened endpoint would reject, so an attacker could upload a web shell or a stored-XSS SVG.",
+            "Enforce a server-side allowlist of extensions and content types, verify the file's magic bytes, store uploads outside the web root (or on a separate domain), and never execute uploaded files.",
+            "- [OWASP file upload cheat sheet](\(owasp)File_Upload_Cheat_Sheet.html)"),
+        def(
             "active.xpathi", "XPath injection", "XPath injection", .high, .firm,
             "Input is built into an XPath expression over XML data: a quote broke the expression and `or`-boolean conditions flipped the response, so an attacker can bypass checks or read other nodes of the document.",
             "Use parameterized XPath (variable binding) instead of string concatenation, and escape or allowlist input.",

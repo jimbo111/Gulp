@@ -11,7 +11,7 @@ import GulpHTTP
 enum ExtendedChecks {
     static let all: [any ActiveCheck] = [
         CORSCheck(), HostHeaderCheck(), JWTScanCheck(), MassAssignmentCheck(), PrototypePollutionCheck(),
-        NoSQLInjectionCheck(), LDAPInjectionCheck(), XPathInjectionCheck(),
+        NoSQLInjectionCheck(), LDAPInjectionCheck(), XPathInjectionCheck(), UploadBypassCheck(),
     ]
 }
 
@@ -220,6 +220,93 @@ struct PrototypePollutionCheck: ActiveCheck {
                     "A marker injected under `__proto__` appeared in a later clean response (`\(marker)`), so a server-side merge follows `__proto__` — prototype pollution.",
                 evidence: confirm, marker: marker, confidence: .firm)
         ]
+    }
+}
+
+/// Unrestricted file upload: for a multipart upload, re-send the same file with a dangerous
+/// extension and content-type (`.php`, `.svg`, …). A server that still accepts it the way it accepted
+/// the benign file is not enforcing an allowlist, so a web shell or stored-XSS SVG could be uploaded.
+/// Unsafe-gated (it submits a file) and non-destructive (the file content stays benign).
+struct UploadBypassCheck: ActiveCheck {
+    let id = "active.upload"
+    let family = "upload"
+    let intensity = CheckIntensity.balanced
+    let kinds: Set<InsertionPointKind> = []  // request-level (rewrites the file part)
+
+    /// Dangerous (extension, content-type) pairs a hardened upload endpoint should reject.
+    static let dangerous: [(label: String, ext: String, type: String)] = [
+        ("PHP web shell", ".php", "application/x-httpd-php"),
+        ("SVG (stored XSS)", ".svg", "image/svg+xml"),
+        ("HTML", ".html", "text/html"),
+        ("JSP", ".jsp", "application/x-jsp"),
+    ]
+
+    func run(_ point: InsertionPoint?, baseline: Baseline?, context: AuditContext) async -> [IssueFinding] {
+        guard context.unsafe else { return [] }  // submits a file
+        let method = context.base.bytes[context.base.parsed.method].string().uppercased()
+        guard ["POST", "PUT"].contains(method) else { return [] }
+        guard
+            context.base.headerValue("content-type")?.string().lowercased().contains("multipart/form-data")
+                == true
+        else { return [] }
+        // Latin-1 round-trip: every byte maps to one scalar, so binary file content survives untouched.
+        let bodyBytes = Array(context.base.bytes.rawBytes[context.base.parsed.body])
+        let body = String(bodyBytes.map { Character(UnicodeScalar($0)) })
+        guard let nameStart = body.range(of: "filename=\""),
+            let nameEnd = body.range(of: "\"", range: nameStart.upperBound..<body.endIndex)
+        else { return [] }  // a real file upload
+        let originalName = String(body[nameStart.upperBound..<nameEnd.lowerBound])
+        let base =
+            originalName.contains(".")
+            ? String(originalName[..<originalName.lastIndex(of: ".")!]) : originalName
+
+        // The benign upload must currently be accepted, or "still accepted" means nothing.
+        let benign = await context.send(context.base)
+        guard let status = benign.status, (200..<300).contains(status) else { return [] }
+
+        for variant in Self.dangerous {
+            let newName = base + variant.ext
+            guard let rewritten = Self.rewrite(body, ext: variant.ext, type: variant.type) else { continue }
+            let newBody = [UInt8](rewritten.unicodeScalars.map { UInt8($0.value & 0xff) })
+            let request = context.base.replacing(context.base.parsed.body, with: Bytes(newBody))
+                .updatingContentLength()
+            let probe = await context.send(request)
+            // "Accepted like the benign file": same 2xx and the same response once the (reflected)
+            // filename is removed — so a rejection page (different status/body) does not match.
+            guard let code = probe.status, (200..<300).contains(code),
+                SQLInjectionCheck.similar(probe, benign, removing: [originalName, newName])
+            else { continue }
+            return [
+                context.finding(
+                    id, point: nil, variant: variant.label,
+                    detail:
+                        "The upload endpoint accepted a file renamed to `\(variant.ext)` with `Content-Type: \(variant.type)` exactly as it accepted the benign file, so it does not enforce a type allowlist (\(variant.label)).",
+                    evidence: probe, confidence: .firm)
+            ]
+        }
+        return []
+    }
+
+    /// Replace the first file part's extension and `Content-Type`. Returns nil if there is no filename.
+    static func rewrite(_ body: String, ext: String, type: String) -> String? {
+        guard let nameStart = body.range(of: "filename=\"") else { return nil }
+        guard let nameEnd = body.range(of: "\"", range: nameStart.upperBound..<body.endIndex) else {
+            return nil
+        }
+        let filename = String(body[nameStart.upperBound..<nameEnd.lowerBound])
+        let base = filename.contains(".") ? String(filename[..<filename.lastIndex(of: ".")!]) : filename
+        var out = body.replacingOccurrences(
+            of: "filename=\"\(filename)\"", with: "filename=\"\(base)\(ext)\"")
+        // Replace the file part's Content-Type (the first one after the filename), if present.
+        if let ctStart = out.range(
+            of: "Content-Type:",
+            range: (out.range(of: "filename=\"")?.upperBound
+                ?? out.startIndex)..<out.endIndex),
+            let ctEnd = out.range(of: "\r\n", range: ctStart.upperBound..<out.endIndex)
+        {
+            out.replaceSubrange(ctStart.lowerBound..<ctEnd.lowerBound, with: "Content-Type: \(type)")
+        }
+        return out
     }
 }
 

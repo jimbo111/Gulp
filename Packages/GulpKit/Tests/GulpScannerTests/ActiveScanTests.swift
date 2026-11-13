@@ -129,6 +129,18 @@ struct FakeApp: Sendable {
                     ? Self.text("{\"user\":\"alice\"}")
                     : Self.response(401, headers: [], body: "unauthorized"), 0.01
             )
+        case "/upload":
+            let raw = String(decoding: request.bytes.rawBytes[request.parsed.body], as: UTF8.self)
+            guard let start = raw.range(of: "filename=\""),
+                let end = raw.range(of: "\"", range: start.upperBound..<raw.endIndex)
+            else { return (Self.response(400, headers: [], body: "No file."), 0.01) }
+            let filename = String(raw[start.upperBound..<end.lowerBound])
+            let ext = filename.contains(".") ? String(filename[filename.lastIndex(of: ".")!...]) : ""
+            let allowed = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
+            if safe && !allowed.contains(ext.lowercased()) {
+                return (Self.response(400, headers: [], body: "Rejected: images only."), 0.01)
+            }
+            return (Self.text("Stored at /uploads/\(filename)"), 0.01)
         case "/nosql/find":
             let value = query["user"] ?? ""
             let matched =
@@ -479,6 +491,26 @@ struct ActiveScanTests {
             let (safe, _) = await scan([request], app: FakeApp(safe: true))
             #expect(!safe.contains { $0.typeID == typeID }, "safe twin \(typeID): \(pairs(safe))")
         }
+    }
+
+    @Test("M11c: an upload that accepts a renamed .php/.svg is flagged; the allowlisting twin is clean")
+    func test_M11c_uploadBypass() async {
+        let boundary = "GulpBoundary123"
+        let body =
+            "--\(boundary)\r\n"
+            + "Content-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"\r\n"
+            + "Content-Type: image/jpeg\r\n\r\nJPEGDATA\r\n--\(boundary)--\r\n"
+        let request = post("/upload", type: "multipart/form-data; boundary=\(boundary)", body: body)
+        var unsafeConfig = ScanConfig.preset(.balanced)
+        unsafeConfig.unsafe = true
+        let (findings, _) = await scan([request], app: FakeApp(), config: unsafeConfig)
+        #expect(findings.contains { $0.typeID == "active.upload" }, "\(pairs(findings))")
+        // Off without the unsafe gate (it submits a file).
+        let (gated, _) = await scan([request], app: FakeApp(), config: .preset(.balanced))
+        #expect(!gated.contains { $0.typeID == "active.upload" })
+        // The allowlisting twin rejects the renamed file, so nothing is flagged.
+        let (safe, _) = await scan([request], app: FakeApp(safe: true), config: unsafeConfig)
+        #expect(!safe.contains { $0.typeID == "active.upload" })
     }
 
     @Test("SCN-030: the safe twins produce nothing")
