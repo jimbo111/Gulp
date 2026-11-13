@@ -231,7 +231,8 @@ reused, so older references stay unambiguous.
 
 ### M15 — Extensions, scripting, Check Recipes
 - [x] *2026-11-13:* **Check Recipes** (SCN-060/061/064, passive) shipped — declarative no-code checks (metadata, path/content gates, matchers incl. header/body/status/regex and OR groups, templated issue) that join the passive scan; `gulp-cli scan passive --recipes <file|dir>`; `Scripts/recipe-dod.sh` PASS. Recipes are JSON (YAML is a documented thin future layer); active recipes and the editor UI remain.
-- [ ] All P0/P1 of F18 (JS host, JSON-RPC host, Snippets, the Python SDK — now P1). The Extension Gallery (EXT-020/021) is post-1.0; v1 installs from a file or folder.
+- [x] *2026-11-13:* **Out-of-process JSON-RPC extension host** (EXT-002/003/004) — manifest parsing + approved permissions, LSP-style length-prefixed JSON-RPC framing, the `ExtensionHost` actor (initialize handshake, passive-check calls, inbound `host/log` and permission-gated `http/send`), and the production `ProcessExtensionTransport` over a child's stdio. Verified against a mock transport **and a real bash subprocess**; sample extension in `SDK/examples/header-leak`. `GulpExtensions/*`.
+- [ ] Remaining F18: the in-process **JS host** (EXT-001, JavaScriptCore — macOS), Snippets (EXT-010), the Python/TS SDKs (EXT-012/013), and the extension-manager UI (EXT-005). The Extension Gallery (EXT-020/021) is post-1.0; v1 installs from a file or folder.
 - [ ] **Check Recipes** (YAML custom checks, SCN-060…SCN-064; moved out of M11 and to P1 by the 2026-11-08 review).
 - **DoD:** The sample extensions in `SDK/examples` (header injector, custom passive check, custom tab) work in both runtimes; a YAML Check Recipe for a custom header leak detects it on VulnLab and renders the templated issue (F08 §7).
 

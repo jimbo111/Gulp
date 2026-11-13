@@ -1,0 +1,11 @@
+{
+  "id": "com.gulp.examples.header-leak",
+  "name": "Debug-header leak finder",
+  "version": "1.0.0",
+  "author": "Gulp examples",
+  "runtime": "process",
+  "command": ["/usr/bin/env", "bash", "ext.sh"],
+  "minAPIVersion": 1,
+  "permissions": ["read-traffic", "create-issues"],
+  "hooks": ["passive-check"]
+}

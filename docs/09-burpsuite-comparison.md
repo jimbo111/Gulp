@@ -83,7 +83,7 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 
 | Capability | Burp | Gulp | Notes |
 |---|---|---|---|
-| Extension API (in-process) | ✅ (BApp store, Java/Python) | 🟡 | Gulp's in-process JS extensions + out-of-process JSON-RPC are specced (F18) but not built (M15). **Gap vs Burp's huge ecosystem.** |
+| Extension API (out-of-process, any language) | ✅ (BApp store, Java/Python) | 🟡 | The **out-of-process JSON-RPC host is built (2026-11-13)** — manifest + approved permissions, length-prefixed framing, passive-check + permission-gated API calls, verified against a real subprocess (sample in `SDK/examples/header-leak`). The in-process JS host (JavaScriptCore) and the manager UI remain; Burp's ecosystem is still far larger. |
 | Check Recipes / custom checks (no-code) | 🟡 (Bambdas) | ✅ | ⭐ Declarative JSON/YAML recipes (passive) join the scan — no Java, unlike Burp Bambdas/BChecks. Active recipes + editor remain. |
 | Reporting (HTML/PDF/Markdown) | ✅ | ✅ | HTML + bug-bounty Markdown built (`gulp-cli report`); ⭐ SARIF too; PDF export remains. |
 | **MCP server (drive the tool from an AI agent)** | ⬜ | ⭐ | Gulp exposes an MCP server (read history, send requests, audited); Burp has no first-party agent interface. |

@@ -454,6 +454,13 @@ for behavior.
 
 ## Log
 
+- 2026-11-13 — **M15 out-of-process extension host (F18 EXT-002/003/004)**: `GulpExtensions` gained the
+  JSON-RPC extension runtime — manifest + approved permissions enforced at the API boundary, LSP-style
+  length-prefixed framing, the `ExtensionHost` actor (initialize → declared checks; passive-check
+  gated on `create-issues`; inbound `http/send` denied+logged without `http-send`), and
+  `ProcessExtensionTransport` over a child's stdio. Verified against a mock transport **and a real bash
+  subprocess** (475 tests total); `SDK/examples/header-leak` is a dependency-free sample extension. The
+  in-process JS runtime (JavaScriptCore) and the manager UI stay macOS-gated.
 - 2026-11-13 — **M13a/M13b browser automation + DOM Probe (engine core)**: built the Chrome DevTools
   Protocol client (`CDPClient`, transport-abstracted → unit-tested against a mock; command
   id-correlation, event routing, remote-error handling), a launch helper (`BrowserAutomation`: flags +

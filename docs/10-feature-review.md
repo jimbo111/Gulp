@@ -263,6 +263,21 @@ Each subsection: **what it does · module · proof (tests + DoD) · Burp verdict
 - **Gaps:** the swift↔real-browser integration (crawl/login/passkeys) and the macOS UI need a
   Chromium+Swift host; the verification sandbox has Chromium and Swift in separate places.
 
+### 3.22 Extensions (out-of-process) 🟡→⭐
+- **Does:** loads an extension described by a `gulp-extension.json` manifest with declared, user-approved
+  permissions, and runs it as a child process speaking JSON-RPC 2.0 over stdio: `initialize` reads the
+  checks it registers, `passiveCheck` runs them over traffic, and the extension can call back into Gulp
+  (`host/log`, and `http/send` only if granted).
+- **Module:** `GulpExtensions`. **Proof:** `GulpExtensionsTests` — "frames round-trip, even split
+  across arbitrary byte chunks", "a gulp-extension.json parses with its runtime, permissions and
+  hooks", "initialize reads the extension's declared checks", "a passive check returns findings only
+  when create-issues is granted", "an inbound http/send is denied without the http-send permission",
+  and "**a bash extension over real stdio registers a check and reports a finding**" — a dependency-free
+  sample extension (`SDK/examples/header-leak`) driven as a real subprocess.
+- **Burp:** 🟡→⭐ — the out-of-process host (any language, permission-scoped) is built and tested;
+  Burp's BApp ecosystem is far larger, and the in-process JS host + manager UI remain.
+- **Gaps:** in-process JS (JavaScriptCore, macOS), the Python/TS SDKs, and the extension-manager UI.
+
 ## 4. Cross-cutting quality evidence
 
 - **Scope safety (CLAUDE.md hard rule):** `GulpScannerTests` includes "SCN-012 / CLAUDE.md scope
