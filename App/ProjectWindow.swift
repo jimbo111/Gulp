@@ -194,6 +194,8 @@ struct ProjectWindow: View {
             ExtensionsView()
         case .assistant:
             AssistantView()
+        case .authzMatrix:
+            AuthzMatrixView(session: session)
         default:
             ContentUnavailableView(
                 selection?.title ?? "Gulp", systemImage: selection?.symbol ?? "network",

@@ -595,6 +595,20 @@ for behavior.
   (these compile to empty on Linux); the SwiftUI bodies and the dependency fix are compiled for real
   only by the macOS CI leg. Only the Authz-Matrix screen (which needs live multi-identity sending via
   the workspace) and the in-process JavaScriptCore extension host remain macOS-gated.
+- 2026-11-13 — **macOS UI: Authz Matrix screen (F23 §1)**: added `AuthzMatrixView`, session-backed
+  (like the Scanner), wired into `ProjectWindow`. It replays the requests queued for analysis
+  (`session.scanRequests` → `session.runAuthzMatrix`) as every configured identity and renders the
+  verdict grid (requests × identities), with a bypassed cell — a privileged response under a lower
+  identity — called out in red. The run is a cancellable task; the main thread never waits on the
+  network. Written against the verified workspace signatures (`runAuthzMatrix` returns
+  `AuthzMatrixResult` with `requests`/`columns`/`cells`/`cell(request:identity:)`, `AuthzVerdict` cases
+  authorized/enforced/bypassed/same/needs-review). With this, **every named macOS tool screen is now
+  written and wired** (Sequencer, JS-Recon, Assistant, GraphQL, Extensions, DOM-Probe, Authz-Matrix);
+  all compile to empty on Linux and are verified for real only by the macOS CI leg. The single
+  remaining macOS-gated item is the **in-process JavaScriptCore extension host** — an alternative
+  extension runtime that needs Apple's JavaScriptCore framework, which does not exist on Linux at all,
+  so it can be neither written against nor compiled in this environment (the process-based extension
+  host, M15, is already shipped and tested).
 - 2026-11-13 — **M20 release tooling (doc 02 §8)**: wrote the missing `Scripts/release.sh` (archive →
   sign helpers inside-out with Hardened Runtime + timestamp → notarize with notarytool → staple → build
   + notarize + staple the DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual
