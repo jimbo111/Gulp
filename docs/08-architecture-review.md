@@ -1,15 +1,21 @@
-# 08 — Architecture review (2026-11-13)
+# 08 — Architecture review (2026-11-13, refreshed at feature-complete)
 
-A higher-level, architectural review of the Gulp codebase as it stands after M13b, judged against
-the ideal the project set for itself in `docs/01-architecture.md` and the hard rules in `CLAUDE.md`.
-It is backed by an executable check (`Scripts/arch-check.sh`) so the conclusions stay true as the
-code changes, not just on the day they were written.
+A higher-level, architectural review of the Gulp codebase as it stands **with every milestone and the
+post-1.0 phases implemented** (the full WebSocket workbench WSX-002…008, AI/redaction, the extension
+hosts, Sequencer, JS Recon, smuggling confirmation, param discovery/pollution, and all the macOS tool
+screens), judged against the ideal the project set for itself in `docs/01-architecture.md` and the hard
+rules in `CLAUDE.md`. It is backed by an executable check (`Scripts/arch-check.sh`) so the conclusions
+stay true as the code changes, not just on the day they were written.
 
 ## 1. Scope and method
 
-- **Size**: ~61k lines of Swift across 20 real modules plus two executables (`gulp-cli`,
-  `gulp-vulnlab`) and five still-stub modules (`GulpSequencer`, `GulpScript`, `GulpReport`,
-  `GulpExtensions`, `GulpAI` — their milestones are not built yet).
+- **Size**: ~60k+ lines of Swift across 22 real modules plus three executables (`gulp-cli`,
+  `gulp-vulnlab`, `gulp-beacon`). Every module that was a stub at M13b is now built: `GulpSequencer`
+  (randomness battery), `GulpReport` (HTML/Markdown reporting), `GulpExtensions` (out-of-process host),
+  `GulpAI` (agent + redaction), and `GulpScript` (the in-process JavaScriptCore extension host). The
+  only code that cannot be compiled on Linux is, by design, the Apple-framework-gated UI (`GulpFeatures`
+  SwiftUI) and the `GulpScript` JavaScriptCore host — both behind `#if canImport(...)` and verified by
+  the macOS CI leg.
 - **Method**: static inspection of the module/import graph, the concurrency surface
   (`actor`/`Sendable`/`@unchecked`), the invariants `CLAUDE.md` calls non-negotiable, and the test
   and DoD coverage. Each structural claim is re-checkable: the dependency rules now run as
@@ -61,6 +67,20 @@ GulpFeatures     → the engines it surfaces + GulpWorkspace + GulpUI   # UI (ma
   `GulpCrawler` and `GulpSession` that it never imported (its `OASTProvider` is a protocol defined in
   the module itself, and crawl-and-audit lives in `GulpWorkspace`). Removed — three fewer edges in
   the build graph and a dependency list that now tells the truth.
+- **A real latent bug the review surfaced (now fixed):** `GulpFeatures` declared *too few*
+  dependencies — its own views `import GulpScanner`, `GulpSequencer`, `GulpExtensions`, `GulpCrawler`
+  and (newly) `GulpBrowser`, none of which were in the target's `dependencies`. On Linux this hid
+  because the views are `#if canImport(AppKit)` (empty), but the macOS build of the target would have
+  failed on a missing-module error. All five were added. This is the one class of defect the Linux
+  gate structurally cannot catch — a missing dependency behind an Apple-framework guard — and is the
+  reason the macOS CI leg is load-bearing, not optional.
+- **The guardrail caught a misplacement in real time.** The in-process JavaScriptCore extension host
+  was first drafted inside the `GulpExtensions` *engine*; `arch-check.sh` rule 2 ("engines and
+  services must not import an Apple UI/JS framework") failed the build immediately. It was moved to
+  `GulpScript` — the platform-capability module the architecture already reserves for "JavaScriptCore
+  runtime and in-process JS extension host" — which resolved it. The check doing its job during
+  development, not just in review, is the strongest evidence the layering is enforced rather than
+  aspirational.
 
 ## 3. The hard invariants
 
@@ -106,12 +126,14 @@ GulpFeatures     → the engines it surfaces + GulpWorkspace + GulpUI   # UI (ma
 
 ## 5. Test and verification posture
 
-- **430 unit/integration tests** (`swift-testing`) covering every module, plus **~16 milestone
-  "Definition of Done" scripts** (`Scripts/mN-dod.sh`) that run the real `gulp-cli` and `gulp-vulnlab`
-  end to end and assert observable behaviour (the scanner finds exactly the planted bugs with no
-  false positives on the `/safe/*` twins; signing verifies against an independent implementation; the
-  authz matrix flags the IDOR; GraphQL introspection and the field-authz bug are detected). Both the
-  tests and the DoDs run in CI on every push, on Linux for the core and macOS for the app.
+- **516 unit/integration tests** (`swift-testing`) covering every module, plus **~25 "Definition of
+  Done" scripts** (`Scripts/*-dod.sh`) that run the real `gulp-cli`, `gulp-vulnlab` and `gulp-beacon`
+  end to end and assert observable behaviour (the scanner finds exactly the planted bugs with no false
+  positives on the `/safe/*` twins; signing verifies against an independent implementation; the authz
+  matrix flags the IDOR; GraphQL introspection and the field-authz bug are detected; the WS workbench's
+  per-message-authz, fuzzer, OAST-over-WS and scripted-sequence probes each pass against VulnLab's WS
+  routes; the smuggling confirmation refuses to auto-send and is scope-gated). Both the tests and the
+  DoDs run in CI on every push, on Linux for the core and macOS for the app.
 - **VulnLab as a differential oracle.** The DoD scripts assert against a controlled vulnerable app
   with safe twins, so "the tool is correct" is a reproducible claim, not a vibe. The signing and
   authz DoDs deliberately verify with a *second, independent* implementation in VulnLab, so a pass
@@ -122,11 +144,16 @@ GulpFeatures     → the engines it surfaces + GulpWorkspace + GulpUI   # UI (ma
 
 ## 6. Risks and technical debt
 
-1. **macOS-gated surfaces are unverified in cloud sessions.** The browser automation (CDP),
-   notarized packaging, and the live AI provider can't be exercised on Linux; they depend on the
-   macOS CI job that is currently starved of minutes. This is a process risk, not a design flaw.
-2. **Five stub modules** (`GulpSequencer`, `GulpScript`, `GulpReport`, `GulpExtensions`, `GulpAI`)
-   are placeholders for unbuilt milestones; the package graph is ready for them.
+1. **macOS-gated surfaces are unverified in cloud sessions.** The SwiftUI tool screens
+   (`GulpFeatures`), the in-process JavaScriptCore host (`GulpScript`), the CDP browser automation,
+   notarized packaging, and the live AI provider can't be *compiled or exercised* on Linux; they
+   depend on the macOS CI job. This is the dominant residual risk — not a design flaw, but it means a
+   missing dependency or an API-signature error behind an Apple-framework guard (see §2) only shows up
+   on the macOS leg. Mitigation applied: every macOS view/host in this round was written against the
+   engines' *verified* public signatures (read from source) and the Apple-framework surface is kept to
+   constructs already proven elsewhere in the module.
+2. **All milestone modules are now built**; no stubs remain. The post-1.0 breadth (further WS
+   sub-protocol coverage, richer AI tool-use) is enhancement, not missing structure.
 3. **Signing keys not yet in the Keychain** (see §3).
 4. **`GulpWorkspace` is large (~5k lines)** and imports nearly everything by design (it is the
    composition root). It is cohesive but worth watching; the service-per-file split keeps it
