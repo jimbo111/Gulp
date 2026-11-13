@@ -4,6 +4,7 @@
 
 import ArgumentParser
 import Foundation
+import GulpCodec
 import GulpCore
 import GulpFuzzer
 import GulpHTTP
@@ -91,6 +92,8 @@ struct WSFuzz: AsyncParsableCommand {
     @Option(help: "The server, e.g. http://127.0.0.1:8088.") var target: String
     @Option(help: "The WebSocket path.") var path = "/ws/fuzz"
     @Option(help: "The message template, with §…§ around each payload position.") var template: String
+    @Flag(help: "Treat --template as a captured message and auto-mark its JSON values (WSX-007).")
+    var auto = false
     @Option(help: "Comma-separated payloads (or use --payload-file).") var payloads = ""
     @Option(help: "A wordlist file, one payload per line.") var payloadFile: String?
     @Option(help: "Add a literal prefix to every payload.") var prefix: String?
@@ -117,8 +120,17 @@ struct WSFuzz: AsyncParsableCommand {
         if let prefix { processors.append(.prefix(prefix)) }
         if let suffix { processors.append(.suffix(suffix)) }
 
+        let messageTemplate: String
+        if auto {
+            let decoded = WSSubprotocolCodec.decode(Array(template.utf8))
+            messageTemplate = WSSubprotocolCodec.autoInsertionPoints(decoded)
+            print("ws-fuzz: \(decoded.subprotocol.rawValue) → template \(messageTemplate)")
+        } else {
+            messageTemplate = template
+        }
+
         let config = WSFuzzConfig(
-            template: Array(template.utf8),
+            template: Array(messageTemplate.utf8),
             payloadSet: PayloadSet(source, processors: processors),
             matches: grep.map { [GrepMatch($0, isRegex: true)] } ?? [],
             extracts: extract.map { [.regex(pattern: $0, group: 1)] } ?? [],

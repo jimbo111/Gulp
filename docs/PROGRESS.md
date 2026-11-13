@@ -544,6 +544,17 @@ for behavior.
   VulnLab (a WS message yields correlated `dns, http` interactions). gulp-cli gained a direct `GulpOAST`
   dependency. No unit test (live-only integration; covered by the DoD). 506 tests. Burp's Collaborator
   is not wired into WebSocket messages, so this has no Burp equivalent.
+- 2026-11-13 — **WS sub-protocol decode + auto insertion points (F01 §2.4, WSX-006/007)**:
+  `WSSubprotocolCodec` (in `GulpCodec`) detects and splits the transport envelope of socket.io,
+  graphql-ws, SignalR, STOMP and bare JSON from their editable payload, byte-exact
+  (`encode(decode(x)) == x`), with a raw/hex fallback — shared by WS history, the WS Repeater and the
+  WS Fuzzer. `autoInsertionPoints` (WSX-007) wraps each JSON string/number *value* (never keys or the
+  envelope) in `§…§`, and `gulp-cli ws-fuzz --auto` turns a captured message into a fuzz template
+  automatically (e.g. `{"q":"PH"}` → `{"q":§"PH"§}`, socket.io `42[…]` keeps its `42` prefix).
+  `WSSubprotocolTests` (10) + the `--auto` block in `Scripts/wsfuzz-dod.sh` PASS. 516 tests (the lone
+  non-pass in the full run is the documented GulpDiff F13 perf flake under CPU contention, which passes
+  in isolation at 0.42 s; unrelated to these changes). Burp needs an extension to understand WS
+  sub-protocols.
 - 2026-11-13 — **M20 release tooling (doc 02 §8)**: wrote the missing `Scripts/release.sh` (archive →
   sign helpers inside-out with Hardened Runtime + timestamp → notarize with notarytool → staple → build
   + notarize + staple the DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual

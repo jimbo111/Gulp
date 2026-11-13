@@ -28,6 +28,13 @@ echo "$out" | grep -q "3 message(s) over one socket" || fail "should send 3 mess
 echo "$out" | grep -q "1 match(es)" || fail "exactly one reply should match the grep"
 echo "$out" | grep -q "\[MATCH\] #3 payload=INJECT" || fail "the INJECT payload should be the match"
 echo "$out" | grep -q "extract=alpha" || fail "the echoed value should be extracted"
-echo "PASS: ws-fuzz drives one socket, greps and extracts each reply"
+echo "PASS 1: ws-fuzz drives one socket, greps and extracts each reply"
+
+echo "== ws-fuzz --auto (WSX-007: auto insertion points) =="
+auto=$("$GULP" ws-fuzz --target "$LAB" --path /ws/fuzz --template '{"q":"PH"}' --auto \
+  --payloads alpha,INJECT --grep 'INJECT'); echo "$auto"
+echo "$auto" | grep -qF 'JSON → template {"q":§"PH"§}' || fail "auto should mark the JSON value, not the key"
+echo "$auto" | grep -q "1 match(es)" || fail "the auto-generated fuzz should still match"
+echo "PASS 2: --auto decodes the sub-protocol and marks JSON values automatically"
 
 echo "WS Fuzzer DoD: PASS"
