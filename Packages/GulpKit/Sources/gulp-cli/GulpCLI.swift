@@ -36,6 +36,7 @@ struct GulpCommand: AsyncParsableCommand {
             GovernorCommand.self, SessionCommand.self, AuthzCommand.self, GraphQLCommand.self,
             ReportCommand.self, SequencerCommand.self, DiscoverParams.self, Smuggle.self, CSWSH.self,
             JSReconCommand.self, Pollute.self, WSAuthz.self, WSFuzz.self, SmuggleConfirm.self,
+            WSOast.self,
         ])
 }
 

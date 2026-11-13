@@ -181,6 +181,10 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/wsfuzz-dod.sh
+      - name: WS OAST Definition of Done (WSX-005: a WebSocket message triggers a correlated blind-SSRF interaction)
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/wsoast-dod.sh
       - name: Parameter Pollution Definition of Done (/pollute resolves duplicates last-wins, /safe/pollute first-wins)
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib

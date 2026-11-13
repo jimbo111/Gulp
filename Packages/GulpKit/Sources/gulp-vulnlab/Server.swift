@@ -76,6 +76,9 @@ enum WSHandlerMode: Equatable {
     /// `/ws/fuzz` (WSX-002): echo like `.echo` but with no greeting, so a fuzzer's first reply lines
     /// up with its first sent message.
     case echoQuiet
+    /// `/ws/ssrf` (WSX-005): a blind SSRF reachable only over WebSocket — a message carrying a URL to
+    /// the Beacon's domain makes the lab fetch it, so only an OAST interaction reveals it.
+    case ssrf
     /// `/ws/authz` (WSX-004): authorizes only at the handshake, so the privileged `secret` action
     /// succeeds on *any* upgraded connection — a replayed privileged message under a stripped identity
     /// still works.
@@ -117,7 +120,8 @@ final class AppHandler: ChannelInboundHandler {
             let isAuthzWS = target == "/ws/authz" || target.hasPrefix("/ws/authz?")
             let isSafeAuthzWS = target == "/safe/ws/authz" || target.hasPrefix("/safe/ws/authz?")
             let isFuzzWS = target == "/ws/fuzz" || target.hasPrefix("/ws/fuzz?")
-            if isWS || isSafeWS || isAuthzWS || isSafeAuthzWS || isFuzzWS,
+            let isSsrfWS = target == "/ws/ssrf" || target.hasPrefix("/ws/ssrf?")
+            if isWS || isSafeWS || isAuthzWS || isSafeAuthzWS || isFuzzWS || isSsrfWS,
                 let key = request.headerValue("sec-websocket-key")?.string(),
                 request.hasHeaderToken("upgrade", "websocket")
             {
@@ -139,6 +143,7 @@ final class AppHandler: ChannelInboundHandler {
                 if isAuthzWS { wsMode = .authzHandshakeOnly }
                 if isSafeAuthzWS { wsMode = .authzPerMessage }
                 if isFuzzWS { wsMode = .echoQuiet }
+                if isSsrfWS { wsMode = .ssrf }
                 wsIsAdmin = Self.cookieValue(request, "sid") == "admin"
                 acceptWebSocket(key: key, context: context)
                 let rest = buffer
@@ -225,6 +230,19 @@ final class AppHandler: ChannelInboundHandler {
         return "{\"ok\":true}"
     }
 
+    /// WSX-005: a blind SSRF reachable only over WebSocket. The message carries a URL (a bare URL or a
+    /// JSON `{"url":"…"}`); if its host is under the Beacon's domain, the lab fetches it (DNS + HTTP),
+    /// so only an OAST interaction reveals the injection. The frame itself just gets `queued`.
+    private func ssrfReply(to payload: [UInt8]) -> String {
+        let text = String(decoding: payload, as: UTF8.self)
+        if let range = text.range(of: #"https?://[^\s"'`\\]+"#, options: .regularExpression) {
+            let url = String(text[range])
+            _ = OASTLab.fetch(["url": url], safe: false)
+            return "{\"status\":\"queued\"}"
+        }
+        return "{\"status\":\"no-url\"}"
+    }
+
     /// The value of a cookie by name from the request's `Cookie` header, or nil.
     static func cookieValue(_ request: RawRequest, _ name: String) -> String? {
         guard let header = request.headerValue("cookie")?.string() else { return nil }
@@ -247,6 +265,11 @@ final class AppHandler: ChannelInboundHandler {
                     frame.opcode == WSOpcode.text.rawValue
                 {
                     let answer = authzReply(to: frame.payload)
+                    reply = WebSocketWire.frame(opcode: .text, payload: Array(answer.utf8), fin: frame.fin)
+                    break
+                }
+                if wsMode == .ssrf, frame.opcode == WSOpcode.text.rawValue {
+                    let answer = ssrfReply(to: frame.payload)
                     reply = WebSocketWire.frame(opcode: .text, payload: Array(answer.utf8), fin: frame.fin)
                     break
                 }

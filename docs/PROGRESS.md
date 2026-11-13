@@ -535,6 +535,15 @@ for behavior.
   send; authorized-but-out-of-scope is refused) PASS. 506 tests. This matches ADV-032's letter:
   "construct a follow-up that proves desync, with strong warnings and scope gating; never run
   destructive confirmations automatically."
+- 2026-11-13 — **OAST-correlated blind injection over WebSocket (F07 §2.6, WSX-005)**: `gulp-cli
+  ws-oast` registers an OAST payload (reusing `GulpOAST.InteractshClient`), opens one socket, carries
+  the payload URL in a WebSocket message, then polls and correlates the out-of-band DNS + HTTP
+  interactions back to that payload — a blind SSRF reachable only over the socket. VulnLab gained
+  `/ws/ssrf` (a WS handler that, on a message carrying a Beacon-domain URL, fetches it via the existing
+  `OASTLab.fetch` outbound helper). `Scripts/wsoast-dod.sh` PASS end-to-end against the dev Beacon +
+  VulnLab (a WS message yields correlated `dns, http` interactions). gulp-cli gained a direct `GulpOAST`
+  dependency. No unit test (live-only integration; covered by the DoD). 506 tests. Burp's Collaborator
+  is not wired into WebSocket messages, so this has no Burp equivalent.
 - 2026-11-13 — **M20 release tooling (doc 02 §8)**: wrote the missing `Scripts/release.sh` (archive →
   sign helpers inside-out with Hardened Runtime + timestamp → notarize with notarytool → staple → build
   + notarize + staple the DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual
