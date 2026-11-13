@@ -14,9 +14,12 @@ order; within a milestone, do P0 first.
   launched by the Gulp Browser launcher through the proxy loads `https://localhost:8443` with no
   certificate interstitial (SPKI pin of the Gulp CA) and the request is in history. M1–M4a DoD
   scripts still pass in the same run.
-- **Active milestone**: **M11c — Full check catalog and crawl-and-audit** next (the **daily-driver
-  beta** release gate after M9 still needs macOS for its release work); M5…M11b are implemented and
-  await the macOS CI run (see their status below).
+- **Active milestone**: capstone (architecture review + Burp-comparison-driven outperformance).
+  Implemented through M12b and M13b-GraphQL on the Linux-testable core; four outperformance
+  increments shipped (secret/JS recon, reporting, Check Recipes, vulnerable-JS-libraries). Remaining
+  leftover phases are macOS/browser/external-gated (M13a CDP, M17 polish, M18 live AI, M20
+  notarization) or deferred (M11c injection-style P1 checks). All non-UI work is in CI with DoDs;
+  `Scripts/arch-check.sh` enforces the architecture.
 - **Branching**: `main` holds merged milestones (PRs jimbo111/Gulp#1 M0–M2, #2 review fixes,
   #3 M3a, then M3b + the feature-review adoption). Work happens on
   the session branch and is merged by PR once CI is green.
