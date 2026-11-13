@@ -79,13 +79,10 @@ public final class JSExtensionHost: @unchecked Sendable {
     public func initialize(apiVersion: Int = 1) -> [ExtensionCheck] {
         guard let fn = context.objectForKeyedSubscript("initialize"), !fn.isUndefined,
             let result = fn.call(withArguments: [apiVersion]),
-            let object = result.toDictionary(),
-            let checks = object["passiveChecks"] as? [[String: Any]]
+            let object = result.toDictionary() as? [String: Any]
         else { return [] }
-        return checks.compactMap { (entry: [String: Any]) -> ExtensionCheck? in
-            guard let id = entry["id"] as? String, let name = entry["name"] as? String else { return nil }
-            return ExtensionCheck(id: id, name: name)
-        }
+        // Same wire contract as the out-of-process host; the decoding is shared and Linux-tested.
+        return ExtensionWire.checks(fromInitializeResult: object)
     }
 
     /// Run the extension's passive check over one exchange and collect its findings. Findings are only
@@ -98,10 +95,9 @@ public final class JSExtensionHost: @unchecked Sendable {
             denials.append("passiveCheck returned findings without the create-issues permission")
             return []
         }
-        guard let object = result.toDictionary(), let raw = object["findings"],
-            let data = try? JSONSerialization.data(withJSONObject: raw)
-        else { return [] }
-        return (try? JSONDecoder().decode([ExtensionFinding].self, from: data)) ?? []
+        guard let object = result.toDictionary() as? [String: Any] else { return [] }
+        // Same wire contract as the out-of-process host; the decoding is shared and Linux-tested.
+        return ExtensionWire.findings(fromCheckResult: object)
     }
 }
 #endif

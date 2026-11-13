@@ -69,13 +69,9 @@ public actor ExtensionHost {
     @discardableResult
     public func initialize(apiVersion: Int = 1) async throws -> [ExtensionCheck] {
         let result = try await call("initialize", params: ["apiVersion": apiVersion])
-        guard let object = try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any],
-            let checks = object["passiveChecks"] as? [[String: Any]]
+        guard let object = try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any]
         else { return [] }
-        return checks.compactMap { entry in
-            guard let id = entry["id"] as? String, let name = entry["name"] as? String else { return nil }
-            return ExtensionCheck(id: id, name: name)
-        }
+        return ExtensionWire.checks(fromInitializeResult: object)
     }
 
     /// Run the extension's passive check over one exchange and collect its findings. Findings are only
@@ -88,11 +84,9 @@ public actor ExtensionHost {
             denials.append("passiveCheck returned findings without the create-issues permission")
             return []
         }
-        guard let object = try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any],
-            let raw = object["findings"],
-            let data = try? JSONSerialization.data(withJSONObject: raw)
+        guard let object = try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any]
         else { return [] }
-        return (try? JSONDecoder().decode([ExtensionFinding].self, from: data)) ?? []
+        return ExtensionWire.findings(fromCheckResult: object)
     }
 
     /// Stop the extension, cancel the reader and fail any outstanding calls.
