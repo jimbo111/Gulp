@@ -157,7 +157,7 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/smuggle-dod.sh
-      - name: Smuggling confirmation workbench Definition of Done (ADV-032: constructs, warns, never auto-sends)
+      - name: "Smuggling confirmation workbench Definition of Done (ADV-032: constructs, warns, never auto-sends)"
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/smuggle-confirm-dod.sh
@@ -181,11 +181,11 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/wsfuzz-dod.sh
-      - name: WS OAST Definition of Done (WSX-005: a WebSocket message triggers a correlated blind-SSRF interaction)
+      - name: "WS OAST Definition of Done (WSX-005: a WebSocket message triggers a correlated blind-SSRF interaction)"
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/wsoast-dod.sh
-      - name: WS script Definition of Done (WSX-008: a send/expect sequence runs over one socket)
+      - name: "WS script Definition of Done (WSX-008: a send/expect sequence runs over one socket)"
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/wsscript-dod.sh
