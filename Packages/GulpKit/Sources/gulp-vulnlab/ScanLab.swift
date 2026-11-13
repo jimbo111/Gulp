@@ -115,6 +115,18 @@ enum ScanLab {
             return text("Reset link: http://\(host)/reset?token=abc\n")
         case "/pp/merge":
             return prototypePollution(body, safe: safe)
+        case "/nosql/find":
+            // NoSQL $where: the vulnerable twin evaluates `this.user == '<input>'` as a JS boolean;
+            // the safe twin compares the value literally (parameterized query).
+            return lookup(query["user"] ?? "", safe: safe, eq: "==", and: "&&")
+        case "/xpath/user":
+            // XPath: the vulnerable twin evaluates `name='<input>'` as an XPath boolean; the safe
+            // twin binds the value as an XPath variable.
+            return lookup(query["name"] ?? "", safe: safe, eq: "=", and: " and ")
+        case "/ldap/login":
+            // LDAP: the vulnerable twin interpolates into `(uid=<input>)`, so `*` is a wildcard that
+            // matches; the safe twin escapes the value (RFC 4515), so `*` matches nothing.
+            return ldapLookup(query["uid"] ?? "", safe: safe)
         case "/profile/update":
             // Mass assignment: the vulnerable twin echoes every field it received (role included);
             // the safe twin binds only name and email.
@@ -337,6 +349,59 @@ enum ScanLab {
             (try? JSONSerialization.data(withJSONObject: object)).map { String(decoding: $0, as: UTF8.self) }
             ?? "{}"
         return VulnReply(bytes: VulnLab.response(200, body: Array(json.utf8), type: "application/json"))
+    }
+
+    /// The one directory/collection record the lookup twins resolve against.
+    static let knownUser = "alice"
+    static let foundBody = #"{"user":"alice","role":"user"}"#
+    static let notFoundBody = #"{"results":[]}"#
+
+    /// NoSQL (`$where`) / XPath string-expression lookup. The vulnerable twin evaluates the value as
+    /// part of a boolean expression (`'alice' <eq> '<input>'`), so an injected `<and> '1'<eq>'1'`
+    /// conjunction keeps the match while `'1'<eq>'2'` removes it; the safe twin compares literally.
+    /// Nothing from the input is echoed, so there is no reflection and exactly one check fires.
+    static func lookup(_ input: String, safe: Bool, eq: String, and: String) -> VulnReply {
+        let matched: Bool
+        if safe {
+            matched = input == knownUser
+        } else {
+            matched = conjunctionHolds("'\(knownUser)' \(eq) '\(input)'", eq: eq, and: and)
+        }
+        return VulnReply(
+            bytes: VulnLab.response(
+                200, body: Array((matched ? foundBody : notFoundBody).utf8), type: "application/json"))
+    }
+
+    /// LDAP filter lookup. The vulnerable twin interpolates into `(uid=<input>)`, so `*` is a
+    /// wildcard that matches the record; the safe twin escapes the value, so only the exact name
+    /// matches and `*` matches nothing.
+    static func ldapLookup(_ input: String, safe: Bool) -> VulnReply {
+        let matched = safe ? (input == knownUser) : (input == knownUser || input == "*")
+        return VulnReply(
+            bytes: VulnLab.response(
+                200, body: Array((matched ? foundBody : notFoundBody).utf8), type: "application/json"))
+    }
+
+    /// Does every equality in `expr`, joined by `and`, hold? (A tiny stand-in for the JavaScript/XPath
+    /// boolean the vulnerable lookup twins would evaluate.) Each side is a single-quoted literal or the
+    /// XPath `string-length('…')` function.
+    static func conjunctionHolds(_ expr: String, eq: String, and: String) -> Bool {
+        for term in expr.components(separatedBy: and) {
+            let sides = term.components(separatedBy: eq)
+            guard sides.count == 2, evalSide(sides[0]) == evalSide(sides[1]) else { return false }
+        }
+        return true
+    }
+
+    /// Resolve `string-length('X')` to its length; otherwise strip whitespace and a pair of quotes.
+    static func evalSide(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("string-length('"), trimmed.hasSuffix("')") {
+            let inner = trimmed.dropFirst("string-length('".count).dropLast("')".count)
+            return String(inner.count)
+        }
+        guard trimmed.count >= 2, trimmed.hasPrefix("'"), trimmed.hasSuffix("'") else { return trimmed }
+        return String(trimmed.dropFirst().dropLast())
     }
 
     /// POST stores `message`; GET renders the messages — unencoded here, encoded on the safe twin.

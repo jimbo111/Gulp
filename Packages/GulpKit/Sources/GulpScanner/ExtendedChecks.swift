@@ -11,6 +11,7 @@ import GulpHTTP
 enum ExtendedChecks {
     static let all: [any ActiveCheck] = [
         CORSCheck(), HostHeaderCheck(), JWTScanCheck(), MassAssignmentCheck(), PrototypePollutionCheck(),
+        NoSQLInjectionCheck(), LDAPInjectionCheck(), XPathInjectionCheck(),
     ]
 }
 
@@ -218,6 +219,185 @@ struct PrototypePollutionCheck: ActiveCheck {
                 detail:
                     "A marker injected under `__proto__` appeared in a later clean response (`\(marker)`), so a server-side merge follows `__proto__` — prototype pollution.",
                 evidence: confirm, marker: marker, confidence: .firm)
+        ]
+    }
+}
+
+/// NoSQL injection in a JavaScript string context (for example MongoDB `$where`, or any server that
+/// concatenates input into an evaluated expression). A quote provokes a JavaScript parse error, and
+/// two independent JS-boolean pairs (`|| '1'=='1'` true, `|| '1'=='2'` false) flip the response the
+/// way a boolean-based SQL injection would — but with JavaScript operators, so it is a distinct
+/// family. Reuses `SQLInjectionCheck.similar` for the differential and the same two-pair rigour.
+struct NoSQLInjectionCheck: ActiveCheck {
+    let id = "active.nosqli"
+    let family = "nosqli"
+    let intensity = CheckIntensity.light
+    let kinds: Set<InsertionPointKind> = ActiveChecks.parameterKinds
+
+    /// JavaScript / MongoDB driver parse errors — none of which a SQL engine emits.
+    static let errorPatterns = [
+        "SyntaxError", "MongoError", "MongoServerError", "CastError", "BSONError", "BSONTypeError",
+        "unterminated string literal", "missing ) after argument list", "$where",
+    ]
+
+    func run(_ point: InsertionPoint?, baseline: Baseline?, context: AuditContext) async -> [IssueFinding] {
+        guard let point, let baseline else { return [] }
+        let v = point.baseValue
+        // Error based: a lone quote breaks the JavaScript string literal.
+        for payload in ["\(v)'", "\(v)\""] {
+            let probe = await context.send(point.build(context.base, payload: payload))
+            if let error = Self.errorPatterns.first(where: {
+                probe.text.contains($0) && !baseline.original.text.contains($0)
+            }) {
+                return [
+                    context.finding(
+                        "active.nosqli", point: point, variant: "error",
+                        detail:
+                            "A quote in **\(point.label)** produced a JavaScript/NoSQL engine error (`\(error)`), so the value is evaluated as part of a server-side expression.",
+                        evidence: probe, marker: error, confidence: .firm)
+                ]
+            }
+        }
+        // Boolean based: two independent JS-boolean true/false pairs, as for SQL injection. `&&`
+        // (true keeps the match, false removes it) so the oracle holds for a valid baseline value.
+        guard !baseline.volatile else { return [] }
+        let pairs = [
+            ("\(v)' && '1'=='1", "\(v)' && '1'=='2"), ("\(v)' && 'a'=='a", "\(v)' && 'a'=='b"),
+        ]
+        var evidence: Probe?
+        for (truePayload, falsePayload) in pairs {
+            let yes = await context.send(point.build(context.base, payload: truePayload))
+            let no = await context.send(point.build(context.base, payload: falsePayload))
+            let same = SQLInjectionCheck.similar(yes, baseline.original, removing: [truePayload, v])
+            let different = !SQLInjectionCheck.similar(no, baseline.original, removing: [falsePayload, v])
+            guard same && different else { return [] }
+            evidence = no
+        }
+        guard let evidence else { return [] }
+        return [
+            context.finding(
+                "active.nosqli", point: point, variant: "boolean",
+                detail:
+                    "Two independent JavaScript-boolean conditions (`&& '1'=='1'` and `&& 'a'=='a'`) appended to **\(point.label)** kept the original page while their false twins (`'1'=='2`) removed it — a NoSQL/JavaScript expression injection.",
+                evidence: evidence, confidence: .firm)
+        ]
+    }
+}
+
+/// LDAP injection in a search filter. An unbalanced parenthesis provokes a filter/parse error, and a
+/// wildcard (`*`) that matches where a random literal does not shows the value lands inside an LDAP
+/// filter (`(uid=INPUT)`) rather than being compared literally.
+struct LDAPInjectionCheck: ActiveCheck {
+    let id = "active.ldapi"
+    let family = "ldapi"
+    let intensity = CheckIntensity.light
+    let kinds: Set<InsertionPointKind> = ActiveChecks.parameterKinds
+
+    /// LDAP filter / directory errors — distinct from SQL and XML.
+    static let errorPatterns = [
+        "javax.naming", "LDAPException", "ldap_search", "Bad search filter", "invalid filter",
+        "Protocol error", "com.sun.jndi", "INVALID_SYNTAX", "FILTER_ERROR",
+    ]
+
+    func run(_ point: InsertionPoint?, baseline: Baseline?, context: AuditContext) async -> [IssueFinding] {
+        guard let point, let baseline else { return [] }
+        let v = point.baseValue
+        // Error based: an unbalanced parenthesis or filter operator breaks the filter.
+        for payload in ["\(v))", "\(v)(", "\(v)*)("] {
+            let probe = await context.send(point.build(context.base, payload: payload))
+            if let error = Self.errorPatterns.first(where: {
+                probe.text.contains($0) && !baseline.original.text.contains($0)
+            }) {
+                return [
+                    context.finding(
+                        "active.ldapi", point: point, variant: "error",
+                        detail:
+                            "An unbalanced parenthesis in **\(point.label)** produced an LDAP filter error (`\(error)`), so the value is built into a search filter.",
+                        evidence: probe, marker: error, confidence: .firm)
+                ]
+            }
+        }
+        // Boolean based: `*` is an LDAP wildcard that matches like the real value; a random literal
+        // does not. A plain exact-match parameter treats `*` literally, so neither matches and the
+        // check stays quiet.
+        guard !baseline.volatile else { return [] }
+        let invalidLiteral = "\(context.token(8))zz"
+        let wildcard = await context.send(point.build(context.base, payload: "*"))
+        let invalid = await context.send(point.build(context.base, payload: invalidLiteral))
+        // Strip both payloads from both comparisons so an endpoint that merely echoes the value (not
+        // an LDAP filter) matches the baseline either way and does not look like a wildcard match.
+        let wildcardMatches = SQLInjectionCheck.similar(wildcard, baseline.original, removing: ["*", v])
+        let invalidDiffers = !SQLInjectionCheck.similar(
+            invalid, baseline.original, removing: [invalidLiteral, v])
+        guard wildcardMatches && invalidDiffers else { return [] }
+        return [
+            context.finding(
+                "active.ldapi", point: point, variant: "wildcard",
+                detail:
+                    "An LDAP wildcard (`*`) in **\(point.label)** matched like the original value while a random literal did not, so the value is interpolated into an LDAP filter.",
+                evidence: wildcard, confidence: .firm)
+        ]
+    }
+}
+
+/// XPath injection in an XML query. A quote breaks the XPath string literal, and two independent
+/// `and`-boolean pairs flip the response (`' and '1'='1` keeps the match, `' and '1'='2` removes it).
+/// It uses lowercase `and`/`=` and single quotes — the XPath idiom — so it is distinct from the SQL
+/// `AND`-based check (uppercase, different family and lab route).
+struct XPathInjectionCheck: ActiveCheck {
+    let id = "active.xpathi"
+    let family = "xpathi"
+    let intensity = CheckIntensity.light
+    let kinds: Set<InsertionPointKind> = ActiveChecks.parameterKinds
+
+    /// XPath / XML evaluation errors — none of which a SQL engine emits.
+    static let errorPatterns = [
+        "XPathException", "xmlXPathEval", "Invalid expression", "Invalid predicate", "XPath",
+        "javax.xml.xpath", "SyntaxError: unexpected", "unclosed", "XPST0003",
+    ]
+
+    func run(_ point: InsertionPoint?, baseline: Baseline?, context: AuditContext) async -> [IssueFinding] {
+        guard let point, let baseline else { return [] }
+        let v = point.baseValue
+        // Error based: a lone quote breaks the XPath string literal.
+        for payload in ["\(v)'", "\(v)\""] {
+            let probe = await context.send(point.build(context.base, payload: payload))
+            if let error = Self.errorPatterns.first(where: {
+                probe.text.contains($0) && !baseline.original.text.contains($0)
+            }) {
+                return [
+                    context.finding(
+                        "active.xpathi", point: point, variant: "error",
+                        detail:
+                            "A quote in **\(point.label)** produced an XPath error (`\(error)`), so the value is built into an XPath expression.",
+                        evidence: probe, marker: error, confidence: .firm)
+                ]
+            }
+        }
+        // Boolean based: two independent `and`-boolean pairs that use the XPath-only `string-length()`
+        // function, so a SQL engine rejects the payload (no `string-length`) and only a true XPath
+        // context flips — this distinguishes XPath injection from SQL injection on real targets.
+        guard !baseline.volatile else { return [] }
+        let pairs = [
+            ("\(v)' and string-length('ab')='2", "\(v)' and string-length('ab')='9"),
+            ("\(v)' and string-length('abcd')='4", "\(v)' and string-length('abcd')='9"),
+        ]
+        var evidence: Probe?
+        for (truePayload, falsePayload) in pairs {
+            let yes = await context.send(point.build(context.base, payload: truePayload))
+            let no = await context.send(point.build(context.base, payload: falsePayload))
+            let same = SQLInjectionCheck.similar(yes, baseline.original, removing: [truePayload, v])
+            let different = !SQLInjectionCheck.similar(no, baseline.original, removing: [falsePayload, v])
+            guard same && different else { return [] }
+            evidence = no
+        }
+        guard let evidence else { return [] }
+        return [
+            context.finding(
+                "active.xpathi", point: point, variant: "boolean",
+                detail:
+                    "Two XPath conditions using `string-length()` appended to **\(point.label)** kept the original page when the length matched and removed it when it did not — XPath injection (the `string-length()` function a SQL engine would reject).",
+                evidence: evidence, confidence: .firm)
         ]
     }
 }

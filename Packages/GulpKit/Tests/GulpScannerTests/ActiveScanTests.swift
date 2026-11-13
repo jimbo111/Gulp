@@ -129,6 +129,20 @@ struct FakeApp: Sendable {
                     ? Self.text("{\"user\":\"alice\"}")
                     : Self.response(401, headers: [], body: "unauthorized"), 0.01
             )
+        case "/nosql/find":
+            let value = query["user"] ?? ""
+            let matched =
+                safe ? value == "alice" : Self.conjunctionHolds("'alice' == '\(value)'", eq: "==", and: "&&")
+            return (Self.json(matched), 0.01)
+        case "/xpath/user":
+            let value = query["name"] ?? ""
+            let matched =
+                safe ? value == "alice" : Self.conjunctionHolds("'alice' = '\(value)'", eq: "=", and: " and ")
+            return (Self.json(matched), 0.01)
+        case "/ldap/login":
+            let value = query["uid"] ?? ""
+            let matched = safe ? value == "alice" : (value == "alice" || value == "*")
+            return (Self.json(matched), 0.01)
         case "/pp/merge":
             // Server-side prototype pollution: the vulnerable twin follows `__proto__` into a shared
             // store and enriches later responses with the inherited keys; the safe twin ignores it.
@@ -217,6 +231,31 @@ struct FakeApp: Sendable {
 
     static func text(_ body: String) -> RawResponse {
         response(200, headers: ["Content-Type: text/plain"], body: body)
+    }
+
+    /// A constant record (or empty result) — no input is echoed, so there is no reflection.
+    static func json(_ matched: Bool) -> RawResponse {
+        response(
+            200, headers: ["Content-Type: application/json"],
+            body: matched ? #"{"user":"alice","role":"user"}"# : #"{"results":[]}"#)
+    }
+
+    /// Mirror of the lab's tiny boolean: every single-quoted equality joined by `and` must hold.
+    static func conjunctionHolds(_ expr: String, eq: String, and: String) -> Bool {
+        for term in expr.components(separatedBy: and) {
+            let sides = term.components(separatedBy: eq)
+            guard sides.count == 2, evalSide(sides[0]) == evalSide(sides[1]) else { return false }
+        }
+        return true
+    }
+
+    static func evalSide(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("string-length('"), trimmed.hasSuffix("')") {
+            return String(trimmed.dropFirst("string-length('".count).dropLast("')".count).count)
+        }
+        guard trimmed.count >= 2, trimmed.hasPrefix("'"), trimmed.hasSuffix("'") else { return trimmed }
+        return String(trimmed.dropFirst().dropLast())
     }
 
     static func response(_ status: Int, headers: [String], body: String) -> RawResponse {
@@ -419,6 +458,27 @@ struct ActiveScanTests {
         // The safe twin ignores `__proto__`, so a later clean response never inherits the marker.
         let (safe, _) = await scan([request], app: FakeApp(safe: true), config: unsafeConfig)
         #expect(!safe.contains { $0.typeID == "active.prototype-pollution" })
+    }
+
+    @Test("M11c: NoSQL, XPath and LDAP injection fire on the vulnerable twins and nothing on the safe ones")
+    func test_M11c_injectionFamilies() async {
+        let cases: [(RawRequest, String)] = [
+            (get("/nosql/find?user=alice"), "active.nosqli"),
+            (get("/xpath/user?name=alice"), "active.xpathi"),
+            (get("/ldap/login?uid=alice"), "active.ldapi"),
+        ]
+        for (request, typeID) in cases {
+            let (findings, _) = await scan([request], app: FakeApp())
+            #expect(findings.contains { $0.typeID == typeID }, "vulnerable \(typeID): \(pairs(findings))")
+            // The differential is exact: only the intended family fires, so the three never cross-match.
+            let others = ["active.nosqli", "active.xpathi", "active.ldapi", "active.sqli.boolean"]
+                .filter { $0 != typeID }
+            #expect(
+                !findings.contains { others.contains($0.typeID) },
+                "cross-match on \(typeID): \(pairs(findings))")
+            let (safe, _) = await scan([request], app: FakeApp(safe: true))
+            #expect(!safe.contains { $0.typeID == typeID }, "safe twin \(typeID): \(pairs(safe))")
+        }
     }
 
     @Test("SCN-030: the safe twins produce nothing")

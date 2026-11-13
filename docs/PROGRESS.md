@@ -430,7 +430,7 @@ for behavior.
 - [ ] M10b — gRPC & protobuf (F33) — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M11a — Crawler (static), Beacon client + dev Beacon, shared limiter + panic stop — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
 - [ ] M11b — Active scan engine + P0 checks — *implemented; local Linux gate + DoD PASS; awaiting macOS CI*
-- [ ] M11c — Full check catalog (incl. SCN-070…074) + crawl-and-audit — *partial: crawl-and-audit, API scan, gRPC points, re-test done; P1 active checks landed — CORS, host-header, JWT (alg:none/weak-secret), mass assignment (SCN-072), server-side prototype pollution (SCN-070); remaining: CSPT (SCN-071, browser-gated), upload bypass (SCN-073), NoSQL/LDAP/XPath injection families*
+- [ ] M11c — Full check catalog (incl. SCN-070…074) + crawl-and-audit — *partial: crawl-and-audit, API scan, gRPC points, re-test done; P1 active checks landed — CORS, host-header, JWT (alg:none/weak-secret), mass assignment (SCN-072), server-side prototype pollution (SCN-070), NoSQL/`$where`, XPath (via `string-length()`) and LDAP (wildcard) injection; remaining: CSPT (SCN-071, browser-gated), upload bypass (SCN-073)*
 - [ ] M12a — Sessions, auth, macros, request signing
 - [ ] M12b — Authz Matrix
 - [ ] M13a — Browser automation: CDP crawl, recorded logins, passkeys
@@ -454,6 +454,16 @@ for behavior.
 
 ## Log
 
+- 2026-11-13 — **M11c check catalog — NoSQL / XPath / LDAP injection families**: added three boolean-
+  differential active checks. NoSQL (`$where`) uses JavaScript `&& '1'=='1'` / `'1'=='2'` pairs; XPath
+  uses `string-length()` (a function a SQL engine rejects, so it is distinguished from SQL injection on
+  real targets, not only in the lab); LDAP uses a `*` wildcard that matches where a random literal does
+  not, with both payloads stripped from the comparison so a merely-reflecting endpoint can't look like a
+  filter. VulnLab gained `/nosql/find`, `/xpath/user`, `/ldap/login` with safe twins; the m11c-checks
+  DoD asserts each fires and its safe twin is clean, and the live m11b DoD still reports 0 unexpected /
+  0 missing (no cross-matching on the SQLi/XSS/SSTI routes). The one subtle bug: the LDAP wildcard
+  oracle first false-positived on every reflecting endpoint until the invalid probe's value was also
+  stripped from the similarity test.
 - 2026-11-13 — **M11c check catalog — prototype pollution (SCN-070) + mass assignment (SCN-072)**:
   added `PrototypePollutionCheck` (unsafe-gated; injects a random marker under `__proto__`, re-sends a
   clean request, confirms the marker leaks on an object that never set it) alongside the already-landed

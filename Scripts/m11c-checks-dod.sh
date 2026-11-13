@@ -66,4 +66,37 @@ echo "PASS 1: server-side prototype pollution flagged on /pp/merge, clean on the
 scan_expect "/profile/update" '{"name":"bob"}' "active.mass-assignment" yes
 scan_expect "/safe/profile/update" '{"name":"bob"}' "active.mass-assignment" no
 echo "PASS 2: mass assignment flagged on /profile/update, clean on the safe twin"
+
+# scan a raw GET of <path-with-query> and assert the issue type fires (or not).
+scan_get_expect() {  # <path?query> <issue-type> <should-fire:yes|no>
+  local path="$1" want="$2" fire="$3"
+  local proj="$WORK/$(echo "$path" | tr -c 'a-zA-Z0-9' '_').gulp"
+  printf 'GET %s HTTP/1.1\r\nHost: 127.0.0.1:8088\r\n\r\n' "$path" > "$WORK/req.txt"
+  "$GULP" scope --project "$proj" --add "$LAB/" > /dev/null
+  "$GULP" scan active --project "$proj" --raw "$WORK/req.txt" --target "$LAB" --config balanced --unsafe > "$WORK/scan.txt"
+  local issues
+  issues=$("$GULP" issues --project "$proj")
+  echo "$issues" | grep -E "$want" || true
+  if [ "$fire" = "yes" ]; then
+    echo "$issues" | grep -q "$want" || fail "$want not raised on $path"
+  else
+    if echo "$issues" | grep -q "$want"; then fail "$want wrongly raised on $path"; fi
+  fi
+}
+
+# 3. NoSQL ($where) injection.
+scan_get_expect "/nosql/find?user=alice" "active.nosqli" yes
+scan_get_expect "/safe/nosql/find?user=alice" "active.nosqli" no
+echo "PASS 3: NoSQL injection flagged on /nosql/find, clean on the safe twin"
+
+# 4. XPath injection.
+scan_get_expect "/xpath/user?name=alice" "active.xpathi" yes
+scan_get_expect "/safe/xpath/user?name=alice" "active.xpathi" no
+echo "PASS 4: XPath injection flagged on /xpath/user, clean on the safe twin"
+
+# 5. LDAP injection.
+scan_get_expect "/ldap/login?uid=alice" "active.ldapi" yes
+scan_get_expect "/safe/ldap/login?uid=alice" "active.ldapi" no
+echo "PASS 5: LDAP injection flagged on /ldap/login, clean on the safe twin"
+
 echo "M11c checks DoD: PASS"

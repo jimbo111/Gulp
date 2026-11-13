@@ -373,5 +373,21 @@ public enum IssueDefinitions {
             "Reject `__proto__`/`constructor`/`prototype` keys in input; use a safe merge (null-prototype objects, `Map`), and freeze prototypes.",
             "- [OWASP prototype pollution prevention](\(owasp)Prototype_Pollution_Prevention_Cheat_Sheet.html)"
         ),
+        def(
+            "active.nosqli", "NoSQL / JavaScript expression injection", "NoSQL injection", .high, .firm,
+            "Input reaches a server-side JavaScript or NoSQL expression (such as a MongoDB `$where` clause): a quote broke the expression and JavaScript-boolean conditions flipped the response, so an attacker can bypass authentication or extract data.",
+            "Never build queries or `$where`/`$expr` expressions from input; use the driver's typed query API, and reject query operators (`$ne`, `$gt`, `$where`) in user-supplied values.",
+            "- [OWASP testing for NoSQL injection](https://owasp.org/www-project-web-security-testing-guide/)"
+        ),
+        def(
+            "active.ldapi", "LDAP injection", "LDAP injection", .high, .firm,
+            "Input is interpolated into an LDAP search filter: an unbalanced parenthesis broke the filter, or a wildcard matched where a literal did not, so an attacker can alter the filter to bypass authentication or enumerate the directory.",
+            "Escape input for LDAP filters (RFC 4515) or use a parameterized directory API; validate against an allowlist and never build filters by string concatenation.",
+            "- [OWASP LDAP injection prevention](\(owasp)LDAP_Injection_Prevention_Cheat_Sheet.html)"),
+        def(
+            "active.xpathi", "XPath injection", "XPath injection", .high, .firm,
+            "Input is built into an XPath expression over XML data: a quote broke the expression and `or`-boolean conditions flipped the response, so an attacker can bypass checks or read other nodes of the document.",
+            "Use parameterized XPath (variable binding) instead of string concatenation, and escape or allowlist input.",
+            "- [OWASP XPath injection](https://owasp.org/www-community/attacks/XPATH_Injection)"),
     ]
 }
