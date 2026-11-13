@@ -169,6 +169,10 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/wsauthz-dod.sh
+      - name: WS Fuzzer Definition of Done (ws-fuzz drives one socket, greps and extracts each reply)
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/wsfuzz-dod.sh
       - name: Parameter Pollution Definition of Done (/pollute resolves duplicates last-wins, /safe/pollute first-wins)
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib

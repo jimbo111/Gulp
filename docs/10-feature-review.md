@@ -128,10 +128,13 @@ Each subsection: **what it does · module · proof (tests + DoD) · Burp verdict
 - **Does:** the four Intruder-class attack types (sniper/battering-ram/pitchfork/cluster-bomb),
   payload sources and processing, grep-match/extract/reflection/anomaly analysis, a concurrent runner
   with rps cap, retries, stop-on, pause/resume/cancel, recursive grep, ScopeGuard, content discovery,
-  and **native protobuf-field positions**.
-- **Module:** `GulpFuzzer`. **Proof:** `GulpFuzzerTests` (19); `m8` DoD (incl. content discovery).
+  and **native protobuf-field positions**. The **WS Fuzzer** (WSX-002) reuses the same payload
+  generators/processors and grep/extract over one persistent WebSocket connection (`gulp-cli ws-fuzz`).
+- **Module:** `GulpFuzzer`. **Proof:** `GulpFuzzerTests` (incl. `WSFuzzerTests`); `m8` DoD (content
+  discovery) and `wsfuzz-dod.sh` (one-socket WS fuzz with grep/extract on VulnLab `/ws/fuzz`).
 - **Burp:** ⭐ — no Community-tier throttle (the limiter is a user-controlled safety cap, not a
-  paywall), and protobuf-field fuzzing is native (Burp needs an extension).
+  paywall), protobuf-field fuzzing is native (Burp needs an extension), and Intruder does not fuzz
+  WebSocket messages at all.
 
 ### 3.9 GulpQL + logger + notebook ⭐
 - **Does:** a real query language over history (lexer/parser/AST/evaluator with push-down to SQL),

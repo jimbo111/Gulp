@@ -73,6 +73,9 @@ struct VulnLabServer: Sendable {
 enum WSHandlerMode: Equatable {
     /// `/ws`, `/safe/ws`: echo every message as `echo: …` (M4b).
     case echo
+    /// `/ws/fuzz` (WSX-002): echo like `.echo` but with no greeting, so a fuzzer's first reply lines
+    /// up with its first sent message.
+    case echoQuiet
     /// `/ws/authz` (WSX-004): authorizes only at the handshake, so the privileged `secret` action
     /// succeeds on *any* upgraded connection — a replayed privileged message under a stripped identity
     /// still works.
@@ -113,7 +116,8 @@ final class AppHandler: ChannelInboundHandler {
             let isSafeWS = target == "/safe/ws" || target.hasPrefix("/safe/ws?")
             let isAuthzWS = target == "/ws/authz" || target.hasPrefix("/ws/authz?")
             let isSafeAuthzWS = target == "/safe/ws/authz" || target.hasPrefix("/safe/ws/authz?")
-            if isWS || isSafeWS || isAuthzWS || isSafeAuthzWS,
+            let isFuzzWS = target == "/ws/fuzz" || target.hasPrefix("/ws/fuzz?")
+            if isWS || isSafeWS || isAuthzWS || isSafeAuthzWS || isFuzzWS,
                 let key = request.headerValue("sec-websocket-key")?.string(),
                 request.hasHeaderToken("upgrade", "websocket")
             {
@@ -134,6 +138,7 @@ final class AppHandler: ChannelInboundHandler {
                 // for per-message authorization is read from `Cookie: sid=…`.
                 if isAuthzWS { wsMode = .authzHandshakeOnly }
                 if isSafeAuthzWS { wsMode = .authzPerMessage }
+                if isFuzzWS { wsMode = .echoQuiet }
                 wsIsAdmin = Self.cookieValue(request, "sid") == "admin"
                 acceptWebSocket(key: key, context: context)
                 let rest = buffer
@@ -238,7 +243,9 @@ final class AppHandler: ChannelInboundHandler {
             let reply: [UInt8]
             switch WSOpcode(rawValue: frame.opcode) {
             case .text, .binary, .continuation:
-                if wsMode != .echo, frame.opcode == WSOpcode.text.rawValue {
+                if wsMode == .authzHandshakeOnly || wsMode == .authzPerMessage,
+                    frame.opcode == WSOpcode.text.rawValue
+                {
                     let answer = authzReply(to: frame.payload)
                     reply = WebSocketWire.frame(opcode: .text, payload: Array(answer.utf8), fin: frame.fin)
                     break

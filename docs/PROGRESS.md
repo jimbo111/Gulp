@@ -505,6 +505,16 @@ for behavior.
   it is a manual Repeater exercise). Also fixed two mislabeled requirement IDs: the CSWSH command and
   DoD were commented `WSX-004`; CSWSH is `WSX-003`. Remaining WS items (WS Fuzzer WSX-002/005/007,
   sub-protocol decode WSX-006, scripted sequences WSX-008) stay post-1.0.
+- 2026-11-13 — **WS Fuzzer (F07 §2.6, WSX-002)**: `WSFuzzEngine` (in `GulpFuzzer`) iterates a
+  `§…§`-marked message template's payloads as frames over **one** persistent `openWebSocket` connection
+  — not the HTTP exchange loop — reusing only the F07 payload generators/processors (`PayloadSet`,
+  `PayloadPipeline`) and the grep/extract/reflection analysis, for which `ResponseAnalyzer` gained a
+  text-based `analyze(text:payloads:)` shared with the HTTP path. A testable `WSFuzzChannel` protocol
+  abstracts the socket (`LiveWSChannel` in the CLI wraps `WebSocketSession` with an ordered reply queue
+  + per-exchange timeout). `gulp-cli ws-fuzz`, VulnLab `/ws/fuzz` (a greeting-less echo so the first
+  reply lines up with the first send), `WSFuzzerTests` (4) + `Scripts/wsfuzz-dod.sh` PASS (3 payloads
+  over one socket, only the grep-matching reply flagged, echoed value extracted). 500 tests. Burp's
+  Intruder does not fuzz WS messages natively.
 - 2026-11-13 — **M20 release tooling (doc 02 §8)**: wrote the missing `Scripts/release.sh` (archive →
   sign helpers inside-out with Hardened Runtime + timestamp → notarize with notarytool → staple → build
   + notarize + staple the DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual

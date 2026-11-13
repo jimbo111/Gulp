@@ -125,7 +125,13 @@ public struct ResponseAnalyzer: Sendable {
                 matches: matchers.map { _ in false }, extracts: extractors.map { _ in nil }, reflection: .none
             )
         }
-        let text = Self.text(of: response)
+        return analyze(text: Self.text(of: response), payloads: payloads)
+    }
+
+    /// Run the same grep columns, extract columns and reflection check over arbitrary text — used by
+    /// the WebSocket Fuzzer (WSX-002), where the "response" is a returned WS message rather than an
+    /// HTTP exchange.
+    public func analyze(text: String, payloads: [[UInt8]]) -> ResponseFindings {
         let range = NSRange(text.startIndex..., in: text)
         let matches = matchers.map { $0.firstMatch(in: text, range: range) != nil }
         let extracts: [String?] = extractors.map { regex, group in
