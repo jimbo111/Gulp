@@ -19,6 +19,7 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 | **Byte-exact requests (no normalization)** | 🟡 | ⭐ | Burp's engine re-normalizes some requests; Gulp *never* round-trips through a parser — "raw bytes are the truth" is an enforced invariant (0 `URLSession` in engines). This matters for smuggling/desync work. |
 | Upstream proxies, SOCKS, match & replace | ✅ | ✅ | |
 | HTTP/3 (QUIC) client | 🟡 | ⬜ | Burp has experimental HTTP/3; Gulp has it as post-1.0 (HTTP-037). **Gap.** |
+| **HTTP request smuggling / desync** | ✅ (HTTP Request Smuggler, ext) | ✅ | Built (2026-11-13): `gulp-cli smuggle` sends byte-exact CL.TE/TE.CL timing probes the byte-exact engine makes possible and classifies by the timing differential; proven on a VulnLab desync emulation. Burp needs the HTTP Request Smuggler extension. |
 
 ## 2. Repeater / Intruder-class fuzzing
 

@@ -267,6 +267,7 @@ reused, so older references stay unambiguous.
 - **DoD:** Param Discovery finds the hidden parameter planted in a VulnLab endpoint (F23 test 3); the secret scanner finds the planted key in a VulnLab JS file and reports it redacted (F23 test 7); JS Recon reconstructs the `src/` tree from the exposed `.map` and adds the JS-only `/api/internal/*` routes to the site map (F27 tests 1–2).
 
 ### M19b — Smuggling Probe
+- [x] *2026-11-13:* **Smuggling Probe** (ADV-030/031) built — byte-exact CL.TE / TE.CL timing probes (`SmugglingProbe`, leveraging the raw engine's conflicting-framing control) + a timing classifier; `gulp-cli smuggle`; VulnLab `/smuggle` emulates the desync hang (5 s) on conflicting Content-Length + Transfer-Encoding and `/safe/smuggle` rejects it; `Scripts/smuggle-dod.sh` PASS. The guided confirmation/exploitation workbench (ADV-032) stays deferred (never auto-run).
 - [ ] All P0/P1 of F23 §4 (ADV-030…ADV-033).
 - **DoD:** The Smuggling Probe classifies VulnLab's CL.TE emulation listener (:8090) as vulnerable via timing differentials and a correctly-behaving endpoint as safe (F23 test 4).
 

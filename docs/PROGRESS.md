@@ -454,6 +454,13 @@ for behavior.
 
 ## Log
 
+- 2026-11-13 — **Smuggling Probe (F23 ADV-030/031, M19b)**: `SmugglingProbe` builds byte-exact CL.TE
+  and TE.CL timing probes (conflicting Content-Length vs Transfer-Encoding framing a normalizing client
+  can't send — the payoff of the "raw bytes are the truth" engine) and classifies a vector by its
+  timing differential against a clean baseline. `gulp-cli smuggle`; VulnLab `/smuggle` emulates the
+  desync hang (5 s on a CL+TE conflict) and `/safe/smuggle` rejects it; `Scripts/smuggle-dod.sh` PASS
+  (CL.TE/TE.CL → VULNERABLE on the vuln route, no differential on the safe twin). 488 tests. The guided
+  confirmation/exploitation workbench (ADV-032) stays deferred and is never auto-run.
 - 2026-11-13 — **Parameter Discovery (F23 ADV-020) + web cache poisoning (F28 WCP-001)**: `ParamMiner`
   brute-forces hidden query parameters and reports the ones the server processes — a canary reflected
   in the body (`reflected`) or a status/length change isolated by binary search (`behavior change`);

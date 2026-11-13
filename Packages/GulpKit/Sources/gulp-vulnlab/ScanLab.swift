@@ -136,6 +136,16 @@ enum ScanLab {
             // Sequencer rates it Poor (most of it never changes; the rest only counts up).
             let token = String(format: "a1b2c3d4%08x", tokenCounter.next())
             return text("ok\n", headers: ["Set-Cookie: SID=\(token); Path=/; HttpOnly"])
+        case "/smuggle":
+            // HTTP request-smuggling emulation: a request with conflicting Content-Length and
+            // Transfer-Encoding framing makes the vulnerable twin hang (a back-end waiting for bytes
+            // that never come), surfaced as a 5 s delay; the safe twin rejects the conflict promptly.
+            let conflicting =
+                request.headerValue("content-length") != nil
+                && request.headerValue("transfer-encoding")?.string().lowercased().contains("chunked")
+                    == true
+            if !safe && conflicting { return text("Request received.\n", delay: 5000) }
+            return text(safe && conflicting ? "Ambiguous framing rejected.\n" : "Request received.\n")
         case "/cache":
             // Web cache poisoning: the vulnerable twin reflects X-Forwarded-Host into a cacheable
             // response; the safe twin uses a canonical host, so there is nothing to poison.
