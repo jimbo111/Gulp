@@ -302,18 +302,20 @@ Each subsection: **what it does · module · proof (tests + DoD) · Burp verdict
   Parameter Pollution (`gulp-cli pollute`) duplicates each param with a canary and classifies the
   server's resolution (first/last-wins, concatenated, both) — a last-wins/concatenated quirk is a
   front-end/WAF bypass primitive; the Smuggling Probe (`gulp-cli smuggle`) detects CL.TE/TE.CL desync
-  by byte-exact timing probes; the CSWSH probe (`gulp-cli cswsh`) flags WebSocket endpoints that
+  by byte-exact timing probes and the confirmation workbench (`gulp-cli smuggle-confirm`) constructs a
+  scope-gated, never-auto-sent self-poisoning proof-of-desync; the CSWSH probe (`gulp-cli cswsh`) flags WebSocket endpoints that
   upgrade without an Origin check; the WS per-message authorization probe (`gulp-cli ws-authz`) replays
   a privileged message under a stripped identity and flags sockets that authorize only at the
   handshake; and `active.cache-poisoning` flags an unkeyed header reflected into a cacheable response.
 - **Modules:** `GulpScanner` (`ParamMiner`, `ParamPollution`, `SmugglingProbe`, `WSAuthzProbe`,
   `CachePoisoningCheck`), `gulp-cli`. **Proof:** `ParamMinerTests`, `ParamPollutionTests`,
-  `SmugglingTests`, `WSAuthzProbeTests`, the cache-poisoning scanner test, and six executable DoDs
-  against VulnLab — `paramdisc-dod.sh` (hidden debug/trace, clean safe twin), `pollute-dod.sh`
-  (`/pollute` last-wins quirk vs `/safe/pollute` first-wins), `smuggle-dod.sh` (CL.TE/TE.CL timing
-  differential on `/smuggle`, clean `/safe/smuggle`), `cswsh-dod.sh` (`/ws` vulnerable, `/safe/ws` not),
-  `wsauthz-dod.sh` (`/ws/authz` handshake-only vs `/safe/ws/authz` per-message), and the cache step in
-  `m11c-checks-dod.sh`.
+  `SmugglingTests`, `SmugglingConfirmTests`, `WSAuthzProbeTests`, the cache-poisoning scanner test, and
+  seven executable DoDs against VulnLab — `paramdisc-dod.sh` (hidden debug/trace, clean safe twin),
+  `pollute-dod.sh` (`/pollute` last-wins quirk vs `/safe/pollute` first-wins), `smuggle-dod.sh`
+  (CL.TE/TE.CL timing differential on `/smuggle`, clean `/safe/smuggle`), `smuggle-confirm-dod.sh`
+  (constructs the confirmation, warns, never auto-sends, refuses out-of-scope), `cswsh-dod.sh` (`/ws`
+  vulnerable, `/safe/ws` not), `wsauthz-dod.sh` (`/ws/authz` handshake-only vs `/safe/ws/authz`
+  per-message), and the cache step in `m11c-checks-dod.sh`.
 - **Burp:** ⭐ — these are the in-tree equivalents of Burp's Param Miner (both hidden-param discovery
   and the HTTP Param Miner duplicate-handling check) and HTTP Request Smuggler extensions and its
   cache-poisoning scanner; the smuggling probes in particular are the payoff of the byte-exact engine.

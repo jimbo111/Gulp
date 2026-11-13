@@ -523,6 +523,18 @@ for behavior.
   is a superset of `/recon/app.js` adding `adminPanel`, `ssoToken` and an `admin.corp` host.
   `JSReconDiffTests` (3) + `Scripts/jsrecon-diff-dod.sh` PASS (added surface surfaces, nothing falsely
   removed). 503 tests.
+- 2026-11-13 — **Smuggling confirmation workbench (F23 ADV-032)**: `SmugglingProbe.confirmation` builds
+  a non-destructive **self-poisoning** desync proof — an attack that smuggles an invalid `GPOST`
+  request-start onto the tester's **own** connection, plus an innocuous follow-up whose poisoned 4xx
+  proves the desync (poisons only the tester's connection, not other users). `gulp-cli smuggle-confirm`
+  is the guided workbench: **dry run by default** (prints the request pair with prominent warnings,
+  sends nothing), **scope-gated** (refuses an out-of-scope host even when authorized), and it **never
+  auto-sends** — a live send needs the explicit `--i-am-authorized` flag. `SmugglingConfirmTests` (3,
+  verifying the conflicting framing, the GPOST prefix, and that the CL.TE Content-Length equals the
+  smuggled tail length) + `Scripts/smuggle-confirm-dod.sh` (dry-run prints the warning + pair + does not
+  send; authorized-but-out-of-scope is refused) PASS. 506 tests. This matches ADV-032's letter:
+  "construct a follow-up that proves desync, with strong warnings and scope gating; never run
+  destructive confirmations automatically."
 - 2026-11-13 — **M20 release tooling (doc 02 §8)**: wrote the missing `Scripts/release.sh` (archive →
   sign helpers inside-out with Hardened Runtime + timestamp → notarize with notarytool → staple → build
   + notarize + staple the DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual

