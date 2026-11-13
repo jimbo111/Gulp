@@ -321,6 +321,44 @@ Each subsection: **what it does · module · proof (tests + DoD) · Burp verdict
   cache-poisoning scanner; the smuggling probes in particular are the payoff of the byte-exact engine.
   The guided smuggling-exploitation workbench and WS fuzzing remain.
 
+### 3.25 WebSocket workbench (WSX-002…008) ⭐
+
+- **Does:** the complete non-UI WebSocket security toolset over one persistent `openWebSocket`
+  connection: **WS Fuzzer** (`ws-fuzz`, WSX-002) fuzzes a `§…§` template reusing the Fuzzer's payload
+  generators + grep; **CSWSH** (`cswsh`, WSX-003); **per-message authorization** (`ws-authz`, WSX-004)
+  replays a privileged message under a stripped identity; **OAST-over-WS** (`ws-oast`, WSX-005)
+  correlates a blind-SSRF interaction carried in a frame; **sub-protocol decode** (`WSSubprotocolCodec`,
+  WSX-006) splits socket.io/graphql-ws/SignalR/STOMP/JSON envelopes byte-exactly; **auto insertion
+  points** (`ws-fuzz --auto`, WSX-007) marks a captured message's JSON values; **scripted sequences**
+  (`ws-script`, WSX-008) runs send/expect flows for stateful protocols.
+- **Modules:** `GulpScanner` (`WSAuthzProbe`), `GulpFuzzer` (`WSFuzzEngine`), `GulpCodec`
+  (`WSSubprotocolCodec`, `WSScript`), `GulpHTTP` (`WebSocketSession`), `gulp-cli`. **Proof:**
+  `WSAuthzProbeTests` (3), `WSFuzzerTests` (4), `WSSubprotocolTests` (10), `WSScriptTests` (3), and the
+  executable DoDs `wsfuzz-dod.sh` (incl. `--auto`), `cswsh-dod.sh`, `wsauthz-dod.sh` (handshake-only vs
+  per-message twins), `wsoast-dod.sh` (live Beacon + `/ws/ssrf`), `wsscript-dod.sh` (happy path + a
+  mismatch that stops the run) — all against VulnLab's WS routes.
+- **Burp:** ⭐⭐ — this is the clearest area of outperformance. Burp's Intruder is HTTP-only, its
+  Collaborator is not wired into WS, and it has no per-message-authz, sub-protocol-decode or
+  scripted-WS runner natively; several of these need third-party extensions and some have no Burp
+  answer at all.
+
+### 3.26 macOS surfaces — tool screens + the in-process JS host 🟡 (macOS-CI-verified)
+
+- **Does:** the SwiftUI tool screens (`GulpFeatures`: Sequencer, JS Recon, Assistant, GraphQL,
+  Extensions, DOM-Probe, Authz-Matrix) that surface the engines, and the **in-process JavaScriptCore
+  extension host** (`GulpScript.JSExtensionHost`, the `js` runtime) that runs an extension script in a
+  `JSContext` with the same manifest-permission gating as the process host.
+- **Verification posture (honest):** these are behind `#if canImport(AppKit/JavaScriptCore)` and
+  compile to empty on Linux, so the Linux gate only proves the guard and the package graph. Two defences
+  narrow the residual risk: every screen/host was written against the engines' *verified* public
+  signatures, and the JS host additionally has `Scripts/jsc-host-typecheck.sh` (in CI) that type-checks
+  it against a faithful JavaScriptCore shim + the real `GulpExtensions` — which caught a genuine
+  cross-module bug (`ExtensionCheck`'s memberwise init was internal) before any macOS build. A missing
+  dependency in `GulpFeatures` (its views imported five modules the target didn't declare) was also
+  found and fixed. The SwiftUI *bodies* have no practical shim and are verified by the macOS CI leg.
+- **Burp:** n/a (UI) — but two extension runtimes (process + in-process JS) exceed Burp's single
+  Montoya/BApp model.
+
 ## 4. Cross-cutting quality evidence
 
 - **Scope safety (CLAUDE.md hard rule):** `GulpScannerTests` includes "SCN-012 / CLAUDE.md scope
@@ -335,15 +373,19 @@ Each subsection: **what it does · module · proof (tests + DoD) · Burp verdict
 
 ## 5. Honest "not built / gated" list
 
+This list is now short — almost everything the earlier drafts listed as "not built" has shipped. What
+genuinely remains is a mix of one protocol gap, a couple of carry-overs, and *verification* (not
+implementation) caveats on the Apple-framework surfaces:
+
 | Area | Status | Why |
 |---|---|---|
-| Browser automation, recorded login, DOM/DOM-XSS probe (M13a) | ⬜ | Needs CDP + a real browser; macOS-gated. `GulpBrowser` is launch-only (211 LOC). |
-| Extensions / JS API + active Check Recipes (M15) | ⬜ | `GulpExtensions`, `GulpScript` are 13-LOC stubs. |
-| AI assistant (M18) | ⬜ | `GulpAI` is a 13-LOC stub; provider-gated. |
-| Sequencer (randomness analysis) | ⬜ | `GulpSequencer` is a 13-LOC stub; moved to post-1.0. |
-| macOS SwiftUI views (`GulpFeatures`, 7.2k LOC) | 🟡 | Implemented but **unverified** without macOS CI (`xcodebuild` unavailable on Linux). The message-editor/inspector *logic* in `GulpUI` is tested on Linux: "UI-010/UI-020" — UTF-8/Latin-1 round-trip and request/response section parsing (3 real tests). |
-| HTTP/3 (QUIC) client, request-smuggling tooling | ⬜ | Post-1.0 backlog. |
-| PDF report export, per-identity client-cert selection | 🟡 | Carry-overs. |
+| Browser automation, DOM/DOM-XSS probe (M13a) | ✅ engine / 🟡 live | The CDP client + DOM probe are built and validated against real Chromium in the DoD; recorded login/passkeys stay browser-gated. |
+| Extensions — process host + in-process JS host (M15) | ✅ | Both runtimes built; the JS host is type-checked on Linux via a JavaScriptCore shim (`jsc-host-typecheck.sh`) and compiled for real on macOS CI. |
+| AI assistant (M18) | ✅ core / 🟡 live | Agent core + the pre-send redaction gate are built and tested; the live provider needs a Keychain key + network (macOS). |
+| Sequencer (randomness analysis) | ✅ | `GulpSequencer` battery built and tested (`regularizedGammaQ` unit-verified); `SequencerView` surfaces it. |
+| macOS SwiftUI views (`GulpFeatures`) | 🟡 verification | Implemented and wired, written against verified engine signatures; compile for real only on macOS CI (`xcodebuild` unavailable on Linux). The editor/inspector *logic* in `GulpUI` is Linux-tested (UI-010/UI-020). |
+| HTTP/3 (QUIC) client | ⬜ | The one squarely-open protocol gap; post-1.0 (HTTP-037). |
+| PDF report export, per-identity client-cert selection | 🟡 | Carry-overs (HTML + Markdown reporting ships; PDF does not). |
 
 ### 5.1 Test-coverage gaps worth closing (found during this review)
 

@@ -125,22 +125,39 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 
 ## 9. Gaps to close to decisively beat Burp (prioritised)
 
-| # | Gap | Milestone | Why it matters |
+| # | Former gap | Status now (2026-11-13) |
+|---|---|---|
+| 1 | **Secret scanner + JS recon** | **Closed.** Passive secret/endpoint scanner (`recon.secret`/`recon.endpoint`) + `gulp-cli js-recon` (source-map recovery, param/literal mining) + `--baseline` asset diff (JSR-009). |
+| 2 | P1 active checks | **Closed** except CSPT (browser-gated): prototype pollution, mass assignment, NoSQL/LDAP/XPath, file-upload bypass, JWT-in-scan, CORS, host-header, cache-poisoning all shipped. |
+| 3 | Extension ecosystem + Check Recipes | **Closed.** Passive Check Recipes, the out-of-process JSON-RPC extension host (M15), **and** the in-process JavaScriptCore host (the `js` runtime) are all built; a type-check harness verifies the JS host even on Linux. |
+| 4 | Formatted reporting | **Closed** for HTML + bug-bounty Markdown (F19); PDF export remains post-1.0. |
+| 5 | Recorded login + DOM-XSS probe | **Closed** for the DOM-XSS probe (real-Chromium-validated) + the CDP client + a DOM-probe UI; recorded login/passkeys remain browser-gated. |
+| 6 | HTTP/3 (QUIC) client | **Open** (post-1.0, HTTP-037) — the one squarely-open protocol gap. |
+| 7 | AI triage/assist | **Closed** for the agent core + the pre-send redaction gate (F18); the live provider needs a key + network, verified on macOS. |
+
+Of the seven originally-tracked gaps, six are closed; the lone squarely-open one is the HTTP/3 client
+(post-1.0). The remaining caveats are *verification* caveats on macOS-gated surfaces, not missing
+features.
+
+## 10. Scorecard — the whole feature set vs Burp
+
+Tallying every row above, by area:
+
+| Area | Parity (✅) | Gulp advantage (⭐ / Burp lacks) | Open gap (⬜) |
 |---|---|---|---|
-| 1 | **Secret scanner + JS recon** (find secrets/endpoints in responses & JS) | M19 (F27) | High-signal, always-on; a daily bug-bounty win. **Built next (§10).** |
-| 2 | P1 active checks | M11c | **Prototype pollution, mass assignment, NoSQL/LDAP/XPath, file-upload bypass, JWT-in-scan, CORS, host-header all shipped (2026-11-13);** only CSPT (browser-gated) remains. |
-| 3 | Extension ecosystem (JS API) + active Check Recipes | M15 | **Passive Check Recipes shipped (2026-11-13);** the JS extension API + active recipes remain. |
-| 4 | Formatted reporting (HTML/PDF, bug-bounty Markdown) | M16 | **HTML + Markdown shipped (2026-11-13); PDF + UI remain.** |
-| 5 | Recorded browser login + DOM/DOM-XSS probe | M13a | **DOM-XSS probe built + real-Chromium-validated (2026-11-13);** the CDP client is built; recorded login/passkeys + the swift↔browser integration remain browser-gated. |
-| 6 | HTTP/3 client | post-1.0 | Niche but a visible checkbox. |
-| 7 | AI triage/assist | M18 | Burp AI exists; Gulp's agent surface is a stronger base. |
+| Core proxy & HTTP | h1/h2 proxy, TLS/CA, upstream proxies, match & replace | byte-exact engine; CSWSH, WS per-message authz, WS fuzzing, OAST-over-WS, WS sub-protocol decode, scripted WS sequences; smuggling + non-destructive confirmation | HTTP/3 client |
+| Repeater / Intruder | repeater, 4 attack types, single-packet race, grep/extract | no Community throttle; native protobuf/gRPC field fuzzing; hidden-param discovery, SSPP, JS-recon asset diff in-tree | — |
+| Scanner | ~33 passive + active P0/P1 checks, SARIF | NoSQL/LDAP/XPath distinguished on real targets; differential VulnLab oracle with safe twins | CSPT (browser-gated) |
+| Access control / sessions | cookie jar, identities, macros, request signing | **Authz Matrix** (IDOR grid) + **WS per-message authz** native; DPoP / RFC 9421 / SigV4 signing | — |
+| Decoders / utilities | decoder chains, comparer, JWT workbench, Smart Decode | Transform Tags; gRPC/protobuf named decode | — |
+| Target / logging / query | site map, scope, history | **GulpQL** typed query language with FTS + saved filters; notebook/coverage | — |
+| Extensibility / reporting / automation | reporting, CLI | **two** extension runtimes (process + in-process JS); MCP server for agent control; HTML + Markdown reports | PDF export |
+| AI | — | agent core with a **mandatory pre-send redaction gate** (shows what is masked before anything leaves the machine) | live-provider UX (macOS) |
 
-## 10. First outperformance increment (this session): Secret & JS recon
-
-Gap #1 is the highest signal-per-effort and fully testable on Linux, so it is built now as a passive,
-always-on capability (F27): every in-scope response (and every linked JavaScript file) is scanned for
-high-entropy secrets and credentials with a curated ruleset (AWS keys, Google API keys, GitHub/GitLab
-tokens, Slack tokens, JWTs, private keys, Stripe keys, generic high-entropy assignments), and for
-JavaScript endpoints/paths (fetch/axios/XHR URLs, template literals) that expand the attack surface.
-Findings become issues (`recon.secret`, `recon.endpoint`). This is something Burp only does via
-extensions (and with weaker entropy handling). See the M-recon DoD and `GulpScanner/Recon*`.
+**Verdict.** Across the eight areas Gulp is at parity or ahead in seven, with concrete, tested
+advantages Burp has no native answer for — most of the WebSocket workbench, the byte-exact engine and
+its smuggling tooling, the Authz Matrix, native protobuf/gRPC fuzzing, GulpQL, and two extension
+runtimes. The one squarely-open capability gap is the HTTP/3 client (post-1.0). The remaining
+differences are the macOS-verification caveats, not feature gaps. The design choice that compounds
+into most of these wins is the single byte-exact engine choke point (§1), which is what makes the WS,
+smuggling and raw-framing advantages possible at all.
