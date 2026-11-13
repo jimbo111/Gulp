@@ -274,11 +274,11 @@ Each subsection: **what it does · module · proof (tests + DoD) · Burp verdict
 These are places where the feature exists but the **test suite** is thinner than it should be —
 tracked here so the coverage claim stays honest:
 
-- **Integration tests are a stub.** `IntegrationTests` contains one test — "workspace module is
-  linkable from integration tests" — and exercises no cross-module flow. There is no end-to-end
-  "capture → store → scan → report" test; the pipeline is only proven piecewise (unit tests + the
-  live DoDs, which are themselves a form of end-to-end). Adding a true in-process integration test is
-  the highest-value coverage work.
+- **Integration tests** (addressed 2026-11-13): `IntegrationTests` now carries a real end-to-end test
+  — "a vulnerable page is captured, scanned into issues, and rendered into HTML + Markdown reports" —
+  that drives the `capture → store → passive scan → report` pipeline across GulpStore, GulpScanner
+  (via the workspace) and GulpReport in one flow. Further end-to-end paths (an active scan through the
+  engine, a full proxy round-trip) could still be added, but the core pipeline is now covered.
 - **DB migrations:** `GulpStoreTests` proves schema v1 creation but not a v1→later migration path
   (there is only one schema version today, but the migrator is untested for upgrades).
 - **Suite-advertised but unnamed requirement IDs:** a few suites name a range wider than their tests —

@@ -249,7 +249,9 @@ let package = Package(
             ]),
         .testTarget(
             name: "GulpAutomationTests", dependencies: ["GulpAutomation", "GulpWorkspace", "GulpStore"]),
-        .testTarget(name: "IntegrationTests", dependencies: ["GulpWorkspace"]),
+        .testTarget(
+            name: "IntegrationTests",
+            dependencies: ["GulpWorkspace", "GulpCore", "GulpStore", "GulpReport"]),
     ],
     swiftLanguageModes: [.v6]
 )
