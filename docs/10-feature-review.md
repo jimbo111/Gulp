@@ -294,6 +294,20 @@ Each subsection: **what it does · module · proof (tests + DoD) · Burp verdict
 - **Gaps:** the egress-consent + chat UI, Keychain key storage, and wiring the loop's executor to the
   live F21 services are provider-/macOS-gated.
 
+### 3.24 Offensive tooling (param discovery, smuggling, CSWSH, cache poisoning) ⭐
+- **Does:** Parameter Discovery (`gulp-cli discover-params`) finds hidden query params; the Smuggling
+  Probe (`gulp-cli smuggle`) detects CL.TE/TE.CL desync by byte-exact timing probes; the CSWSH probe
+  (`gulp-cli cswsh`) flags WebSocket endpoints that upgrade without an Origin check; and
+  `active.cache-poisoning` flags an unkeyed header reflected into a cacheable response.
+- **Modules:** `GulpScanner` (`ParamMiner`, `SmugglingProbe`, `CachePoisoningCheck`), `gulp-cli`.
+  **Proof:** `ParamMinerTests`, `SmugglingTests`, the cache-poisoning scanner test, and four executable
+  DoDs against VulnLab — `paramdisc-dod.sh` (hidden debug/trace, clean safe twin), `smuggle-dod.sh`
+  (CL.TE/TE.CL timing differential on `/smuggle`, clean `/safe/smuggle`), `cswsh-dod.sh` (`/ws`
+  vulnerable, `/safe/ws` not), and the cache step in `m11c-checks-dod.sh`.
+- **Burp:** ⭐ — these are the in-tree equivalents of Burp's Param Miner and HTTP Request Smuggler
+  extensions and its cache-poisoning scanner; the smuggling probes in particular are the payoff of the
+  byte-exact engine. The guided smuggling-exploitation workbench and WS fuzzing remain.
+
 ## 4. Cross-cutting quality evidence
 
 - **Scope safety (CLAUDE.md hard rule):** `GulpScannerTests` includes "SCN-012 / CLAUDE.md scope
