@@ -19,10 +19,11 @@ struct ExtensionWireTests {
             ]
         ]
         let checks = ExtensionWire.checks(fromInitializeResult: object)
-        #expect(checks == [
-            ExtensionCheck(id: "ext.header", name: "Missing header"),
-            ExtensionCheck(id: "ext.cookie", name: "Insecure cookie"),
-        ])
+        #expect(
+            checks == [
+                ExtensionCheck(id: "ext.header", name: "Missing header"),
+                ExtensionCheck(id: "ext.cookie", name: "Insecure cookie"),
+            ])
     }
 
     @Test("EXT-002: entries missing id or name are skipped; a missing array yields none")
@@ -30,12 +31,15 @@ struct ExtensionWireTests {
         let partial: [String: Any] = [
             "passiveChecks": [
                 ["id": "ext.ok", "name": "Fine"],
-                ["id": "ext.noname"],          // no name → skipped
-                ["name": "no id"],             // no id → skipped
+                ["id": "ext.noname"],  // no name → skipped
+                ["name": "no id"],  // no id → skipped
                 ["id": 7, "name": "wrong type"],  // id not a string → skipped
             ]
         ]
-        #expect(ExtensionWire.checks(fromInitializeResult: partial) == [ExtensionCheck(id: "ext.ok", name: "Fine")])
+        #expect(
+            ExtensionWire.checks(fromInitializeResult: partial) == [
+                ExtensionCheck(id: "ext.ok", name: "Fine")
+            ])
         #expect(ExtensionWire.checks(fromInitializeResult: [:]).isEmpty)
         #expect(ExtensionWire.checks(fromInitializeResult: ["passiveChecks": "not an array"]).isEmpty)
     }
@@ -51,11 +55,12 @@ struct ExtensionWireTests {
             ]
         ]
         let findings = ExtensionWire.findings(fromCheckResult: object)
-        #expect(findings == [
-            ExtensionFinding(
-                typeID: "ext.secret", name: "Secret in body", severity: "high",
-                detail: "Found a token", marker: "AKIA…")
-        ])
+        #expect(
+            findings == [
+                ExtensionFinding(
+                    typeID: "ext.secret", name: "Secret in body", severity: "high",
+                    detail: "Found a token", marker: "AKIA…")
+            ])
     }
 
     @Test("EXT-004: a missing or malformed findings value yields none")
