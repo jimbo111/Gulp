@@ -149,7 +149,17 @@ GulpFeatures     → the engines it surfaces + GulpWorkspace + GulpUI   # UI (ma
    notarized packaging, and the live AI provider can't be *compiled or exercised* on Linux; they
    depend on the macOS CI job. This is the dominant residual risk — not a design flaw, but it means a
    missing dependency or an API-signature error behind an Apple-framework guard (see §2) only shows up
-   on the macOS leg. Mitigation applied: every macOS view/host in this round was written against the
+   on the macOS leg. **And that leg currently cannot run:** the repository is private and its GitHub
+   Actions minutes are exhausted, so every CI job — the `macos` (macos-15) build *and* the `core-linux`
+   job — fails at runner provisioning in ~2 seconds with zero steps executed and no logs (verified
+   2026-11-13 via the Actions API on run 174+). This is an account/billing limit only the owner can
+   lift (add minutes or a payment method); it is not a code failure, and it is the long-standing reason
+   the project ships a Docker-based local Linux gate (`localci.sh`) as the stand-in. A separate, real
+   defect compounded it this session: a `ci.yml` step name carried an inner `": "` (from the ADV-032
+   commit) that made the whole workflow unparseable, so runs failed even earlier (0 jobs). That YAML
+   error is now fixed — the workflow parses and correctly schedules the macOS build — so the one
+   outstanding verification (SwiftUI layout compilation) will execute the moment the account has CI
+   minutes, with nothing further required of the code. Mitigation applied: every macOS view/host in this round was written against the
    engines' *verified* public signatures (read from source) and the Apple-framework surface is kept to
    constructs already proven elsewhere in the module. **Further, for the one piece of genuinely new
    Apple-framework logic — the in-process JavaScriptCore host — the gap is now partly closed by
