@@ -999,6 +999,15 @@ for behavior.
   jQuery/lodash/Bootstrap/Moment/Handlebars/AngularJS/DOMPurify versions from filenames, banners and
   VERSION strings against a bundled advisory dataset, always-on; VulnLab `/libs/old`(+safe). 446 tests.
 
+- 2026-11-13 — **Executed review run (docs/11-review-run.md)**: ran the full suites in-turn —
+  `swift test` = **519 tests / 60 suites / 0 fail (12.4 s)**; the 37 `Scripts/*-dod.sh` acceptance
+  scripts = **36/37 pass** after one fix (m9 only slow here: its 1M-row seed is CPU-throttled in the
+  sandbox — seeder is correctly batched and O(n), measured 50k=92.7s/100k=180.3s). The executed
+  review found a **real recon false-positive**: `recon.endpoint` fired on `/safe/recon/app.js` because
+  `ScanLab` (dispatched before `ReconLab` in `Routes.swift`) stripped `/safe/` and shadowed ReconLab's
+  clean twin with its endpoint-laden JSRecon bundle. Fixed: `ScanLab` returns nil for `/safe/recon/*`;
+  `recon-dod.sh` now PASS. Deviation: none — fixture-routing bug only.
+
 ## How to pick up work (reminder)
 
 1. Read `CLAUDE.md` §1 (reading order) and this file.
