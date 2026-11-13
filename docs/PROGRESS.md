@@ -454,6 +454,12 @@ for behavior.
 
 ## Log
 
+- 2026-11-13 — **CSWSH probe (WSX-003, M22)**: `gulp-cli cswsh` replays a WebSocket handshake with an
+  attacker `Origin` and reports endpoints that upgrade (101) without an Origin check — cross-site
+  WebSocket hijacking. VulnLab's `/ws` was already Origin-blind (vulnerable); added an Origin-checking
+  `/safe/ws` twin that rejects a cross-site handshake with 403. `Scripts/cswsh-dod.sh` PASS (vulnerable
+  `/ws`, clean `/safe/ws`). This completes the named post-1.0 buildable checks (smuggling, CSWSH,
+  cache-poisoning). WS fuzzing and per-message authz (WSX-002/004/…) remain.
 - 2026-11-13 — **Smuggling Probe (F23 ADV-030/031, M19b)**: `SmugglingProbe` builds byte-exact CL.TE
   and TE.CL timing probes (conflicting Content-Length vs Transfer-Encoding framing a normalizing client
   can't send — the payoff of the "raw bytes are the truth" engine) and classifies a vector by its

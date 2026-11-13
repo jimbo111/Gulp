@@ -92,10 +92,25 @@ final class AppHandler: ChannelInboundHandler {
                 Self.streamEvents(request, context: context)  // the connection is the stream from now on
                 return
             }
-            if target == "/ws" || target.hasPrefix("/ws?"),
+            let isWS = target == "/ws" || target.hasPrefix("/ws?")
+            let isSafeWS = target == "/safe/ws" || target.hasPrefix("/safe/ws?")
+            if isWS || isSafeWS,
                 let key = request.headerValue("sec-websocket-key")?.string(),
                 request.hasHeaderToken("upgrade", "websocket")
             {
+                // CSWSH (WSX-004): the vulnerable `/ws` upgrades regardless of Origin; the safe
+                // `/safe/ws` rejects a cross-site handshake (its Origin isn't the lab's own host).
+                let origin = request.headerValue("origin")?.string()
+                if isSafeWS, let origin, !origin.hasSuffix("127.0.0.1:8088"),
+                    !origin.hasSuffix("localhost:8088")
+                {
+                    let reject =
+                        "HTTP/1.1 403 Forbidden\r\nContent-Length: 17\r\nConnection: close\r\n\r\nForbidden origin\n"
+                    let bound = NIOLoopBound(context, eventLoop: context.eventLoop)
+                    context.writeAndFlush(NIOAny(context.channel.allocator.buffer(string: reject)))
+                        .whenComplete { _ in bound.value.close(promise: nil) }
+                    return
+                }
                 acceptWebSocket(key: key, context: context)
                 let rest = buffer
                 buffer = []

@@ -290,7 +290,8 @@ M22–M25.
 - [ ] All P0/P1 of F25. **DoD:** reconstructs a VulnLab OIDC auth-code flow and flags an over-accepted `redirect_uri`; a signature-stripped/XSW SAML assertion is accepted by the vulnerable SP and rejected by the safe twin.
 
 ### M22 — WebSocket fuzzing and checks (merged from F26)
-- [ ] WS Fuzzer and OAST over WS (F07 §2.6: WSX-002, WSX-005, WSX-007), CSWSH (F08 §3.6: WSX-003), per-message authorization in the Authz Matrix (F23 §1: WSX-004), sub-protocol decoding (F01 §2.4: WSX-006) and scripted WS sequences (F15: WSX-008). **DoD:** a 2-position WS fuzz with an extract rule works against VulnLab `/ws/chat`; a cross-origin handshake is flagged CSWSH; a replayed privileged message under a stripped session is caught.
+- [x] *2026-11-13:* **CSWSH** (WSX-003) built — `gulp-cli cswsh` replays the WS handshake with an attacker `Origin` and flags endpoints that upgrade without an Origin check; VulnLab `/ws` (vulnerable) vs `/safe/ws` (Origin-checked), `Scripts/cswsh-dod.sh` PASS.
+- [ ] WS Fuzzer and OAST over WS (F07 §2.6: WSX-002, WSX-005, WSX-007), per-message authorization in the Authz Matrix (F23 §1: WSX-004), sub-protocol decoding (F01 §2.4: WSX-006) and scripted WS sequences (F15: WSX-008). **DoD:** a 2-position WS fuzz with an extract rule works against VulnLab `/ws/chat`; a cross-origin handshake is flagged CSWSH; a replayed privileged message under a stripped session is caught.
 
 ### M23 — JS Recon Studio (rest)
 - [ ] The F27 requirements not built in M19a (JSR-006…JSR-009). **DoD:** library fingerprinting flags the bundled known-vulnerable library version and the asset diff surfaces a new endpoint between two VulnLab captures (F27 tests 3–4).

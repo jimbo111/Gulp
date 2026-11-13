@@ -15,6 +15,7 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 | Intercepting proxy (HTTP/1.1, HTTP/2) | ✅ | ✅ | Gulp proxies h2 both ways with ALPN mirroring. |
 | TLS interception / per-host CA | ✅ | ✅ | Gulp mints leaves with SNI; CA key in Keychain. |
 | WebSockets intercept/repeat | ✅ | ✅ | |
+| **Cross-site WebSocket hijacking (CSWSH)** | 🟡 (manual) | ✅ | Built (2026-11-13): `gulp-cli cswsh` replays the handshake with an attacker Origin and flags endpoints that upgrade without an Origin check; proven on VulnLab `/ws` vs `/safe/ws`. |
 | HTTP/2-exclusive edits (raw h2) | ✅ | ✅ | |
 | **Byte-exact requests (no normalization)** | 🟡 | ⭐ | Burp's engine re-normalizes some requests; Gulp *never* round-trips through a parser — "raw bytes are the truth" is an enforced invariant (0 `URLSession` in engines). This matters for smuggling/desync work. |
 | Upstream proxies, SOCKS, match & replace | ✅ | ✅ | |

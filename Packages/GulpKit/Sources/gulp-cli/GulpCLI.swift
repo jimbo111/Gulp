@@ -34,7 +34,7 @@ struct GulpCommand: AsyncParsableCommand {
             LoggerCommand.self, Filters.self, NotebookCommand.self, Coverage.self, Seed.self,
             IssuesCommand.self, ScanCommand.self, GRPCCommand.self, CrawlCommand.self, OASTCommand.self,
             GovernorCommand.self, SessionCommand.self, AuthzCommand.self, GraphQLCommand.self,
-            ReportCommand.self, SequencerCommand.self, DiscoverParams.self, Smuggle.self,
+            ReportCommand.self, SequencerCommand.self, DiscoverParams.self, Smuggle.self, CSWSH.self,
         ])
 }
 
