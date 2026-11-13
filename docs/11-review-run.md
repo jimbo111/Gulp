@@ -28,10 +28,11 @@ for d in Scripts/*-dod.sh; do bash "$d"; done   # end-to-end Definition-of-Done 
 Executed this run against `Packages/GulpKit`:
 
 ```
-✔ Test run with 519 tests passed after 12.408 seconds.
+✔ Test run with 523 tests passed after 14.888 seconds.
 ```
 
-- **519 tests, 60 suites, 0 failures.** Every `@Suite` reported `passed`. The suites are named by
+- **523 tests, 0 failures** (519 at the start of this review + 4 new `ExtensionWire` tests added while
+  hardening the extension hosts — see §5.0b). Every `@Suite` reported `passed`. The suites are named by
   requirement ID (e.g. `WebSocket Fuzzer (F07 §2.6, WSX-002)`, `Scripted WebSocket sequences
   (F15 §2.3, WSX-008)`, `Server-side parameter pollution (F23 ADV-022)`, `Smuggling confirmation
   workbench (F23 ADV-032)`, `JS Recon asset diff (F27 JSR-009)`), so a green line maps directly to a
@@ -111,6 +112,15 @@ it — it is on the repository owner to restore CI billing.
 Real defects surfaced by running the suites + DoD acceptance scripts + shim type-checks this cycle,
 not hypotheticals:
 
+0b. **Crash on malformed extension output (`JSONSerialization` fatal-error), found by extracting +
+   testing `ExtensionWire`.** Both extension hosts decoded a `passiveCheck` result's `findings` with
+   `JSONSerialization.data(withJSONObject:)`, which **fatal-errors (does not throw)** on a top-level
+   scalar — so an extension (buggy or hostile) returning `findings: "oops"` would crash the host
+   process. Surfaced while unifying the two hosts' duplicated wire-decoding into one Linux-tested
+   `ExtensionWire` helper (the macOS JavaScriptCore host now shares it, so its parsing contract is
+   Linux-verified and only the raw `JSContext` bridge stays macOS-only). Fixed by gating on
+   `JSONSerialization.isValidJSONObject` first; 4 new tests cover it; `GulpExtensionsTests` = 11
+   tests, full suite 523, arch + lint + JSC-host type-check all green.
 0. **Recon false-positive on a `/safe/` twin (product/fixture bug, found by `recon-dod.sh`).** The
    passive secret/endpoint recon check reported `recon.endpoint` on `/safe/recon/app.js`, which the
    differential oracle requires to be clean. Root cause was a `/recon/*` route-namespace collision
