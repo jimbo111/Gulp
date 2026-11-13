@@ -53,7 +53,8 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 | Cookie jar, identities | ✅ | ✅ | |
 | **Authorization matrix / Autorize-style** | 🟡 (extension) | ⭐ | Autorize is a third-party extension in Burp; Gulp has the Authz Matrix built in (replay-as-identity, verdicts, auto-issues). |
 | **Request signing: DPoP, HTTP Message Signatures, AWS SigV4** | 🟡 (extensions) | ⭐ | Burp needs separate extensions (and SigV4 is Pro-only via an add-on); Gulp has all three as first-class session actions that run last and sign the sent bytes, verified against independent implementations. |
-| Recorded browser login / passkeys | ✅ | ⬜ | **Gap** — needs the CDP browser (M13a, macOS). |
+| DOM-based XSS probe (client-side taint) | ✅ | 🟡 | The taint instrumentation + CDP client are **built and validated against real Chromium** (2026-11-13): flags `location.hash → innerHTML` on VulnLab `/spa`, clean on `/safe/spa`. Full source coverage + the UI remain. |
+| Recorded browser login / passkeys | ✅ | 🟡 | The CDP client it needs is built (BRW-005); the recorded-login/passkey flow and macOS UI remain browser-gated. |
 | Client certs / platform auth per identity | ✅ | 🟡 | mTLS supported at the engine; per-identity selection is a carry-over. |
 
 ## 5. Decoders, encoders, utilities
@@ -118,7 +119,7 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 | 2 | P1 active checks | M11c | **Prototype pollution, mass assignment, NoSQL/LDAP/XPath, file-upload bypass, JWT-in-scan, CORS, host-header all shipped (2026-11-13);** only CSPT (browser-gated) remains. |
 | 3 | Extension ecosystem (JS API) + active Check Recipes | M15 | **Passive Check Recipes shipped (2026-11-13);** the JS extension API + active recipes remain. |
 | 4 | Formatted reporting (HTML/PDF, bug-bounty Markdown) | M16 | **HTML + Markdown shipped (2026-11-13); PDF + UI remain.** |
-| 5 | Recorded browser login + DOM/DOM-XSS probe | M13a | JS-heavy apps and client-side bugs. |
+| 5 | Recorded browser login + DOM/DOM-XSS probe | M13a | **DOM-XSS probe built + real-Chromium-validated (2026-11-13);** the CDP client is built; recorded login/passkeys + the swift↔browser integration remain browser-gated. |
 | 6 | HTTP/3 client | post-1.0 | Niche but a visible checkbox. |
 | 7 | AI triage/assist | M18 | Burp AI exists; Gulp's agent surface is a stronger base. |
 

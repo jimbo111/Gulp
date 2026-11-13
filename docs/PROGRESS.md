@@ -454,6 +454,18 @@ for behavior.
 
 ## Log
 
+- 2026-11-13 — **M13a/M13b browser automation + DOM Probe (engine core)**: built the Chrome DevTools
+  Protocol client (`CDPClient`, transport-abstracted → unit-tested against a mock; command
+  id-correlation, event routing, remote-error handling), a launch helper (`BrowserAutomation`: flags +
+  `DevToolsActivePort` → `ws://` endpoint + engine WebSocket connect), and the DOM Probe — a
+  taint-tracking instrumentation (`dom-probe.js`, `.embedInCode`-embedded so what's tested is what
+  ships) that wraps DOM sinks and reports source→sink flows via a CDP binding. Verification is split by
+  the environment (swift container has no Chromium libs; host has no Swift): the CDP client + launch
+  helper by Swift tests (469 total), and the instrumentation against **real headless Chromium** via
+  Node+Playwright (`Scripts/dom-probe-check.mjs` / `Scripts/m13a-dom-probe-dod.sh`, gated-skip in CI) —
+  it reports the planted DOM XSS on VulnLab `/spa` (location.hash→innerHTML) and nothing on `/safe/spa`.
+  The swift↔real-browser crawl/login/passkey integration and the macOS UI remain for a Chromium+Swift
+  host.
 - 2026-11-13 — **Sequencer built (F11) — outperformance increment**: `GulpSequencer`, a pure-Swift,
   Linux-testable token-randomness analyzer closing a whole named Burp tool Gulp lacked. Token → symbols
   and bits (with constant prefix/suffix stripping), a NIST SP 800-22-style battery (monobit, block

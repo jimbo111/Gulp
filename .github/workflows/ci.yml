@@ -147,6 +147,8 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/sequencer-dod.sh
+      - name: DOM Probe Definition of Done (real Chromium reports the DOM XSS on /spa, clean on the safe twin)
+        run: Scripts/m13a-dom-probe-dod.sh
       - name: Build Beacon
         run: swift build --package-path Beacon -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
       - name: Test Beacon

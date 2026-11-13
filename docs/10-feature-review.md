@@ -245,6 +245,24 @@ Each subsection: **what it does · module · proof (tests + DoD) · Burp verdict
 - **Burp:** ✅ parity with Burp's Sequencer, and ⭐ the method is open and reference-tested rather than
   a black box. **Gaps:** the Swift-Charts UI and project-saved runs are macOS/post-1.0 carry-overs.
 
+### 3.21 Browser automation + DOM Probe 🟡→⭐
+- **Does:** a Chrome DevTools Protocol client (connect, command id-correlation, event routing,
+  remote-error handling) and a launch helper (automation flags, `DevToolsActivePort` → `ws://`); a DOM
+  Probe that injects a taint-tracking instrumentation to report client-side source→sink flows
+  (DOM-based XSS).
+- **Module:** `GulpBrowser`. **Proof:** `GulpBrowserTests` — "a command is answered by id; concurrent
+  commands correlate to their own results", "a remote error becomes a thrown CDPError.remote", "events
+  are delivered on the events stream, not confused with responses", "the automation flags carry the
+  debug port, isolated profile, proxy and SPKI pin", "the DevToolsActivePort file is parsed into a
+  ws:// endpoint". The instrumentation is **validated against real headless Chromium** by
+  `Scripts/dom-probe-check.mjs` (`m13a-dom-probe-dod.sh`): it reports the planted DOM XSS on `/spa`
+  (location.hash → innerHTML) and nothing on `/safe/spa`. The embedded `dom-probe.js` is the exact
+  bytes shipped, so what the browser tests is what runs.
+- **Burp:** 🟡→⭐ — DOM Invader is a Burp feature; here the probe is built and its detection is proven
+  against a real browser with an open, inspectable instrumentation.
+- **Gaps:** the swift↔real-browser integration (crawl/login/passkeys) and the macOS UI need a
+  Chromium+Swift host; the verification sandbox has Chromium and Swift in separate places.
+
 ## 4. Cross-cutting quality evidence
 
 - **Scope safety (CLAUDE.md hard rule):** `GulpScannerTests` includes "SCN-012 / CLAUDE.md scope

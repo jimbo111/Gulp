@@ -136,6 +136,10 @@ enum ScanLab {
             // Sequencer rates it Poor (most of it never changes; the rest only counts up).
             let token = String(format: "a1b2c3d4%08x", tokenCounter.next())
             return text("ok\n", headers: ["Set-Cookie: SID=\(token); Path=/; HttpOnly"])
+        case "/spa":
+            // A client-side SPA with DOM XSS: the fragment flows into innerHTML (the DOM Probe's
+            // target). The safe twin writes the same value with textContent.
+            return spa(safe: safe)
         case "/token/strong":
             // A CSPRNG session token: 16 random hex characters. The Sequencer rates it Excellent.
             var generator = SystemRandomNumberGenerator()
@@ -386,6 +390,18 @@ enum ScanLab {
         return VulnReply(
             bytes: VulnLab.response(
                 200, body: Array((matched ? foundBody : notFoundBody).utf8), type: "application/json"))
+    }
+
+    /// A single-page app whose URL fragment flows into the DOM. The vulnerable twin assigns it to
+    /// `innerHTML` (DOM XSS); the safe twin uses `textContent`. Matches `Scripts/dom-probe-check.mjs`.
+    static func spa(safe: Bool) -> VulnReply {
+        let sink = safe ? "textContent" : "innerHTML"
+        let page =
+            "<!doctype html><html><head><title>SPA</title></head><body><div id=\"out\"></div><script>"
+            + "document.getElementById('out').\(sink) = decodeURIComponent(location.hash.slice(1));"
+            + "</script></body></html>"
+        return VulnReply(
+            bytes: VulnLab.response(200, body: Array(page.utf8), type: "text/html; charset=utf-8"))
     }
 
     /// A multipart file upload. The vulnerable twin stores whatever filename it is given; the safe
