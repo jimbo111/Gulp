@@ -8,7 +8,7 @@ enum Tool: String, Identifiable, CaseIterable, Hashable {
     case dashboard
     case proxy, target, logger
     case repeater, fuzzer, scanner, beacon, sequencer, decoder, comparer
-    case authzMatrix, jwt, graphql
+    case authzMatrix, jwt, graphql, jsRecon
     case notebook, extensions, assistant
 
     var id: String { rawValue }
@@ -30,6 +30,7 @@ enum Tool: String, Identifiable, CaseIterable, Hashable {
         case .authzMatrix: "Authz Matrix"
         case .jwt: "JWT Workbench"
         case .graphql: "GraphQL"
+        case .jsRecon: "JS Recon"
         case .notebook: "Notebook"
         case .extensions: "Extensions"
         case .assistant: "Assistant"
@@ -53,6 +54,7 @@ enum Tool: String, Identifiable, CaseIterable, Hashable {
         case .authzMatrix: "person.2.badge.key"
         case .jwt: "key"
         case .graphql: "point.3.connected.trianglepath.dotted"
+        case .jsRecon: "doc.text.magnifyingglass"
         case .notebook: "note.text"
         case .extensions: "puzzlepiece.extension"
         case .assistant: "sparkles"
@@ -82,7 +84,7 @@ enum ToolSection: String, Identifiable, CaseIterable {
         case .tools:
             [
                 .repeater, .fuzzer, .scanner, .beacon, .sequencer, .decoder,
-                .comparer, .authzMatrix, .jwt, .graphql,
+                .comparer, .authzMatrix, .jwt, .graphql, .jsRecon,
             ]
         case .workspace: [.notebook, .extensions, .assistant]
         }

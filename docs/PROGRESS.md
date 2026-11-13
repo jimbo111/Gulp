@@ -564,6 +564,21 @@ for behavior.
   send/expect run against VulnLab `/ws`, plus a deliberately wrong expectation that stops the run). This
   completes the WebSocket workbench at the engine/CLI level (WSX-002 through WSX-008); only the macOS WS
   workbench UI remains, which cannot be verified on Linux.
+- 2026-11-13 — **macOS UI: Sequencer (F11) and JS Recon (F27) screens**: added `SequencerView` and
+  `JSReconView` to `GulpFeatures`, wired into the sidebar `Tool` enum and `ProjectWindow` (replacing
+  their placeholder). Both are self-contained views over **pure, already-tested** engines —
+  `GulpSequencer.analyze(tokens:)` → `SequencerReport` (verdict, entropy estimate, NIST-style test
+  table) and `JSRecon.inventory`/`diff` (recovered sources, mined params, literals, deploy diff) — so
+  they add no new untested logic, only presentation. They follow the exact pattern of the 28 existing
+  views (`@MainActor @Observable` model + SwiftUI body under `#if canImport(AppKit)`), use only SwiftUI
+  constructs already proven in this codebase (`HSplitView`, `Table` with an `Identifiable` row wrapper,
+  `LabeledContent`, `ContentUnavailableView`), and were written against the engines' real public
+  signatures (e.g. corrected to the actual `TokenVerdict` cases after reading the source). **Honesty
+  caveat:** the Linux build only confirms the `#if canImport(AppKit)` guard (these compile to empty on
+  Linux, as do all ~7.2k lines of `GulpFeatures`); the SwiftUI bodies compile for real only on the
+  **macOS CI leg**, which cannot run in this Linux environment. Remaining macOS-gated UI: Assistant
+  (needs an AI provider + key), DOM-probe (needs a live browser), the GraphQL / Authz-Matrix /
+  Extensions screens, and the in-process JavaScriptCore extension host.
 - 2026-11-13 — **M20 release tooling (doc 02 §8)**: wrote the missing `Scripts/release.sh` (archive →
   sign helpers inside-out with Hardened Runtime + timestamp → notarize with notarytool → staple → build
   + notarize + staple the DMG → Sparkle appcast) and `ExportOptions.plist` (developer-id, manual

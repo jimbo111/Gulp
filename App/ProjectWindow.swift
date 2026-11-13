@@ -182,6 +182,10 @@ struct ProjectWindow: View {
             ComparerView(session: session)
         case .jwt:
             JWTWorkbenchView()
+        case .sequencer:
+            SequencerView()
+        case .jsRecon:
+            JSReconView()
         default:
             ContentUnavailableView(
                 selection?.title ?? "Gulp", systemImage: selection?.symbol ?? "network",
