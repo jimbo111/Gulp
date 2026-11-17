@@ -205,6 +205,10 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/cache-dod.sh
+      - name: "LLM security Definition of Done (F32 LLM-002/009: prompt injection + MCP tool poisoning; guarded twins clean)"
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/llm-dod.sh
       - name: JS extension host type-check (JavaScriptCore shim; catches cross-platform errors)
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib

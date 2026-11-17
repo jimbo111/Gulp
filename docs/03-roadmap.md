@@ -347,7 +347,17 @@ asserted in `Scripts/m11c-checks-dod.sh`. The rest of the family (WCP-002…008)
   (the verdict is reflected in `issues.status`). **DoD met.**
 
 ### M26 — LLM/AI-feature security testing
-- [ ] All P0/P1 of F32, including AI-agent/MCP endpoint testing (LLM-009). **DoD:** a VulnLab chat endpoint is flagged for direct prompt injection and for indirect injection with an OAST-correlated exfil; the guarded twins are clean; the poisoned tool description on VulnLab's `/mcp` server is reported.
+- [x] *2026-11-17:* **P0 core + LLM-009 done.** `LLMInjection` (GulpScanner): LLM-endpoint detection
+  (LLM-001), a prompt-injection/jailbreak payload library + reply classifier (refusal/compliance/leak,
+  LLM-002), and MCP tool-poisoning detection (LLM-009). VulnLab `LLMLab`: `/chat` (vulnerable obeys +
+  leaks its system prompt; `/safe/chat` refuses) and `/mcp` (unauthenticated, a poisoned tool
+  description; `/safe/mcp` requires a bearer token, clean tools). `gulp llm inject|mcp`,
+  `LLMInjectionTests`, `Scripts/llm-dod.sh` **PASS** (acceptance 1 & 4: the vulnerable chat flagged
+  for direct injection + system-prompt leak, the guarded twin clean; the `/mcp` server reported
+  unauthenticated with the poisoned `notes` tool, the authenticated twin clean). Remaining: indirect
+  injection via stored content (LLM-003, acceptance 2 — needs the crawler store-then-read path),
+  OAST-correlated exfil (LLM-004), insecure-output-handling via DOM Probe (LLM-005, acceptance 3), and
+  the macOS LLM-test UI. **DoD (acceptance 1 & 4) met.**
 
 ### Post-1.0 backlog (specified, not scheduled)
 

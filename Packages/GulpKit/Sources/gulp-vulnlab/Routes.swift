@@ -162,6 +162,7 @@ enum VulnLab {
         if let recon = ReconLab.respond(path) { return recon }
         if let sso = SSOLab.respond(request, path: path, query: query) { return sso }
         if let cache = CacheLab.respond(request, path: path, query: query) { return cache }
+        if let llm = LLMLab.respond(request, path: path, query: query) { return llm }
         switch path {
         case "/lab/burst":
             return BurstLab.respond(query)
