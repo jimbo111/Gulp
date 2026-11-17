@@ -325,7 +325,16 @@ asserted in `Scripts/m11c-checks-dod.sh`. The rest of the family (WCP-002…008)
 - [ ] All P0/P1 of F08 §3.5 (WCP-001…WCP-008). **DoD:** confirms an `X-Forwarded-Host` poisoning vector victim-safely and a `/account.css` deception; safe twins clean.
 
 ### M25 — Issue retest (merged from F30)
-- [ ] F08 §2.4 (DRF-003…DRF-005) and `gulp retest` (F21 DRF-009); the `v3_drift` migration with `issue_proofs`/`retest_runs` only. **DoD:** an issue proof re-run flips Still-Vulnerable→Fixed after a patch; `gulp retest --fail-on regression` exits non-zero on a regression.
+- [x] *2026-11-17:* **Done.** The retest engine (DRF-003/004, re-run the issue's active check at its
+  insertion point — SCN-037) and per-issue `scan retest` already existed; added the headless top-level
+  **`gulp retest`** (DRF-009) with Fixed/Still-Vulnerable/Needs-Review verdicts and regression
+  detection (a previously-Fixed issue found again is reopened), plus `--fail-on-regression` for CI
+  gating, and VulnLab `/lab/unpatch` to toggle a route back to vulnerable. `Scripts/retest-dod.sh`
+  **PASS**: scan `/ssti` → retest Still-Vulnerable → `/lab/patch` → retest **Fixed** (status updated)
+  → `/lab/unpatch` → `gulp retest --fail-on-regression` flags the **regression** and exits non-zero.
+  Deviation (ADR, docs/07): the retest reuses the stored proving exchange + the SCN-037 check re-run
+  rather than a separate `issue_proofs` table; verdict-history `retest_runs` persistence is deferred
+  (the verdict is reflected in `issues.status`). **DoD met.**
 
 ### M26 — LLM/AI-feature security testing
 - [ ] All P0/P1 of F32, including AI-agent/MCP endpoint testing (LLM-009). **DoD:** a VulnLab chat endpoint is flagged for direct prompt injection and for indirect injection with an OAST-correlated exfil; the guarded twins are clean; the poisoned tool description on VulnLab's `/mcp` server is reported.

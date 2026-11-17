@@ -197,6 +197,10 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/sso-dod.sh
+      - name: "Issue retest Definition of Done (F30 DRF: still-vuln→fixed after patch; --fail-on-regression exits non-zero)"
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/retest-dod.sh
       - name: JS extension host type-check (JavaScriptCore shim; catches cross-platform errors)
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib

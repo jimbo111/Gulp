@@ -61,6 +61,12 @@ enum ScanLab {
             patched.insert(route)
             return text("patched \(route)\n")
         }
+        // `/lab/unpatch?route=/ssti`: revert the patch, so the route is vulnerable again (a retest
+        // regression: a Fixed issue becomes Still-Vulnerable — F30 DRF).
+        if path == "/lab/unpatch", let route = query["route"] {
+            patched.remove(route)
+            return text("unpatched \(route)\n")
+        }
         let safe = path.hasPrefix("/safe/") || patched.contains(path)
         let route = path.hasPrefix("/safe/") ? String(path.dropFirst(5)) : path
         // The `/recon/*` JS bundles here are the JSRecon source-map/asset-diff fixtures and only ever
@@ -598,5 +604,6 @@ final class LockedRoutes: @unchecked Sendable {
     private var routes: Set<String> = []
 
     func insert(_ route: String) { lock.withLock { _ = routes.insert(route) } }
+    func remove(_ route: String) { lock.withLock { _ = routes.remove(route) } }
     func contains(_ route: String) -> Bool { lock.withLock { routes.contains(route) } }
 }
