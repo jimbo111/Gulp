@@ -160,6 +160,7 @@ enum VulnLab {
         if let signed = SignedLab.respond(request, path: path) { return signed }
         if let graphql = GraphQLLab.respond(request, path: path) { return graphql }
         if let recon = ReconLab.respond(path) { return recon }
+        if let sso = SSOLab.respond(request, path: path, query: query) { return sso }
         switch path {
         case "/lab/burst":
             return BurstLab.respond(query)
