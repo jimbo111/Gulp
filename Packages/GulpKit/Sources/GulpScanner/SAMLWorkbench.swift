@@ -133,7 +133,8 @@ public enum SAMLWorkbench {
                 out.append(
                     .init(
                         kind: .signatureWrapping, xml: wrapped,
-                        note: "Forged unsigned assertion (NameID=admin) wrapped before the signed one (XSW)."))
+                        note: "Forged unsigned assertion (NameID=admin) wrapped before the signed one (XSW).")
+                )
             }
         }
 
@@ -148,7 +149,8 @@ public enum SAMLWorkbench {
         }
         if let m = replaceAttribute(xml, attribute: "NotOnOrAfter", with: "2099-01-01T00:00:00Z") {
             out.append(
-                .init(kind: .notOnOrAfterExtended, xml: m, note: "Assertion validity window extended to 2099."))
+                .init(
+                    kind: .notOnOrAfterExtended, xml: m, note: "Assertion validity window extended to 2099."))
         }
         return out
     }

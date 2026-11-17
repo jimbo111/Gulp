@@ -15,7 +15,9 @@ struct CacheChecksTests {
             let head =
                 "HTTP/1.1 200 OK\r\n" + headers.map { "\($0): \($1)" }.joined(separator: "\r\n")
                 + "\r\nContent-Length: \(body.utf8.count)\r\n\r\n\(body)"
-            return Probe(request: RawRequest(Bytes("GET / HTTP/1.1\r\n\r\n")), response: RawResponse(Bytes(head)), exchangeID: 0, seconds: 0)
+            return Probe(
+                request: RawRequest(Bytes("GET / HTTP/1.1\r\n\r\n")), response: RawResponse(Bytes(head)),
+                exchangeID: 0, seconds: 0)
         }
         #expect(CachePoisoningCheck.cacheable(probe(["Cache-Control": "public, max-age=60"])))
         #expect(CachePoisoningCheck.cacheable(probe(["Age": "5"])))
@@ -30,7 +32,9 @@ struct CacheChecksTests {
             var head = "HTTP/1.1 200 OK\r\n"
             if let location { head += "Location: \(location)\r\n" }
             head += "Content-Length: \(body.utf8.count)\r\n\r\n\(body)"
-            return Probe(request: RawRequest(Bytes("GET / HTTP/1.1\r\n\r\n")), response: RawResponse(Bytes(head)), exchangeID: 0, seconds: 0)
+            return Probe(
+                request: RawRequest(Bytes("GET / HTTP/1.1\r\n\r\n")), response: RawResponse(Bytes(head)),
+                exchangeID: 0, seconds: 0)
         }
         let canary = "abcd1234.gulp-cache.test"
         #expect(CachePoisoningCheck.reflects(probe(body: "<a href=https://\(canary)/x>"), canary))

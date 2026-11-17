@@ -29,7 +29,8 @@ enum LLMLab {
             var reply = "Okay. \(message)"
             let lower = message.lowercased()
             if lower.contains("system prompt") || lower.contains("your instructions")
-                || lower.contains("ignore") {
+                || lower.contains("ignore")
+            {
                 reply += " [system prompt: \(systemMarker)]"
             }
             let escaped = reply.replacingOccurrences(of: "\\", with: "\\\\")

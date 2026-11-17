@@ -55,7 +55,8 @@ struct SSO: AsyncParsableCommand {
                 throw ValidationError("The authorize URL has no redirect_uri.")
             }
             let defaultPort = destination.scheme == .https ? 443 : 80
-            let host = destination.port == defaultPort
+            let host =
+                destination.port == defaultPort
                 ? destination.host : "\(destination.host):\(destination.port)"
             let authorizePath = flow.authorizeEndpoint.flatMap { URLPath($0) } ?? "/authorize"
 
@@ -99,7 +100,9 @@ struct SSO: AsyncParsableCommand {
             if overAccepted.isEmpty {
                 print("redirect_uri: strict (only the exact registered value accepted)")
             } else {
-                print("redirect_uri: OVER-ACCEPTS \(overAccepted.count) variant(s) — \(overAccepted.map(\.kind.rawValue).joined(separator: ", "))")
+                print(
+                    "redirect_uri: OVER-ACCEPTS \(overAccepted.count) variant(s) — \(overAccepted.map(\.kind.rawValue).joined(separator: ", "))"
+                )
             }
 
             // SSO-004: PKCE downgrade (S256 → plain → none), redirect held at the registered value.

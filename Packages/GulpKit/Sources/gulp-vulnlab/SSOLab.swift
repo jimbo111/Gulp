@@ -45,7 +45,8 @@ enum SSOLab {
             }
             // Accept: issue a code to the (possibly attacker-controlled) redirect_uri.
             let sep = redirect.contains("?") ? "&" : "?"
-            let location = "\(redirect)\(sep)code=AUTH_\(abs(redirect.hashValue) % 100000)"
+            let location =
+                "\(redirect)\(sep)code=AUTH_\(abs(redirect.hashValue) % 100000)"
                 + (state.isEmpty ? "" : "&state=\(state)")
             return VulnReply(bytes: VulnLab.response(302, body: [], headers: ["Location: \(location)"]))
 

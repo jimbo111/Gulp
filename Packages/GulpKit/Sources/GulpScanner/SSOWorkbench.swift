@@ -184,8 +184,10 @@ public enum SSOWorkbench {
             .init(kind: .pathSuffix, value: base + "/../evil"),
             .init(kind: .pathTraversal, value: base + "/%2e%2e/evil"),
             .init(kind: .subdomain, value: "\(parsed.scheme)://\(attackerHost).\(parsed.host)\(parsed.path)"),
-            .init(kind: .siblingHost, value: "\(parsed.scheme)://\(parsed.host).\(attackerHost)\(parsed.path)"),
-            .init(kind: .atConfusion, value: "\(parsed.scheme)://\(parsed.host)@\(attackerHost)\(parsed.path)"),
+            .init(
+                kind: .siblingHost, value: "\(parsed.scheme)://\(parsed.host).\(attackerHost)\(parsed.path)"),
+            .init(
+                kind: .atConfusion, value: "\(parsed.scheme)://\(parsed.host)@\(attackerHost)\(parsed.path)"),
             .init(kind: .openRedirectChain, value: base + "?next=https://\(attackerHost)/"),
         ]
         if parsed.scheme == "https" {
@@ -209,7 +211,8 @@ public enum SSOWorkbench {
         let hostEnd = rest.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) ?? rest.endIndex
         let host = String(rest[rest.startIndex..<hostEnd])
         let pathPart = rest[hostEnd...]
-        let path = String(pathPart.split(separator: "?", maxSplits: 1).first ?? "").isEmpty
+        let path =
+            String(pathPart.split(separator: "?", maxSplits: 1).first ?? "").isEmpty
             ? "" : String(pathPart.prefix(while: { $0 != "?" && $0 != "#" }))
         guard !scheme.isEmpty, !host.isEmpty else { return nil }
         return (scheme, host, path)
@@ -224,7 +227,8 @@ public enum SSOWorkbench {
         -> [SSOProtectionFinding]
     {
         var findings: [SSOProtectionFinding] = []
-        let needsState = flow.grantType == .authorizationCode
+        let needsState =
+            flow.grantType == .authorizationCode
             || flow.grantType == .authorizationCodePKCE || flow.grantType == .implicit
             || flow.grantType == .hybrid
         if needsState {
@@ -253,7 +257,8 @@ public enum SSOWorkbench {
         }
         if (flow.grantType == .implicit || flow.grantType == .hybrid), (flow.nonce ?? "").isEmpty {
             findings.append(
-                .init(kind: .nonceMissing, detail: "No `nonce` on an implicit/hybrid flow — ID-token replay."))
+                .init(kind: .nonceMissing, detail: "No `nonce` on an implicit/hybrid flow — ID-token replay.")
+            )
         }
         return findings
     }

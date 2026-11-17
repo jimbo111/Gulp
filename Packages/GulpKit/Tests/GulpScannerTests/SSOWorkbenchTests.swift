@@ -16,7 +16,8 @@ struct SSOOAuthTests {
             "https://idp.example/authorize?response_type=code&client_id=app1"
             + "&redirect_uri=https://app.example/callback&scope=openid%20profile&state=xyz123"
             + "&nonce=n0&code_challenge=abc&code_challenge_method=S256"
-        let flow = SSOWorkbench.reconstructOAuth(authorizeURL: url, tokenEndpoint: "https://idp.example/token")
+        let flow = SSOWorkbench.reconstructOAuth(
+            authorizeURL: url, tokenEndpoint: "https://idp.example/token")
         #expect(flow.grantType == .authorizationCodePKCE)
         #expect(flow.clientID == "app1")
         #expect(flow.redirectURI == "https://app.example/callback")
