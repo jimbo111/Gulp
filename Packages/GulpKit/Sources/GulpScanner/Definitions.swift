@@ -390,6 +390,11 @@ public enum IssueDefinitions {
             "Don't reflect unkeyed request headers into responses; include every input the response depends on in the cache key (or `Vary`), and don't cache responses built from client-controlled host/scheme headers.",
             "- [OWASP web cache poisoning](https://owasp.org/www-community/attacks/Cache_Poisoning)"),
         def(
+            "active.cache-deception", "Web cache deception", "Cache deception", .high, .firm,
+            "A private, authenticated page is also served at a static-looking path (such as `/account.css`), where a CDN keyed on the extension caches it — so the private content lands in a shared cache and anyone can fetch it.",
+            "Return `Cache-Control: no-store` for authenticated/private responses regardless of the request path; don't let a path suffix change cacheability; and configure the CDN to cache by content type, not by extension.",
+            "- [PortSwigger web cache deception](https://portswigger.net/web-security/web-cache-deception)"),
+        def(
             "active.upload", "Unrestricted file upload", "File upload", .high, .firm,
             "A file upload accepted a dangerous type (such as `.php` or `.svg`) that a hardened endpoint would reject, so an attacker could upload a web shell or a stored-XSS SVG.",
             "Enforce a server-side allowlist of extensions and content types, verify the file's magic bytes, store uploads outside the web root (or on a separate domain), and never execute uploaded files.",

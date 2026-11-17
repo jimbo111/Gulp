@@ -201,6 +201,10 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/retest-dod.sh
+      - name: "Cache poisoning/deception Definition of Done (F28 WCP-002/003: confirmed-cached poison + deception; safe twins clean)"
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/cache-dod.sh
       - name: JS extension host type-check (JavaScriptCore shim; catches cross-platform errors)
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib

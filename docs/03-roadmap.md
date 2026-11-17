@@ -318,6 +318,16 @@ M22–M25.
 - [ ] The F27 requirements not built in M19a (JSR-006…JSR-009). **DoD:** library fingerprinting flags the bundled known-vulnerable library version and the asset diff surfaces a new endpoint between two VulnLab captures (F27 tests 3–4).
 
 ### M24 — Web cache poisoning & deception check family (merged from F28)
+*2026-11-17: **P0 family complete.** WCP-002 added to `active.cache-poisoning` — it now probes a list
+of unkeyed inputs (X-Forwarded-Host/Scheme/Server/Host/Port, Forwarded) and **confirms the vector** by
+issuing a clean follow-up that is served the cached canary (certain confidence). New
+`active.cache-deception` check (WCP-003): a private page served cacheable at a static-looking suffix
+(`/x.css`, `.css`, `%2fx.css`) lands private content in a shared cache. WCP-004 evidence carries the
+poisoning request + confirming cached response. VulnLab `CacheLab` (`/cache/poison` URL-keyed cache
++ `/cache/acct` extension-cacheable private content, each with a `/safe/` twin), `CacheChecksTests`
+(7), `Scripts/cache-dod.sh` **PASS** (confirmed-cached poison + deception on the vulnerable routes,
+neither on the safe twins). P1/P2 (WCP-005 OAST-amplified, WCP-006 key-normalization, WCP-008
+workbench) remain.*
 *2026-11-13: the core **web cache poisoning** check (WCP-001) is built early as an active check —
 `active.cache-poisoning` flags an unkeyed header reflected into a cacheable response; VulnLab `/cache`,
 asserted in `Scripts/m11c-checks-dod.sh`. The rest of the family (WCP-002…008) remains.*

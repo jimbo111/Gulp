@@ -12,46 +12,131 @@ enum ExtendedChecks {
     static let all: [any ActiveCheck] = [
         CORSCheck(), HostHeaderCheck(), JWTScanCheck(), MassAssignmentCheck(), PrototypePollutionCheck(),
         NoSQLInjectionCheck(), LDAPInjectionCheck(), XPathInjectionCheck(), UploadBypassCheck(),
-        CachePoisoningCheck(),
+        CachePoisoningCheck(), CacheDeceptionCheck(),
     ]
 }
 
-/// Web cache poisoning (F28 WCP-001): an unkeyed header (e.g. `X-Forwarded-Host`) is reflected into a
-/// response that is cacheable, so a poisoned copy could be served to other users. It fires only when
-/// the reflection lands in a response the cache would store — the cacheability is what separates it
-/// from plain host-header injection.
+/// Web cache poisoning (F28 WCP-001/002/004): a candidate **unkeyed input** (a forwarded-host/scheme/
+/// port header) is reflected into a response a shared cache would store. WCP-001 detects the reflection
+/// into a cacheable response; WCP-002 *confirms* the vector by issuing a clean follow-up (without the
+/// header) and checking the canary is still served — i.e. the poison was cached and would reach other
+/// users. The per-request canary is unique so no real user is served a lasting poisoned page. WCP-004:
+/// the finding carries the poisoning request, the confirming cached response, and the vector header.
 struct CachePoisoningCheck: ActiveCheck {
     let id = "active.cache-poisoning"
     let family = "cache-poisoning"
     let intensity = CheckIntensity.light
     let kinds: Set<InsertionPointKind> = []  // request-level
 
+    /// Candidate unkeyed inputs (header → how it is typically reflected). Kept small and high-signal.
+    static let unkeyedHeaders = [
+        "X-Forwarded-Host", "X-Forwarded-Scheme", "X-Forwarded-Server", "X-Host",
+        "X-Forwarded-Port", "Forwarded",
+    ]
+
     func run(_ point: InsertionPoint?, baseline: Baseline?, context: AuditContext) async -> [IssueFinding] {
-        let canary = "\(context.token(8)).gulp-cache.test"
-        let probe = await context.send(context.base.settingHeader("X-Forwarded-Host", to: canary))
-        guard Self.cacheable(probe) else { return [] }
-        let inLocation = probe.header("location")?.contains(canary) == true
-        let inBody = ["//\(canary)", "http://\(canary)", "https://\(canary)"].contains {
+        for header in Self.unkeyedHeaders {
+            let canary = "\(context.token(8)).gulp-cache.test"
+            let probe = await context.send(context.base.settingHeader(header, to: canary))
+            guard Self.cacheable(probe), Self.reflects(probe, canary) else { continue }
+
+            // WCP-002: confirm it was cached — a clean follow-up (no injected header) still carries the
+            // canary, so the poison would be served to other users keyed on the URL alone.
+            let cleanFollowUp = await context.send(context.base)
+            let confirmedCached = Self.reflects(cleanFollowUp, canary)
+            let confidence: IssueConfidence = confirmedCached ? .certain : .firm
+            let confirmation =
+                confirmedCached
+                ? " A clean follow-up request (without the header) was still served the canary, confirming the poison was **cached** and would reach other users."
+                : " (Reflected into a cacheable response; a clean follow-up did not reproduce it, so caching is probable but unconfirmed.)"
+            return [
+                context.finding(
+                    id, point: nil, variant: confirmedCached ? "confirmed-cached" : "reflected",
+                    detail:
+                        "`\(header): \(canary)` was reflected into a **cacheable** response (`\(probe.header("cache-control") ?? "Age present")`) — web cache poisoning via an unkeyed header.\(confirmation)",
+                    evidence: confirmedCached ? cleanFollowUp : probe, marker: canary,
+                    confidence: confidence)
+            ]
+        }
+        return []
+    }
+
+    /// Whether `canary` appears in the response's redirect Location or body.
+    static func reflects(_ probe: Probe, _ canary: String) -> Bool {
+        if probe.header("location")?.contains(canary) == true { return true }
+        return ["//\(canary)", "http://\(canary)", "https://\(canary)", canary].contains {
             probe.body.contains($0)
         }
-        guard inLocation || inBody else { return [] }
-        return [
-            context.finding(
-                id, point: nil, variant: inLocation ? "redirect" : "body",
-                detail:
-                    "`X-Forwarded-Host: \(canary)` was reflected into a **cacheable** response (`\(probe.header("cache-control") ?? "Age present")`), so a poisoned copy keyed on the URL alone could be served to other users — web cache poisoning.",
-                evidence: probe, marker: canary, confidence: .firm)
-        ]
     }
 
     /// Whether the response looks like something a shared cache would store.
     static func cacheable(_ probe: Probe) -> Bool {
-        if probe.header("age") != nil { return true }
+        if probe.header("age") != nil || probe.header("x-cache")?.lowercased().contains("hit") == true {
+            return true
+        }
         guard let control = probe.header("cache-control")?.lowercased() else { return false }
         if control.contains("no-store") || control.contains("private") || control.contains("no-cache") {
             return false
         }
         return control.contains("public") || control.contains("max-age")
+    }
+}
+
+/// Web cache deception (F28 WCP-003): a private/authenticated page is requested with a static-looking
+/// suffix (`/account.css`, `/account/x.js`, an encoded `/account%2fx.css`). If the app still returns
+/// the private content but the path makes a CDN treat it as a cacheable static asset, that private
+/// content lands in a shared cache — anyone can then fetch it. Confirmed by a private marker appearing
+/// in a now-cacheable response at the deceptive path that was not cacheable at the real path.
+struct CacheDeceptionCheck: ActiveCheck {
+    let id = "active.cache-deception"
+    let family = "cache-poisoning"
+    let intensity = CheckIntensity.light
+    let kinds: Set<InsertionPointKind> = []  // request-level
+
+    func run(_ point: InsertionPoint?, baseline: Baseline?, context: AuditContext) async -> [IssueFinding] {
+        let base = context.base
+        let target = base.bytes[base.parsed.target].string()
+        let path = String(target.split(separator: "?", maxSplits: 1).first ?? "")
+        // Only meaningful on a path that returns content and has no static extension already.
+        guard !path.isEmpty, path != "/", !path.contains(".") else { return [] }
+        // Determine the private marker from the real page (baseline is per-point and absent here).
+        let original: Probe
+        if let b = baseline?.original {
+            original = b
+        } else {
+            original = await context.send(base)
+        }
+        guard let privateMarker = Self.privateMarker(original.body) else { return [] }
+
+        for suffix in ["/x.css", ".css", "/x.js", "%2fx.css"] {
+            let deceptive = Self.retarget(base, path: path + suffix)
+            let probe = await context.send(deceptive)
+            guard CachePoisoningCheck.cacheable(probe), probe.body.contains(privateMarker) else { continue }
+            return [
+                context.finding(
+                    id, point: nil, variant: suffix,
+                    detail:
+                        "Requesting `\(path)\(suffix)` returned the private content (marker `\(privateMarker)`) in a **cacheable** response (`\(probe.header("cache-control") ?? "Age present")`). A CDN keyed on the extension would cache this private page and serve it to anyone — web cache deception.",
+                    evidence: probe, marker: privateMarker, confidence: .firm)
+            ]
+        }
+        return []
+    }
+
+    /// A short, stable substring of the baseline body that marks it as private (a session/user cue).
+    static func privateMarker(_ body: String?) -> String? {
+        guard let body else { return nil }
+        for cue in ["Balance:", "account_number", "\"email\"", "Welcome back", "session_token", "SSN"] {
+            if body.contains(cue) { return cue }
+        }
+        return nil
+    }
+
+    /// Rebuild `base` with a new request-target path (keeps method, Host and headers).
+    static func retarget(_ base: RawRequest, path: String) -> RawRequest {
+        let method = base.bytes[base.parsed.method].string()
+        let host = base.headerValue("host")?.string() ?? "localhost"
+        return RawRequest(Bytes("\(method) \(path) HTTP/1.1\r\nHost: \(host)\r\n\r\n"))
     }
 }
 
