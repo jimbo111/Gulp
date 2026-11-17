@@ -193,6 +193,10 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/pollute-dod.sh
+      - name: "SSO Workbench Definition of Done (F25: AS over-accepts redirect_uri + PKCE downgrade; safe twin strict)"
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/sso-dod.sh
       - name: JS extension host type-check (JavaScriptCore shim; catches cross-platform errors)
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib

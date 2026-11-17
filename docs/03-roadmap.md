@@ -291,7 +291,19 @@ prioritize with the owner; the suggested order after 1.0 is **M21 (SSO) and M26 
 M22–M25.
 
 ### M21 — SSO Workbench
-- [ ] All P0/P1 of F25. **DoD:** reconstructs a VulnLab OIDC auth-code flow and flags an over-accepted `redirect_uri`; a signature-stripped/XSW SAML assertion is accepted by the vulnerable SP and rejected by the safe twin.
+- [x] *2026-11-17:* **P0 core built** (SSO-001…005) on the Linux surface — OAuth/OIDC flow
+  reconstruction + grant-type detection, `redirect_uri` mutation probes + over-acceptance classifier,
+  state/PKCE/nonce protection analysis, and SAML decode (POST + redirect-binding inflate) +
+  signed-node-set computation + assertion mutations (signature stripping, XSW, audience/recipient/
+  NotOnOrAfter tampering). `SSOWorkbench`/`SAMLWorkbench` (12 tests), VulnLab `SSOLab` (`/authorize`
+  + `/safe/authorize` redirect_uri & PKCE differential, OIDC discovery doc), `gulp sso analyze|probe`,
+  `Scripts/sso-dod.sh` **PASS** (acceptance 1 & 4: vulnerable AS over-accepts `redirect_uri` incl. path
+  traversal and accepts a PKCE downgrade; the safe twin rejects every variant and enforces S256).
+  Remaining: the macOS flow-diagram UI (`GulpFeatures/SSO`), the live SAML-SP accept/reject DoD
+  (acceptance 3), and P1/P2 (SSO-006…010) — SAML mutations are constructed and unit-tested, the
+  live-SP fixture is the next increment. **DoD (original):** reconstructs a VulnLab OIDC auth-code flow
+  and flags an over-accepted `redirect_uri` ✓; a signature-stripped/XSW SAML assertion accepted by the
+  vulnerable SP and rejected by the safe twin (SAML live-SP fixture pending).
 
 ### M22 — WebSocket fuzzing and checks (merged from F26)
 - [x] *2026-11-13:* **CSWSH** (WSX-003) built — `gulp-cli cswsh` replays the WS handshake with an attacker `Origin` and flags endpoints that upgrade without an Origin check; VulnLab `/ws` (vulnerable) vs `/safe/ws` (Origin-checked), `Scripts/cswsh-dod.sh` PASS.
