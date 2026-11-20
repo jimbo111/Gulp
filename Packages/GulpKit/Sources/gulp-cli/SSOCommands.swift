@@ -54,21 +54,20 @@ struct SSO: AsyncParsableCommand {
             guard let redirect = flow.redirectURI, !redirect.isEmpty else {
                 throw ValidationError("The authorize URL has no redirect_uri.")
             }
-            let defaultPort = destination.scheme == .https ? 443 : 80
-            let host =
-                destination.port == defaultPort
-                ? destination.host : "\(destination.host):\(destination.port)"
+            let host = destination.hostHeader
             let authorizePath = flow.authorizeEndpoint.flatMap { URLPath($0) } ?? "/authorize"
 
-            let engine = NIOHTTPEngine()
+            let engine = ScopedSender(scope: .pinned(destination))
             defer { Task { await engine.shutdown() } }
             let options = SendOptions(recordAs: .automation)
 
             /// Send an authorize request with these query pairs; return (accepted, location).
-            func authorizeRequest(_ pairs: [(String, String)]) async -> (accepted: Bool, location: String) {
+            func authorizeRequest(_ pairs: [(String, String)]) async throws -> (
+                accepted: Bool, location: String
+            ) {
                 let qs = pairs.map { "\($0.0)=\(encode($0.1))" }.joined(separator: "&")
                 let raw = "GET \(authorizePath)?\(qs) HTTP/1.1\r\nHost: \(host)\r\nConnection: close\r\n\r\n"
-                let result = await engine.send(RawRequest(Bytes(raw)), to: destination, options: options)
+                let result = try await engine.send(RawRequest(Bytes(raw)), to: destination, options: options)
                 guard let response = result.exchange.response else { return (false, "") }
                 let location = response.headerValue("location")?.string() ?? ""
                 // Accepted = a redirect carrying an authorization code.
@@ -89,11 +88,12 @@ struct SSO: AsyncParsableCommand {
 
             // SSO-003: redirect_uri matrix (baseline PKCE held at S256).
             print("sso probe: redirect_uri variants")
-            let registeredAccepted = await authorizeRequest(base(redirect: redirect, method: "S256")).accepted
+            let registeredAccepted = try await authorizeRequest(base(redirect: redirect, method: "S256"))
+                .accepted
             print("  [registered] \(redirect) → \(registeredAccepted ? "accepted" : "rejected")")
             var overAccepted: [RedirectURIProbe] = []
             for probe in SSOWorkbench.redirectProbes(for: redirect) {
-                let r = await authorizeRequest(base(redirect: probe.value, method: "S256"))
+                let r = try await authorizeRequest(base(redirect: probe.value, method: "S256"))
                 print("  [\(probe.kind.rawValue)] \(probe.value) → \(r.accepted ? "ACCEPTED" : "rejected")")
                 if r.accepted { overAccepted.append(probe) }
             }
@@ -107,8 +107,8 @@ struct SSO: AsyncParsableCommand {
 
             // SSO-004: PKCE downgrade (S256 → plain → none), redirect held at the registered value.
             print("sso probe: PKCE enforcement")
-            let plain = await authorizeRequest(base(redirect: redirect, method: "plain")).accepted
-            let none = await authorizeRequest(base(redirect: redirect, method: nil)).accepted
+            let plain = try await authorizeRequest(base(redirect: redirect, method: "plain")).accepted
+            let none = try await authorizeRequest(base(redirect: redirect, method: nil)).accepted
             print("  method=plain → \(plain ? "ACCEPTED" : "rejected")")
             print("  no PKCE → \(none ? "ACCEPTED" : "rejected")")
             if plain || none {

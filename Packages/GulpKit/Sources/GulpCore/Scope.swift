@@ -305,6 +305,12 @@ public struct OutOfScope: Error, Sendable, Equatable {
     public var target: HTTPTarget
     /// The refused path.
     public var path: String
+
+    /// A refusal of `target`/`path`.
+    public init(target: HTTPTarget, path: String) {
+        self.target = target
+        self.path = path
+    }
 }
 
 /// ScopeGuard (TGT-023): active tools call `require` before they send. Out of scope throws

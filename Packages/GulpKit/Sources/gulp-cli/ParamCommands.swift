@@ -44,8 +44,10 @@ struct DiscoverParams: AsyncParsableCommand {
             names = Self.builtin
         }
         let base = RawRequest(Bytes([UInt8](data)))
-        let engine = NIOHTTPEngine()
-        defer { Task { await engine.shutdown() } }
+        let sender = ScopedSender(scope: .pinned(destination))
+        defer { Task { await sender.shutdown() } }
+        // One check at the single place the target is chosen; the closure below only ever sends there.
+        let engine = try await sender.engine(checkedFor: destination)
         let options = SendOptions(recordAs: .automation)
         let found = await ParamMiner.discover(base: base, names: names, batchSize: batchSize) { request in
             let result = await engine.send(request, to: destination, options: options)

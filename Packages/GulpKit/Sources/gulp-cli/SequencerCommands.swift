@@ -80,8 +80,10 @@ struct SequencerCommand: AsyncParsableCommand {
         }
         let request = RawRequest(Bytes([UInt8](data)))
         let options = SendOptions(recordAs: .automation)
-        let engine = NIOHTTPEngine()
-        defer { Task { await engine.shutdown() } }
+        let sender = ScopedSender(scope: .pinned(destination))
+        defer { Task { await sender.shutdown() } }
+        // One check at the single place the target is chosen; the closure below only ever sends there.
+        let engine = try await sender.engine(checkedFor: destination)
         let lanes = max(1, min(concurrency, count))
         let collected = await withTaskGroup(of: [String].self) { group in
             for lane in 0..<lanes {

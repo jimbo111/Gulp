@@ -139,9 +139,7 @@ struct WSFuzz: AsyncParsableCommand {
 
         let http = NIOHTTPEngine()
         defer { Task { await http.shutdown() } }
-        let defaultPort = destination.scheme == .https ? 443 : 80
-        let host =
-            destination.port == defaultPort ? destination.host : "\(destination.host):\(destination.port)"
+        let host = destination.hostHeader
         let nonce = Data((0..<16).map { _ in UInt8.random(in: 0...255) }).base64EncodedString()
         let upgrade = RawRequest(
             Bytes(

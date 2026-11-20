@@ -32,7 +32,7 @@ struct WSAuthz: AsyncParsableCommand {
         guard let destination = HTTPTarget(url: target) else {
             throw ValidationError("Invalid --target \(target)")
         }
-        let engine = NIOHTTPEngine()
+        let engine = ScopedSender(scope: .pinned(destination))
         defer { Task { await engine.shutdown() } }
 
         let privilegedReply = try await replay(cookie: privilegedCookie, engine: engine, to: destination)
@@ -60,12 +60,10 @@ struct WSAuthz: AsyncParsableCommand {
     }
 
     /// Open a fresh socket with the given cookie, send `message`, and return the first text reply.
-    private func replay(cookie: String?, engine: NIOHTTPEngine, to destination: HTTPTarget) async throws
+    private func replay(cookie: String?, engine: ScopedSender, to destination: HTTPTarget) async throws
         -> String
     {
-        let defaultPort = destination.scheme == .https ? 443 : 80
-        let host =
-            destination.port == defaultPort ? destination.host : "\(destination.host):\(destination.port)"
+        let host = destination.hostHeader
         let nonce = Data((0..<16).map { _ in UInt8.random(in: 0...255) }).base64EncodedString()
         let cookieLine = cookie.map { "Cookie: \($0)\r\n" } ?? ""
         let upgrade = RawRequest(

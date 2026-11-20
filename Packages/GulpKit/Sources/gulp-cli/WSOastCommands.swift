@@ -29,9 +29,15 @@ struct WSOast: AsyncParsableCommand {
         guard let destination = HTTPTarget(url: target) else {
             throw ValidationError("Invalid --target \(target)")
         }
-        let engine = NIOHTTPEngine()
+        let engine = ScopedSender(scope: .pinned(destination))
         defer { Task { await engine.shutdown() } }
-        let transport = EngineOASTTransport(engine: engine)
+        // The OAST server is the operator's own infrastructure, never the target: a deliberate override.
+        guard let oastTarget = HTTPTarget(url: oastServer) else {
+            throw ValidationError("Invalid --oast-server \(oastServer)")
+        }
+        let oastSender = ScopedSender(scope: .overridden(reason: "polls the operator's OAST server"))
+        defer { Task { await oastSender.shutdown() } }
+        let transport = EngineOASTTransport(engine: try await oastSender.engine(checkedFor: oastTarget))
         let client = try InteractshClient(
             serverURL: oastServer, domain: oastDomain.isEmpty ? nil : oastDomain,
             token: oastToken?.isEmpty == true ? nil : oastToken, transport: transport)
@@ -44,9 +50,7 @@ struct WSOast: AsyncParsableCommand {
         print("ws-oast: injecting \(url) over \(path)")
 
         // Send the payload over one socket.
-        let defaultPort = destination.scheme == .https ? 443 : 80
-        let host =
-            destination.port == defaultPort ? destination.host : "\(destination.host):\(destination.port)"
+        let host = destination.hostHeader
         let nonce = Data((0..<16).map { _ in UInt8.random(in: 0...255) }).base64EncodedString()
         let upgrade = RawRequest(
             Bytes(

@@ -22,16 +22,14 @@ struct CSWSH: AsyncParsableCommand {
         guard let destination = HTTPTarget(url: target) else {
             throw ValidationError("Invalid --target \(target)")
         }
-        let defaultPort = destination.scheme == .https ? 443 : 80
-        let host =
-            destination.port == defaultPort ? destination.host : "\(destination.host):\(destination.port)"
+        let host = destination.hostHeader
         let nonce = Data((0..<16).map { _ in UInt8.random(in: 0...255) }).base64EncodedString()
         let upgrade = RawRequest(
             Bytes(
                 "GET \(path) HTTP/1.1\r\nHost: \(host)\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
                     + "Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: \(nonce)\r\nOrigin: \(origin)\r\n\r\n")
         )
-        let engine = NIOHTTPEngine()
+        let engine = ScopedSender(scope: .pinned(destination))
         defer { Task { await engine.shutdown() } }
         do {
             let session = try await engine.openWebSocket(

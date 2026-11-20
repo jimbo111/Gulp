@@ -67,12 +67,12 @@ struct SmuggleConfirm: AsyncParsableCommand {
         }
 
         print("SENDING confirmation (authorized, in scope) …")
-        let engine = NIOHTTPEngine()
+        let engine = ScopedSender(scope: .pinned(destination))
         defer { Task { await engine.shutdown() } }
         var options = SendOptions(recordAs: .automation)
         options.timeouts.total = .seconds(20)
-        _ = await engine.send(confirmation.attack, to: destination, options: options)
-        let followResult = await engine.send(confirmation.followUp, to: destination, options: options)
+        _ = try await engine.send(confirmation.attack, to: destination, options: options)
+        let followResult = try await engine.send(confirmation.followUp, to: destination, options: options)
         let status = followResult.exchange.response?.parsed.statusCode
         print("follow-up status: \(status.map(String.init) ?? "(no response)")")
         print("Compare against the endpoint's normal status; a 4xx here is the desync signal.")

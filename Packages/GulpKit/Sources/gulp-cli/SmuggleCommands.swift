@@ -26,23 +26,23 @@ struct Smuggle: AsyncParsableCommand {
             throw ValidationError("Invalid --target \(target)")
         }
         let base = RawRequest(Bytes([UInt8](data)))
-        let engine = NIOHTTPEngine()
+        let engine = ScopedSender(scope: .pinned(destination))
         defer { Task { await engine.shutdown() } }
         var options = SendOptions(recordAs: .automation)
         options.timeouts.total = .seconds(20)
 
-        func time(_ request: RawRequest) async -> Double {
+        func time(_ request: RawRequest) async throws -> Double {
             let start = ContinuousClock.now
-            _ = await engine.send(request, to: destination, options: options)
+            _ = try await engine.send(request, to: destination, options: options)
             let elapsed = ContinuousClock.now - start
             return Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
         }
 
-        let baseline = await time(SmugglingProbe.baselineProbe(base: base))
+        let baseline = try await time(SmugglingProbe.baselineProbe(base: base))
         print(String(format: "baseline: %.2fs", baseline))
         var anyVulnerable = false
         for vector in SmugglingVector.allCases {
-            let probe = await time(SmugglingProbe.timingProbe(vector, base: base))
+            let probe = try await time(SmugglingProbe.timingProbe(vector, base: base))
             let vulnerable = SmugglingProbe.isVulnerable(
                 baseline: baseline, probe: probe, threshold: threshold)
             anyVulnerable = anyVulnerable || vulnerable

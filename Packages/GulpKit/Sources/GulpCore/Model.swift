@@ -73,6 +73,13 @@ public struct HTTPTarget: Sendable, Hashable, Codable {
     }
 }
 
+extension HTTPTarget {
+    /// The `Host` header value: the host, plus `:port` unless it is the scheme's default port.
+    public var hostHeader: String {
+        port == (scheme == .https ? 443 : 80) ? host : "\(host):\(port)"
+    }
+}
+
 // MARK: - Supporting value types
 
 /// Lifecycle of an exchange (`Exchange.state`). Network failures are data, not exceptions.

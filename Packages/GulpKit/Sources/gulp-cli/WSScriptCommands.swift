@@ -66,11 +66,9 @@ struct WSScript_: AsyncParsableCommand {
         let sequence = WSScript.parse(text)
         guard !sequence.steps.isEmpty else { throw ValidationError("The script has no steps.") }
 
-        let engine = NIOHTTPEngine()
+        let engine = ScopedSender(scope: .pinned(destination))
         defer { Task { await engine.shutdown() } }
-        let defaultPort = destination.scheme == .https ? 443 : 80
-        let host =
-            destination.port == defaultPort ? destination.host : "\(destination.host):\(destination.port)"
+        let host = destination.hostHeader
         let nonce = Data((0..<16).map { _ in UInt8.random(in: 0...255) }).base64EncodedString()
         let upgrade = RawRequest(
             Bytes(
@@ -90,7 +88,6 @@ struct WSScript_: AsyncParsableCommand {
             Task { await session.close() }
         }
 
-        var allMatched = true
         for (index, step) in sequence.steps.enumerated() {
             switch step {
             case .send(let message):
@@ -109,12 +106,11 @@ struct WSScript_: AsyncParsableCommand {
                     "  #\(index + 1) \(kind) \(pattern) → \(matched ? "MATCH" : "MISS") "
                         + "[\(frame ?? "(timeout)")]")
                 if !matched {
-                    allMatched = false
                     print("ws-script: step #\(index + 1) did not match; stopping.")
                     return
                 }
             }
         }
-        print("ws-script: \(allMatched ? "all steps matched" : "a step did not match")")
+        print("ws-script: all steps matched")
     }
 }

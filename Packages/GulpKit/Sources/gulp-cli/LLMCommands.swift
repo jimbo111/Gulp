@@ -28,8 +28,8 @@ struct LLM: AsyncParsableCommand {
             guard let destination = HTTPTarget(url: target) else {
                 throw ValidationError("Invalid --target \(target)")
             }
-            let host = hostHeader(destination)
-            let engine = NIOHTTPEngine()
+            let host = destination.hostHeader
+            let engine = ScopedSender(scope: .pinned(destination))
             defer { Task { await engine.shutdown() } }
             let options = SendOptions(recordAs: .automation)
 
@@ -39,7 +39,7 @@ struct LLM: AsyncParsableCommand {
                 let raw =
                     "POST \(path) HTTP/1.1\r\nHost: \(host)\r\nContent-Type: application/json\r\n"
                     + "Content-Length: \(json.utf8.count)\r\nConnection: close\r\n\r\n\(json)"
-                let result = await engine.send(RawRequest(Bytes(raw)), to: destination, options: options)
+                let result = try await engine.send(RawRequest(Bytes(raw)), to: destination, options: options)
                 let reply = (try? result.exchange.response?.decodedBody())?.flatMap { $0 }?.string() ?? ""
                 let verdict = LLMInjection.classify(
                     reply: reply, canary: "GULPCANARY7", systemPromptMarker: leakMarker)
@@ -72,8 +72,8 @@ struct LLM: AsyncParsableCommand {
             guard let destination = HTTPTarget(url: target) else {
                 throw ValidationError("Invalid --target \(target)")
             }
-            let host = hostHeader(destination)
-            let engine = NIOHTTPEngine()
+            let host = destination.hostHeader
+            let engine = ScopedSender(scope: .pinned(destination))
             defer { Task { await engine.shutdown() } }
             let options = SendOptions(recordAs: .automation)
 
@@ -81,7 +81,7 @@ struct LLM: AsyncParsableCommand {
             let raw =
                 "POST \(path) HTTP/1.1\r\nHost: \(host)\r\nContent-Type: application/json\r\n"
                 + "Content-Length: \(rpc.utf8.count)\r\nConnection: close\r\n\r\n\(rpc)"
-            let result = await engine.send(RawRequest(Bytes(raw)), to: destination, options: options)
+            let result = try await engine.send(RawRequest(Bytes(raw)), to: destination, options: options)
             let status = result.exchange.response?.parsed.statusCode ?? 0
             let body = (try? result.exchange.response?.decodedBody())?.flatMap { $0 }?.string() ?? ""
 
@@ -116,12 +116,6 @@ struct LLM: AsyncParsableCommand {
             }
         }
     }
-}
-
-private func hostHeader(_ destination: HTTPTarget) -> String {
-    let defaultPort = destination.scheme == .https ? 443 : 80
-    return destination.port == defaultPort
-        ? destination.host : "\(destination.host):\(destination.port)"
 }
 
 private func escape(_ s: String) -> String {

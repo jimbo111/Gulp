@@ -35,22 +35,22 @@ struct Pollute: AsyncParsableCommand {
             guard let name = kv.first else { return nil }
             return (String(name), kv.count > 1 ? String(kv[1]) : "")
         }
-        let engine = NIOHTTPEngine()
+        let engine = ScopedSender(scope: .pinned(destination))
         defer { Task { await engine.shutdown() } }
         let options = SendOptions(recordAs: .automation)
 
-        func body(_ request: RawRequest) async -> String {
-            let result = await engine.send(request, to: destination, options: options)
+        func body(_ request: RawRequest) async throws -> String {
+            let result = try await engine.send(request, to: destination, options: options)
             return (try? result.exchange.response?.decodedBody()).flatMap { $0 }?.string() ?? ""
         }
 
-        let baseline = await body(base)
+        let baseline = try await body(base)
         print("pollute: \(pairs.count) parameter(s)")
         for (name, value) in pairs {
             let canary = "gp\(UInt16.random(in: 1000...9999))"
             let duplicated = ParamMiner.appendingQuery(base, [(name, canary)])
             let handling = ParamPollution.classify(
-                firstValue: value, canary: canary, baseline: baseline, dup: await body(duplicated))
+                firstValue: value, canary: canary, baseline: baseline, dup: try await body(duplicated))
             let note = ParamPollution.isQuirk(handling) ? " (pollution quirk)" : ""
             print("  \(name): \(handling.rawValue)\(note)")
         }
