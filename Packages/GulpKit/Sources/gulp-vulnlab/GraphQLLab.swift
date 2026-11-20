@@ -21,7 +21,7 @@ enum GraphQLLab {
 
     static func respond(_ request: RawRequest, path: String) -> VulnReply? {
         guard path == "/graphql" || path == "/safe/graphql" else { return nil }
-        let safe = path.hasPrefix("/safe/")
+        let safe = SafeTwin.isSafe(path)
         guard request.bytes[request.parsed.method].string().uppercased() == "POST" else {
             return json(405, #"{"errors":[{"message":"use POST"}]}"#)
         }

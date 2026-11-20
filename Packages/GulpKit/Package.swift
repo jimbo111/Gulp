@@ -245,6 +245,7 @@ let package = Package(
         .testTarget(name: "GulpExtensionsTests", dependencies: ["GulpExtensions"]),
         .testTarget(name: "GulpAITests", dependencies: ["GulpAI"]),
         .testTarget(name: "GulpBrowserTests", dependencies: ["GulpBrowser"]),
+        .testTarget(name: "GulpVulnLabTests", dependencies: ["gulp-vulnlab", "GulpCore"]),
         .testTarget(name: "GulpScriptTests", dependencies: ["GulpScript"]),
         .testTarget(name: "GulpUITests", dependencies: ["GulpUI", "GulpCore"]),
         .testTarget(name: "GulpFeaturesTests", dependencies: ["GulpFeatures"]),

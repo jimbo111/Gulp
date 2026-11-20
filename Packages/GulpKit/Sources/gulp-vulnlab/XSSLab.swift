@@ -8,7 +8,7 @@ import Foundation
 enum XSSLab {
     /// The page for `path` (`/xss/html`, `/safe/xss/attr`…), or nil if it isn't an XSS lab path.
     static func respond(_ path: String, _ query: [String: String]) -> VulnReply? {
-        let safe = path.hasPrefix("/safe/")
+        let safe = SafeTwin.isSafe(path)
         let context = path.split(separator: "/").last.map(String.init) ?? ""
         let q = query["q"] ?? ""
         let body: String

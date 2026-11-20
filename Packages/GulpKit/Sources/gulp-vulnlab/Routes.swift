@@ -149,25 +149,41 @@ enum VulnLab {
 
         """
 
+    /// A lab that owns a family of routes: it answers the paths it owns and returns nil for the rest.
+    struct Lab: Sendable {
+        let name: String
+        let respond:
+            @Sendable (_ request: RawRequest, _ path: String, _ query: [String: String]) -> VulnReply?
+    }
+
+    /// The route-family labs, tried in order before the built-in routes. Ownership must not depend on
+    /// this order: VulnLabOwnershipTests checks that no two labs answer the same path (a later lab's
+    /// route silently shadowed by an earlier one is how `/safe/recon/*` once went to the wrong lab).
+    static let labs: [Lab] = [
+        Lab(name: "GRPCLab") { request, path, _ in GRPCLab.respond(request, path: path) },
+        Lab(name: "CrawlLab") { _, path, query in CrawlLab.respond(path, query) },
+        Lab(name: "ScanLab") { request, path, query in ScanLab.respond(request, path: path, query: query) },
+        Lab(name: "SignedLab") { request, path, _ in SignedLab.respond(request, path: path) },
+        Lab(name: "GraphQLLab") { request, path, _ in GraphQLLab.respond(request, path: path) },
+        Lab(name: "ReconLab") { _, path, _ in ReconLab.respond(path) },
+        Lab(name: "SSOLab") { request, path, query in SSOLab.respond(request, path: path, query: query) },
+        Lab(name: "CacheLab") { request, path, query in CacheLab.respond(request, path: path, query: query) },
+        Lab(name: "LLMLab") { request, path, query in LLMLab.respond(request, path: path, query: query) },
+    ]
+
     /// Route one request.
     static func respond(to request: RawRequest) -> VulnReply {
         let requestTarget = request.bytes[request.parsed.target].string()
         let path = String(requestTarget.split(separator: "?", maxSplits: 1).first ?? "")
         let query = queryItems(requestTarget)
-        if let rpc = GRPCLab.respond(request, path: path) { return rpc }
-        if let crawl = CrawlLab.respond(path, query) { return crawl }
-        if let scan = ScanLab.respond(request, path: path, query: query) { return scan }
-        if let signed = SignedLab.respond(request, path: path) { return signed }
-        if let graphql = GraphQLLab.respond(request, path: path) { return graphql }
-        if let recon = ReconLab.respond(path) { return recon }
-        if let sso = SSOLab.respond(request, path: path, query: query) { return sso }
-        if let cache = CacheLab.respond(request, path: path, query: query) { return cache }
-        if let llm = LLMLab.respond(request, path: path, query: query) { return llm }
+        for lab in labs {
+            if let reply = lab.respond(request, path, query) { return reply }
+        }
         switch path {
         case "/lab/burst":
             return BurstLab.respond(query)
         case "/fetch", "/safe/fetch":
-            return OASTLab.fetch(query, safe: path.hasPrefix("/safe"))
+            return OASTLab.fetch(query, safe: SafeTwin.isSafe(path))
         case "/":
             // The home page: links to the labs, so a proxied visit gives the site map inferred nodes
             // (F04 TGT-003). `/admin` is deliberately not linked (content discovery finds it, M8).
@@ -218,7 +234,7 @@ enum VulnLab {
         case "/account": return AuthLab.account(request)
         case "/admin", "/admin/": return AuthLab.admin(request)
         case "/api/me", "/safe/api/me":
-            return JWTLab.me(request.headerValue("authorization")?.string(), safe: path.hasPrefix("/safe"))
+            return JWTLab.me(request.headerValue("authorization")?.string(), safe: SafeTwin.isSafe(path))
         case "/api/login":
             return JWTLab.login(user: query["user"] ?? "alice", alg: (query["alg"] ?? "RS256").uppercased())
         case "/api/key.pem":

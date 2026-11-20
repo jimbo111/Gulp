@@ -29,8 +29,7 @@ enum PassiveLab {
 
     /// The planted route for `path` (or its `/safe/` twin), or nil.
     static func respond(_ path: String, _ query: [String: String], _ request: RawRequest) -> VulnReply? {
-        let safe = path.hasPrefix("/safe/")
-        let route = safe ? String(path.dropFirst(5)) : path
+        let (route, safe) = SafeTwin.split(path)
         let csrf = #"<input type="hidden" name="csrf" value="9c1f0e2a">"#
         switch route {
         case "/headers/no-csp":

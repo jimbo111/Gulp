@@ -26,7 +26,7 @@ enum SSOLab {
                 bytes: VulnLab.response(200, body: Array(body.utf8), type: "application/json"))
 
         case "/authorize", "/safe/authorize":
-            let safe = path.hasPrefix("/safe/")
+            let safe = SafeTwin.isSafe(path)
             let redirect = query["redirect_uri"] ?? ""
             let state = query["state"] ?? ""
             let method = (query["code_challenge_method"] ?? "").uppercased()

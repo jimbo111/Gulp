@@ -14,8 +14,7 @@ enum CacheLab {
     private static let cache = CacheStore()
 
     static func respond(_ request: RawRequest, path: String, query: [String: String]) -> VulnReply? {
-        let safe = path.hasPrefix("/safe/")
-        let route = safe ? String(path.dropFirst(5)) : path
+        let (route, safe) = SafeTwin.split(path)
 
         switch route {
         case "/cache/poison":

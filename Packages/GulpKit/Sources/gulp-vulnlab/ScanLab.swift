@@ -67,8 +67,8 @@ enum ScanLab {
             patched.remove(route)
             return text("unpatched \(route)\n")
         }
-        let safe = path.hasPrefix("/safe/") || patched.contains(path)
-        let route = path.hasPrefix("/safe/") ? String(path.dropFirst(5)) : path
+        let (route, twin) = SafeTwin.split(path)
+        let safe = twin || patched.contains(path)
         // The `/recon/*` JS bundles here are the JSRecon source-map/asset-diff fixtures and only ever
         // serve their vulnerable twin (the JSRecon DoDs never fetch a `/safe/` variant). Their `/safe/`
         // namespace belongs to ReconLab's clean secret/endpoint twins (F27 M19), so don't shadow those:
