@@ -1,4 +1,5 @@
 import Foundation
+import GulpTestSupport
 import Testing
 
 @testable import GulpDiff
@@ -28,7 +29,7 @@ func checkTiling(
 struct DiffTests {
     @Test("Myers: segments tile both inputs over random edits, at byte and word level")
     func test_CMP002_property() {
-        var generator = SystemRandomNumberGenerator()
+        var generator = SplitMix64(seed: 0xC0FF_EE02)
         let alphabet = Array("ab c\nde,f".utf8)
         for _ in 0..<200 {
             let a = (0..<Int.random(in: 0...60, using: &generator)).map { _ in
@@ -71,12 +72,19 @@ struct DiffTests {
     @Test(
         "F13 acceptance 1: two 1 MB responses differing in a few bytes diff fast and highlight exactly them")
     func test_CMP004_large() {
-        var generator = SystemRandomNumberGenerator()
+        var generator = SplitMix64(seed: 0xC0FF_EE04)
         let words = ["alpha", "beta", "gamma", "delta", "<div>", "</div>", "token", "value", "\n"]
         var text: [UInt8] = []
         while text.count < 1_048_576 { text += Array((words.randomElement(using: &generator)! + " ").utf8) }
+        // Change a byte whose neighbours differ from it: next to an equal byte (the "mm" in "gamma") the
+        // minimal diff is ambiguous — the delete may legally land one byte later — which made this flaky.
+        let positions = [100_000, 500_000, 900_000].map { start in
+            var p = start
+            while text[p - 1] == text[p] || text[p + 1] == text[p] { p += 1 }
+            return p
+        }
         var changed = text
-        for position in [100_000, 500_000, 900_000] {
+        for position in positions {
             changed[position] = changed[position] == 0x58 ? 0x59 : 0x58
         }
         let start = ContinuousClock.now
@@ -87,13 +95,10 @@ struct DiffTests {
         checkTiling(byteDiff)
         checkTiling(wordDiff)
         #expect(
-            byteDiff.changes.filter { $0.operation == .delete }.map(\.a) == [
-                100_000..<100_001, 500_000..<500_001, 900_000..<900_001,
-            ])
+            byteDiff.changes.filter { $0.operation == .delete }.map(\.a) == positions.map { $0..<$0 + 1 })
         // Word mode highlights the containing words: every changed byte is inside (or next to) a
         // change, and every change is near a changed byte (nothing paired far away). One changed
         // byte may merge two words, so the exact number of segments isn't fixed.
-        let positions = [100_000, 500_000, 900_000]
         for position in positions {
             #expect(wordDiff.changes.contains { $0.a.lowerBound <= position && position <= $0.a.upperBound })
         }

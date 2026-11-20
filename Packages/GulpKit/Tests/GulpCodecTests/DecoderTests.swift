@@ -1,4 +1,5 @@
 import Foundation
+import GulpTestSupport
 import Testing
 
 @testable import GulpCodec
@@ -17,7 +18,7 @@ struct DecoderTests {
 
     @Test("F12 acceptance 4: every reversible operation round-trips over random bytes and text")
     func test_DEC005_roundTrips() throws {
-        var generator = SystemRandomNumberGenerator()
+        var generator = SplitMix64(seed: 0xDEC0_DE05)
         for name in Self.byteExact {
             let transform = try #require(Transforms.named(name))
             let inverse = try #require(transform.inverse.flatMap(Transforms.named))
@@ -28,7 +29,7 @@ struct DecoderTests {
             }
         }
         let xorKey = ["key": "k3y"]
-        let random = (0..<100).map { _ in UInt8.random(in: 0...255) }
+        let random = (0..<100).map { _ in UInt8.random(in: 0...255, using: &generator) }
         #expect(
             try Transforms.named("xor")!.apply(Transforms.named("xor")!.apply(random, xorKey), xorKey)
                 == random)

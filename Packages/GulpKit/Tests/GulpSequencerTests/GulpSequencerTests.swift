@@ -1,4 +1,5 @@
 import Foundation
+import GulpTestSupport
 import Testing
 
 @testable import GulpSequencer
@@ -8,25 +9,6 @@ struct GulpSequencerScaffolding {
     @Test("module marker is wired")
     func moduleMarker() {
         #expect(GulpSequencer.moduleName == "GulpSequencer")
-    }
-}
-
-/// A deterministic SplitMix64 PRNG so the "random" fixtures are reproducible (and high quality).
-struct SplitMix64 {
-    var state: UInt64
-    init(seed: UInt64) { state = seed }
-    mutating func next() -> UInt64 {
-        state &+= 0x9E37_79B9_7F4A_7C15
-        var z = state
-        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
-        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
-        return z ^ (z >> 31)
-    }
-    /// A hex token of `symbols` hex characters.
-    mutating func hexToken(_ symbols: Int) -> String {
-        var out = ""
-        while out.count < symbols { out += String(format: "%016llx", next()) }
-        return String(out.prefix(symbols))
     }
 }
 

@@ -190,10 +190,13 @@ let package = Package(
             ]),
 
         // ---- Tests (one per module + integration) ----
-        .testTarget(name: "GulpCoreTests", dependencies: ["GulpCore"], resources: [.copy("Fixtures")]),
-        .testTarget(name: "GulpCodecTests", dependencies: ["GulpCodec", "GulpCore"]),
+        // Shared test helpers (seeded RNG); a plain target so several test targets can depend on it.
+        .target(name: "GulpTestSupport", path: "Tests/GulpTestSupport"),
+        .testTarget(
+            name: "GulpCoreTests", dependencies: ["GulpCore", "GulpTestSupport"], resources: [.copy("Fixtures")]),
+        .testTarget(name: "GulpCodecTests", dependencies: ["GulpCodec", "GulpCore", "GulpTestSupport"]),
         .testTarget(name: "GulpQueryTests", dependencies: ["GulpQuery", "GulpCore"]),
-        .testTarget(name: "GulpDiffTests", dependencies: ["GulpDiff"]),
+        .testTarget(name: "GulpDiffTests", dependencies: ["GulpDiff", "GulpTestSupport"]),
         .testTarget(name: "GulpStoreTests", dependencies: ["GulpStore", "GulpQuery"]),
         .testTarget(
             name: "GulpTLSTests",
@@ -237,7 +240,7 @@ let package = Package(
                 .product(name: "NIOConcurrencyHelpers", package: "swift-nio"),
             ]),
         .testTarget(name: "GulpScannerTests", dependencies: ["GulpScanner", "GulpCore", "GulpCodec"]),
-        .testTarget(name: "GulpSequencerTests", dependencies: ["GulpSequencer"]),
+        .testTarget(name: "GulpSequencerTests", dependencies: ["GulpSequencer", "GulpTestSupport"]),
         .testTarget(name: "GulpReportTests", dependencies: ["GulpReport", "GulpCore"]),
         .testTarget(name: "GulpExtensionsTests", dependencies: ["GulpExtensions"]),
         .testTarget(name: "GulpAITests", dependencies: ["GulpAI"]),

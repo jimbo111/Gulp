@@ -1,4 +1,5 @@
 import Foundation
+import GulpTestSupport
 import Testing
 
 @testable import GulpCore
@@ -30,18 +31,6 @@ enum HTTPFixtures {
 
     static let all = load()
     static let requests = all.filter { !$0.isResponse }
-}
-
-/// Deterministic PRNG (SplitMix64) so fuzz failures reproduce from the seed.
-struct SplitMix64: RandomNumberGenerator {
-    var state: UInt64
-    mutating func next() -> UInt64 {
-        state &+= 0x9E37_79B9_7F4A_7C15
-        var z = state
-        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
-        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
-        return z ^ (z >> 31)
-    }
 }
 
 /// Invariants every parse must satisfy, whatever the input.
@@ -168,7 +157,7 @@ struct ParserPropertyTests {
             "\t", "hello", "\u{0}", "/", "?a=1&b=2", "X-Dup: 1", "\r\n 1", "é",
         ]
         let tokens = tokenStrings.map { Array($0.utf8) }
-        var rng = SplitMix64(state: 0x6775_6C70)  // "gulp"
+        var rng = SplitMix64(seed: 0x6775_6C70)  // "gulp"
         for _ in 0..<2_000 {
             var bytes: [UInt8] = []
             for _ in 0..<Int.random(in: 0...40, using: &rng) {
