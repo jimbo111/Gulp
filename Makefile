@@ -7,10 +7,13 @@ SCHEME    := Gulp
 DD        := .build/xcode
 CONFIG    := Debug
 DEST      := platform=macOS
+# Extra SwiftPM flags, e.g. on Linux with a source-built zlib/sqlite:
+#   make test-core SWIFTPM_FLAGS="-Xcc -I/usr/local/include -Xlinker -L/usr/local/lib"
+SWIFTPM_FLAGS ?=
 
 .DEFAULT_GOAL := help
 
-.PHONY: help bootstrap generate build run test test-core perf lint format vulnlab beacon release clean
+.PHONY: help bootstrap generate build run test test-core perf lint rules format vulnlab beacon release clean
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n",$$1,$$2}'
@@ -30,7 +33,7 @@ run: build ## Build and launch Gulp.app
 	open "$(DD)/Build/Products/$(CONFIG)/Gulp.app"
 
 test-core: ## swift test for GulpKit (works on Linux)
-	swift test --package-path $(KIT) --parallel
+	swift test --package-path $(KIT) --parallel $(SWIFTPM_FLAGS)
 
 test: test-core ## Core tests + app/UI tests (macOS)
 	xcodebuild -project Gulp.xcodeproj -scheme $(SCHEME) -configuration $(CONFIG) -destination '$(DEST)' -derivedDataPath $(DD) test
@@ -38,8 +41,12 @@ test: test-core ## Core tests + app/UI tests (macOS)
 perf: ## Performance budget tests (doc 06 §5; slow, excluded from `test`)
 	swift test --package-path $(KIT) --filter PerformanceTests
 
-lint: ## Check formatting (strict)
+lint: rules ## Check formatting (strict) + the rules/architecture gates
 	swift format lint --strict --recursive App Packages Beacon UITests
+
+rules: ## CLAUDE.md hard rules + architecture invariants as checks (grep only; works on Linux)
+	Scripts/arch-check.sh
+	Scripts/rules-check.sh
 
 format: ## Apply formatting in place
 	swift format --in-place --recursive App Packages Beacon UITests

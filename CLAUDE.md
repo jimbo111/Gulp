@@ -38,7 +38,8 @@ make build       # build the macOS app (Debug)
 make run         # build and launch Gulp.app
 make test        # swift test for GulpKit + xcodebuild test for app/UI tests
 make test-core   # swift test only (works on Linux too)
-make lint        # swift-format lint --strict
+make lint        # swift-format lint --strict, after `make rules`
+make rules       # Scripts/arch-check.sh + Scripts/rules-check.sh (hard rules as grep checks; Linux too)
 make vulnlab     # run the intentionally vulnerable local test server on :8088
 make beacon      # run the OAST Beacon server locally (dev mode, high ports)
 ```
@@ -47,6 +48,9 @@ On **Linux** (for example cloud Claude sessions), `xcodebuild` is unavailable. B
 platform-independent modules with `swift build` / `swift test --package-path Packages/GulpKit`.
 Modules that need Apple frameworks are behind `#if canImport(...)` or are macOS-only targets (see
 architecture §4). Never break the Linux build of the core modules.
+If SwiftPM cannot find zlib/sqlite headers on Linux, pass
+`SWIFTPM_FLAGS="-Xcc -I/usr/local/include -Xlinker -L/usr/local/lib"` (to `make test-core` and to the
+`Scripts/*-dod.sh` scripts), as CI does.
 
 ## 4. Hard rules
 
@@ -66,6 +70,12 @@ architecture §4). Never break the Linux build of the core modules.
 - Swift 6 language mode with strict concurrency, and no `@unchecked Sendable` without a comment that
   justifies it.
 - Public types and functions in GulpKit get a `///` doc comment.
+- `Scripts/rules-check.sh` enforces several of these rules mechanically, and the matching types make
+  the right thing the easy thing: active CLI probes send through `ScopedSender` (`GulpHTTP`), store
+  writes in `GulpWorkspace` go through `persisting(_:events:_:)`, issue ids resolve via
+  `IssueDefinitions.require`, test randomness uses `SplitMix64(seed:)` from `GulpTestSupport`, and
+  VulnLab safe twins use `SafeTwin`. When the check fires, fix the code. A real exception gets the
+  marker comment the rule names, with a reason.
 - When a spec is ambiguous, choose the simplest behavior that meets the acceptance tests, write the
   decision in `docs/07-decisions.md` (as a new ADR or under "Small decisions"), and continue. Ask the
   user only for product-level choices.

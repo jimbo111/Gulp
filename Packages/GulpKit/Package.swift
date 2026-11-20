@@ -193,7 +193,8 @@ let package = Package(
         // Shared test helpers (seeded RNG); a plain target so several test targets can depend on it.
         .target(name: "GulpTestSupport", path: "Tests/GulpTestSupport"),
         .testTarget(
-            name: "GulpCoreTests", dependencies: ["GulpCore", "GulpTestSupport"], resources: [.copy("Fixtures")]),
+            name: "GulpCoreTests", dependencies: ["GulpCore", "GulpTestSupport"],
+            resources: [.copy("Fixtures")]),
         .testTarget(name: "GulpCodecTests", dependencies: ["GulpCodec", "GulpCore", "GulpTestSupport"]),
         .testTarget(name: "GulpQueryTests", dependencies: ["GulpQuery", "GulpCore"]),
         .testTarget(name: "GulpDiffTests", dependencies: ["GulpDiff", "GulpTestSupport"]),

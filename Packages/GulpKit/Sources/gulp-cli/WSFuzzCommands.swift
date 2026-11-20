@@ -137,7 +137,7 @@ struct WSFuzz: AsyncParsableCommand {
             delayMs: delayMs, stopOnFirstMatch: stopOnMatch)
         let engine = try WSFuzzEngine(config)
 
-        let http = NIOHTTPEngine()
+        let http = ScopedSender(scope: .pinned(destination))
         defer { Task { await http.shutdown() } }
         let host = destination.hostHeader
         let nonce = Data((0..<16).map { _ in UInt8.random(in: 0...255) }).base64EncodedString()

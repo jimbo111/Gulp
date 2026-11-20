@@ -1008,6 +1008,7 @@ for behavior.
   `ScanLab` (dispatched before `ReconLab` in `Routes.swift`) stripped `/safe/` and shadowed ReconLab's
   clean twin with its endpoint-laden JSRecon bundle. Fixed: `ScanLab` returns nil for `/safe/recon/*`;
   `recon-dod.sh` now PASS. Deviation: none — fixture-routing bug only.
+- 2026-11-20 — **Agent-readiness guardrails**: prose rules turned into checks. `Scripts/rules-check.sh` (six rules; `make rules`, run by `make lint` and CI; each rule mutation-tested to fire) + typed helpers: `ScopedSender` for the 14 active CLI probes (incl. ws-fuzz), `persisting` for 8 silent store writes, `IssueDefinitions.require` + `IssueIDCoverageTests`, seeded `SplitMix64` (fixed the flaky 1 MB byte-diff test), VulnLab `SafeTwin` + `VulnLabOwnershipTests` (new `GulpVulnLabTests` target), `HTTPTarget.hostHeader`. Deviation: none; ReconLab's dead `/recon/app.js` handler removed (ScanLab always answered it).
 
 ## How to pick up work (reminder)
 

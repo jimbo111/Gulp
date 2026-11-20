@@ -38,6 +38,7 @@ extension ProjectSession {
         }
         let attack = try FuzzAttack(config: config, engine: http, inScope: check)
         let store = self.store
+        let eventBus = self.events
         let configJSON = String(decoding: try JSONEncoder().encode(config), as: UTF8.self)
         let id = try await store.createFuzzerAttack(
             name: config.name, configJSON: configJSON, baseRequest: config.request, state: "running")
@@ -57,14 +58,20 @@ extension ProjectSession {
                 case .result(let result):
                     pending.append(Self.row(result))
                     if pending.count >= 250 || ContinuousClock.now - lastFlush > .milliseconds(200) {
-                        try? await store.appendFuzzerResults(id, pending)
+                        await persisting("fuzzer results", events: eventBus) {
+                            try await store.appendFuzzerResults(id, pending)
+                        }
                         pending = []
                         lastFlush = .now
                     }
                 case .finished(let summary):
-                    try? await store.appendFuzzerResults(id, pending)
+                    await persisting("fuzzer results", events: eventBus) {
+                        try await store.appendFuzzerResults(id, pending)
+                    }
                     pending = []
-                    try? await store.setFuzzerAttackState(id, summary.stopReason ?? "finished")
+                    await persisting("the fuzzer attack state", events: eventBus) {
+                        try await store.setFuzzerAttackState(id, summary.stopReason ?? "finished")
+                    }
                 }
                 continuation.yield(event)
             }

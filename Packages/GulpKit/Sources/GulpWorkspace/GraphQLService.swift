@@ -81,7 +81,11 @@ extension ProjectSession {
                 detail:
                     "The endpoint answered a full introspection query, exposing \(introspection.schema?.queries.count ?? 0) queries and \(introspection.schema?.mutations.count ?? 0) mutations."
             )
-            if let id = try? await store.record(finding).id { raised.append(id) }
+            if let id = await persisting(
+                "a GraphQL issue", events: events, { try await store.record(finding) })?.id
+            {
+                raised.append(id)
+            }
         }
 
         if let authzProbe, let sensitiveMarker {
@@ -94,7 +98,11 @@ extension ProjectSession {
                     detail:
                         "An unauthenticated GraphQL query returned another object's sensitive field (`\(sensitiveMarker)` in the response), so object/field-level authorization isn't enforced in the resolver."
                 )
-                if let id = try? await store.record(finding).id { raised.append(id) }
+                if let id = await persisting(
+                    "a GraphQL issue", events: events, { try await store.record(finding) })?.id
+                {
+                    raised.append(id)
+                }
             }
         }
         await store.writer.flush()

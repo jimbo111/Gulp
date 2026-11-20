@@ -47,6 +47,8 @@ jobs:
         run: swift test --package-path Packages/GulpKit --parallel -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
       - name: Architecture invariants (dependency direction + platform rules)
         run: Scripts/arch-check.sh
+      - name: Hard rules (scope-safe sends, seeded tests, no silent store writes, issue ids, Sendable, keys)
+        run: Scripts/rules-check.sh
       - name: M1 Definition of Done (gulp-cli + VulnLab byte fidelity)
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib

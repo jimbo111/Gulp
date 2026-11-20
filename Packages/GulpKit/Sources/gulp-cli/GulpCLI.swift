@@ -85,6 +85,7 @@ struct Send: AsyncParsableCommand {
             options.upstreamProxy = .proxy(UpstreamProxy(kind: .http, host: proxy.host, port: proxy.port))
         }
         let request = RawRequest(Bytes([UInt8](data)))
+        // rules-check: manual send — the operator typed this exact request (like Repeater), not an active tool.
         let engine = NIOHTTPEngine()
         defer { Task { await engine.shutdown() } }
         if repeatCount > 1 {
@@ -437,6 +438,7 @@ struct WS: AsyncParsableCommand {
                     ("GET \(path) HTTP/1.1\r\nHost: \(host)\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
                         + "Sec-WebSocket-Key: \(key)\r\nSec-WebSocket-Version: 13\r\n\r\n").utf8)))
         let (incoming, feed) = AsyncStream.makeStream(of: [UInt8].self)
+        // rules-check: manual send — the operator typed this exact request (like Repeater), not an active tool.
         let engine = NIOHTTPEngine()
         defer { Task { await engine.shutdown() } }
         let (result, connection) = await engine.upgrade(
@@ -630,6 +632,7 @@ struct Group: AsyncParsableCommand {
         options.timeouts.total = .seconds(30)
         let request = RawRequest(Bytes([UInt8](data)))
         let items = (0..<max(1, count)).map { _ in GroupItem(request: request, target: destination) }
+        // rules-check: manual send — the operator typed this exact request (like Repeater), not an active tool.
         let engine = NIOHTTPEngine()
         defer { Task { await engine.shutdown() } }
         let results = await engine.sendGroup(items, mode: groupMode, options: options)
@@ -685,6 +688,7 @@ struct Paste: AsyncParsableCommand {
         options.tls.validateCertificates = !imported.insecure
         options.httpVersion = imported.prefersHTTP2 ? .http2 : .auto
         if imported.followRedirects { options.followRedirects = RedirectPolicy(mode: .always) }
+        // rules-check: manual send — the operator typed this exact request (like Repeater), not an active tool.
         let engine = NIOHTTPEngine()
         defer { Task { await engine.shutdown() } }
         let result = await engine.send(imported.request, to: target, options: options)

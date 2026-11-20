@@ -84,7 +84,11 @@ extension ProjectSession {
                     let finding = authzFinding(
                         request: item.request, target: item.target, who: who, response: response,
                         authorized: authorized)
-                    if let id = try? await store.record(finding).id { raised.append(id) }
+                    if let id = await persisting(
+                        "an Authz Matrix issue", events: events, { try await store.record(finding) })?.id
+                    {
+                        raised.append(id)
+                    }
                 }
             }
         }

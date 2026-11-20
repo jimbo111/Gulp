@@ -174,11 +174,15 @@ public actor OASTService {
     func attach(_ ids: [String], exchange: ExchangeID, source: ToolSource) async {
         let store = await store()
         for id in ids {
-            try? await store.addOASTPayload(
-                id, host: "\(id).\(health.domain)",
-                context: OASTContext(tool: source.rawValue, note: "in request"))
+            await persisting("an OAST payload", events: events) {
+                try await store.addOASTPayload(
+                    id, host: "\(id).\(health.domain)",
+                    context: OASTContext(tool: source.rawValue, note: "in request"))
+            }
         }
-        try? await store.attachOASTPayloads(ids, to: exchange)
+        await persisting("OAST payload links", events: events) {
+            try await store.attachOASTPayloads(ids, to: exchange)
+        }
         health.payloads += ids.count
     }
 
