@@ -41,7 +41,7 @@ extension ProjectSession {
         -> IssueID?
     {
         guard let item = try await store.notebookItem(itemID) else { return nil }
-        let definition = IssueDefinitions.named("manual.finding")!
+        let definition = IssueDefinitions.require("manual.finding")
         let path: String
         if let target = item.target, let request = item.request {
             path =

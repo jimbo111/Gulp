@@ -96,7 +96,7 @@ extension ProjectSession {
         request: RawRequest, target: HTTPTarget, who: String, response: AuthzResponse,
         authorized: AuthzResponse
     ) -> IssueFinding {
-        let definition = IssueDefinitions.named("authz.broken-access-control")!
+        let definition = IssueDefinitions.require("authz.broken-access-control")
         let derived = DerivedFields(target: target, request: request, response: nil)
         return IssueFinding(
             typeID: definition.id, name: definition.name, severity: definition.severity,

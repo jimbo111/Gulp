@@ -104,7 +104,7 @@ public struct AuditContext: Sendable {
         _ definition: String, point: InsertionPoint?, variant: String = "", detail: String, evidence: Probe,
         marker: String? = nil, requestMarker: String? = nil, confidence: IssueConfidence? = nil
     ) -> IssueFinding {
-        let def = IssueDefinitions.named(definition)!
+        let def = IssueDefinitions.require(definition)
         let path = DerivedFields(target: target, request: base, response: nil).path ?? "/"
         var responseMarkers: [MarkerRange] = []
         if let marker, let wire = evidence.response?.wireBytes.rawBytes,

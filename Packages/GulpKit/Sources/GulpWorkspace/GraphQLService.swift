@@ -104,7 +104,7 @@ extension ProjectSession {
     private func graphQLFinding(
         _ typeID: String, origin: String, path: String, exchangeID: ExchangeID, detail: String
     ) -> IssueFinding {
-        let definition = IssueDefinitions.named(typeID)!
+        let definition = IssueDefinitions.require(typeID)
         return IssueFinding(
             typeID: definition.id, name: definition.name, severity: definition.severity,
             confidence: definition.confidence, host: origin, path: path, insertionPoint: nil, variant: "",

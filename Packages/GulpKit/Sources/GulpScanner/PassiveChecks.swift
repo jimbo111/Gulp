@@ -51,12 +51,7 @@ public struct PassiveScanner: Sendable {
 }
 
 enum PassiveChecks {
-    static func d(_ id: String) -> IssueDefinition {
-        guard let definition = IssueDefinitions.named(id) else {
-            preconditionFailure("unknown definition \(id)")
-        }
-        return definition
-    }
+    static func d(_ id: String) -> IssueDefinition { IssueDefinitions.require(id) }
 
     static func isLoopback(_ host: String) -> Bool {
         let host = host.lowercased()

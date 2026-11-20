@@ -33,8 +33,19 @@ public enum IssueDefinitions {
 
     static let byID: [String: IssueDefinition] = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
 
-    /// The definition with `id`.
+    /// The definition with `id`, or nil (for ids that come from data: stored issues, imports).
     public static func named(_ id: String) -> IssueDefinition? { byID[id] }
+
+    /// The definition with `id`, which the code itself names and so must exist. This is the one place a
+    /// missing definition traps; `IssueIDCoverageTests` scans `Sources/` and fails the suite if any
+    /// literal id handed to `require`/`d`/`…finding(…)` has no definition, so a typo is caught by
+    /// `make test-core`, not by a live scan (Scripts/rules-check.sh bans `named(…)!` elsewhere).
+    public static func require(_ id: String) -> IssueDefinition {
+        guard let definition = byID[id] else {
+            preconditionFailure("No issue definition for '\(id)': add it to IssueDefinitions")
+        }
+        return definition
+    }
 
     static func def(
         _ id: String, _ name: String, _ family: String, _ severity: IssueSeverity,
