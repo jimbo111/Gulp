@@ -115,6 +115,9 @@ struct GulpQLTests {
         let scope = ScopeService(rules: [ScopeRule(kind: .include, host: "api.lab.test")])
         #expect(try matches("matches_scope and in_scope", search, GulpQLContext(scope: scope)))
         #expect(try !matches("matches_scope", search))
+        // The store's stored flag answers both, as SQL push-down reads the same column.
+        let stored = GulpQLContext(scope: scope, inScope: { _ in false })
+        #expect(try !matches("matches_scope or in_scope", search, stored))
         let form = exchange(
             "POST /login HTTP/1.1\r\nHost: a\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\n"
                 + "user=alice+smith&next=%2Fhome",

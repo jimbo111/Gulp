@@ -69,7 +69,7 @@ public enum GulpQLFields {
         info("resp.sets_cookie", .bool, "The response sets a cookie"),
         info("source", .text, "The tool: proxy, repeater, fuzzer…", column: "source"),
         info("in_scope", .bool, "In the project scope"),
-        info("matches_scope", .bool, "Matches the current scope rules"),
+        info("matches_scope", .bool, "Matches the current scope rules (same as in_scope)"),
         info("highlight", .text, "Highlight color", column: "highlight"),
         info("comment", .text, "Comment", column: "comment"),
         info("tag", .list, "Tags (imported, discovered…)"),

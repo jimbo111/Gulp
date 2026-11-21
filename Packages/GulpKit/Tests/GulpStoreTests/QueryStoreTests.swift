@@ -105,6 +105,21 @@ struct QueryStoreTests {
         try await store.close()
     }
 
+    @Test("HIS-022: matches_scope reads the stored scope flag whether it pushes down or not")
+    func test_HIS022_matchesScopeResidual() async throws {
+        let (store, ids) = try await seeded()
+        let inScope = [ids[0], ids[1], ids[6], ids[7]]
+        for text in ["matches_scope", #"matches_scope or resp.body contains "no such text""#] {
+            var filter = HistoryFilter()
+            filter.query = try GulpQL.parse(text)
+            #expect(try await store.matchingIDs(filter: filter) == inScope, "\(text)")
+            #expect(try await store.count(filter: filter) == inScope.count, "\(text)")
+            let rows = try await store.summaries(filter: filter, offset: 0, limit: 100)
+            #expect(rows.map(\.id) == inScope, "\(text)")
+        }
+        try await store.close()
+    }
+
     @Test("F05 acceptance 1: status ≥ 500 and host ~ api uses the status index and loads no bodies")
     func test_HIS024_acceptance() async throws {
         let (store, ids) = try await seeded()
