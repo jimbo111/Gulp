@@ -21,7 +21,8 @@ struct SequencerCommand: AsyncParsableCommand {
     @Option(help: "How many tokens to capture.") var count = 2000
     @Option(help: "How many captures run at once.") var concurrency = 20
     @Option(help: "Instead of capturing, load tokens from this file (one per line).") var tokens: String?
-    @Option(help: "Significance level for each test.") var alpha = 0.01
+    @Option(help: "Family-wise significance level (each test is judged at alpha / number of tests).")
+    var alpha = 0.01
     @Flag(help: "Print the report as JSON.") var json = false
 
     func run() async throws {

@@ -1,8 +1,10 @@
 // GulpSequencer — the randomness test battery (F11 SEQ-005). Bit-level tests follow the NIST SP 800-22
 // family (frequency, block frequency, runs, longest run, approximate entropy, cumulative sums) plus a
 // poker / 4-bit chi-square (the FIPS 140-2 poker test, generalized); the character-level test is a
-// per-position uniformity chi-square. Each test returns a p-value and a pass/fail at a significance
-// level; a token source is random when every test passes. Formulas are the published ones so each
+// per-position uniformity chi-square. Each test returns a p-value and a pass/fail; a token source is
+// random when every test passes. The significance level is family-wise: with k tests each is judged
+// at alpha / k (Bonferroni), so a truly random source fails any test with probability at most alpha.
+// (Judging each at alpha would fail one of 8 about 8% of the time and downgrade a perfect CSPRNG.) Formulas are the published ones so each
 // test can be checked against reference vectors (SEQ acceptance 3).
 
 import Foundation
@@ -34,6 +36,7 @@ enum Battery {
         // Bit-level tests only run for exact power-of-two encodings (hex, base64), where each symbol
         // maps cleanly to its bits; for decimal/alphanumeric the per-position symbol test carries it.
         var tests: [RandomnessTest] = []
+        let alpha = alpha / Double(bitLevel ? 8 : 1)  // per test; keep in step with the list below
         if bitLevel {
             tests += [
                 monobitFrequency(bits, alpha: alpha),

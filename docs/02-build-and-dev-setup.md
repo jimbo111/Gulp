@@ -147,8 +147,8 @@ The macOS-capability targets are not excluded: they build on Linux as empty shel
 
 ## 7. Continuous integration (`.github/workflows/ci.yml`)
 
-**CI cannot run at the moment** (GitHub Actions minutes are exhausted). The workflow is kept current
-for when it can; until then the local `make test` + `make lint` is the only gate.
+CI runs on every push and pull request (the repository is public, so Actions minutes are free). It
+is the gate: run `make test` + `make lint` locally first, then the change must pass CI.
 
 | Job | Runner | Steps |
 |---|---|---|
