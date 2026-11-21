@@ -678,7 +678,7 @@ public final class NIOHTTPEngine: HTTPEngine {
         let result = await connection.send(
             parts, maxResponseBytes: options.maxResponseBytes, deadline: deadline)
         if !Task.isCancelled, result.error == .connectionReset || result.error == .incompleteResponse {
-            await h2Pool.remove(connection, for: key)  // GOAWAY or a dead connection: don't reuse
+            await h2Pool.remove(connection, for: key)  // dead: don't reuse (GOAWAY: see isUsable)
         }
         var wire: WireResponse?
         if let received = result.received {
