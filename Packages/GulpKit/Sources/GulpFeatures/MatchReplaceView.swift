@@ -46,8 +46,9 @@ public struct MatchReplaceView: View {
             List(selection: $selection) {
                 ForEach($rules) { $rule in
                     HStack(spacing: 8) {
-                        Toggle("", isOn: $rule.enabled).labelsHidden()
-                        Picker("", selection: $rule.kind) {
+                        Toggle("Enabled", isOn: $rule.enabled).labelsHidden()
+                            .accessibilityLabel("Rule enabled")
+                        Picker("Rule type", selection: $rule.kind) {
                             ForEach(MatchReplaceKind.allCases, id: \.self) { Text(Self.label($0)) }
                         }
                         .labelsHidden()
@@ -112,22 +113,25 @@ public struct MatchReplaceView: View {
 
 /// The Proxy tool: HTTP History, Intercept, Match & Replace and WebSockets History tabs.
 public struct ProxyToolView: View {
-    let session: ProjectSession
+    let models: ToolModels
     let generation: Int
     @AppStorage("gulp.proxy.tab") private var tab = 0
 
-    /// The Proxy tool for `session`; bump `generation` after the project file changes.
-    public init(session: ProjectSession, generation: Int) {
-        self.session = session
+    /// The Proxy tool of the project whose tool models are `models`; bump `generation` after the
+    /// project file changes.
+    public init(models: ToolModels, generation: Int) {
+        self.models = models
         self.generation = generation
     }
+
+    private var session: ProjectSession { models.session }
 
     public var body: some View {
         TabView(selection: $tab) {
             SessionHistoryView(session: session, generation: generation)
                 .tabItem { Text("HTTP History") }
                 .tag(0)
-            InterceptView(session: session)
+            InterceptView(model: models.intercept, session: session)
                 .tabItem { Text("Intercept") }
                 .tag(1)
             MatchReplaceView(session: session)

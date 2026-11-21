@@ -58,11 +58,11 @@ public final class AuthzMatrixModel {
 
 /// The Authz Matrix: replay requests across identities and read the verdict grid.
 public struct AuthzMatrixView: View {
-    @State private var model: AuthzMatrixModel
+    private let model: AuthzMatrixModel
 
-    /// An Authz Matrix view for `session`.
-    public init(session: ProjectSession) {
-        _model = State(initialValue: AuthzMatrixModel(session: session))
+    /// The Authz Matrix of the project whose tool models are `models`.
+    public init(models: ToolModels) {
+        model = models.authzMatrix
     }
 
     public var body: some View {

@@ -122,11 +122,11 @@ final class ActiveScanModel {
 public struct ScannerView: View {
     enum Pane: String, CaseIterable { case audit = "Audit", crawl = "Crawl" }
 
-    let session: ProjectSession
+    let models: ToolModels
     @State private var pane = Pane.audit
 
-    /// The Scanner for `session`.
-    public init(session: ProjectSession) { self.session = session }
+    /// The Scanner of the project whose tool models are `models`.
+    public init(models: ToolModels) { self.models = models }
 
     public var body: some View {
         VStack(spacing: 0) {
@@ -139,8 +139,8 @@ public struct ScannerView: View {
             .padding(8)
             Divider()
             switch pane {
-            case .audit: ActiveScanView(session: session)
-            case .crawl: CrawlerView(session: session)
+            case .audit: ActiveScanView(model: models.activeScan)
+            case .crawl: CrawlerView(model: models.crawler)
             }
         }
     }
@@ -148,11 +148,9 @@ public struct ScannerView: View {
 
 /// Scanner → Audit (SCN-034/035).
 struct ActiveScanView: View {
-    @State private var model: ActiveScanModel
+    @Bindable var model: ActiveScanModel
     @State private var confirmOutOfScope = false
     @State private var confirmUnsafe = false
-
-    init(session: ProjectSession) { _model = State(initialValue: ActiveScanModel(session: session)) }
 
     var body: some View {
         HSplitView {

@@ -8,6 +8,8 @@ import UniformTypeIdentifiers
 struct ProjectWindow: View {
     let ref: ProjectRef
     @State private var session: ProjectSession?
+    /// One model per tool for this session, created with it (doc 05 §8).
+    @State private var models: ToolModels?
     @State private var projectName = ""
     @State private var generation = 0
     @State private var failure: String?
@@ -28,7 +30,7 @@ struct ProjectWindow: View {
 
     var body: some View {
         Group {
-            if let session {
+            if let session, let models {
                 NavigationSplitView {
                     List(selection: $selection) {
                         ForEach(ToolSection.allCases) { section in
@@ -42,7 +44,7 @@ struct ProjectWindow: View {
                     .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 300)
                     .listStyle(.sidebar)
                 } detail: {
-                    detail(session: session)
+                    detail(session: session, models: models)
                         .safeAreaInset(edge: .top) { bindErrorBanner }
                         .grpcSchemas(from: session, revision: grpcRevision)
                 }
@@ -144,6 +146,7 @@ struct ProjectWindow: View {
         }
         .onDisappear {
             // Temporary projects are kept (recoverable in Caches) until a save/discard prompt lands.
+            models?.stop()
             let session = self.session
             Task { try? await session?.close(keepTemporary: true) }
         }
@@ -152,24 +155,24 @@ struct ProjectWindow: View {
     }
 
     @ViewBuilder
-    private func detail(session: ProjectSession) -> some View {
+    private func detail(session: ProjectSession, models: ToolModels) -> some View {
         switch selection {
         case .proxy:
-            ProxyToolView(session: session, generation: generation)
+            ProxyToolView(models: models, generation: generation)
                 .toolbar {
                     Button("Listeners…") { showListeners = true }
                         .help("Proxy listeners for this project (PRX-001)")
                 }
         case .target:
-            TargetView(session: session)
+            TargetView(models: models)
         case .repeater:
-            RepeaterView(session: session)
+            RepeaterView(models: models)
         case .fuzzer:
-            FuzzerView(session: session)
+            FuzzerView(models: models)
         case .scanner:
-            ScannerView(session: session)
+            ScannerView(models: models)
         case .beacon:
-            BeaconView(session: session)
+            BeaconView(models: models)
         case .dashboard:
             IssuesDashboard(session: session)
         case .logger:
@@ -177,9 +180,9 @@ struct ProjectWindow: View {
         case .notebook:
             NotebookView(session: session)
         case .decoder:
-            DecoderView(session: session)
+            DecoderView(models: models)
         case .comparer:
-            ComparerView(session: session)
+            ComparerView(models: models)
         case .jwt:
             JWTWorkbenchView()
         case .sequencer:
@@ -195,7 +198,7 @@ struct ProjectWindow: View {
         case .assistant:
             AssistantView()
         case .authzMatrix:
-            AuthzMatrixView(session: session)
+            AuthzMatrixView(models: models)
         default:
             ContentUnavailableView(
                 selection?.title ?? "Gulp", systemImage: selection?.symbol ?? "network",
@@ -308,6 +311,7 @@ struct ProjectWindow: View {
                 return nil
             }
             projectName = await opened.url.lastPathComponent
+            models = ToolModels(session: opened)
             session = opened
         } catch {
             failure = "\(error)"

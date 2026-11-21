@@ -575,17 +575,19 @@ public final class RepeaterModel {
     }
 }
 
+extension RepeaterModel: SessionFollowing {}
+
 /// Proxy → Repeater.
 public struct RepeaterView: View {
-    @State private var model: RepeaterModel
+    @Bindable private var model: RepeaterModel
     @State private var renaming: Int64?
     @State private var newTitle = ""
     @State private var showOptions = false
     @State private var showRPCEditor = false
 
-    /// The Repeater for `session`.
-    public init(session: ProjectSession) {
-        _model = State(initialValue: RepeaterModel(session: session))
+    /// The Repeater of the project whose tool models are `models`.
+    public init(models: ToolModels) {
+        model = models.repeater
     }
 
     public var body: some View {

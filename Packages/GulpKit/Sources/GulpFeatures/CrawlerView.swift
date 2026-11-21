@@ -109,16 +109,11 @@ final class CrawlerModel {
 }
 
 /// Scanner → Crawl (static mode, F09).
-public struct CrawlerView: View {
-    @State private var model: CrawlerModel
+struct CrawlerView: View {
+    @Bindable var model: CrawlerModel
     @State private var confirmForms = false
 
-    /// The crawler for `session`.
-    public init(session: ProjectSession) {
-        _model = State(initialValue: CrawlerModel(session: session))
-    }
-
-    public var body: some View {
+    var body: some View {
         HSplitView {
             Form {
                 Section("Seeds (one URL per line)") {
@@ -210,16 +205,18 @@ final class BeaconModel {
     var selected: Int64?
     var raw = ""
     @ObservationIgnored let session: ProjectSession
-    @ObservationIgnored private var poller: Task<Void, Never>?
 
     init(session: ProjectSession) {
         self.session = session
         settings = session.settings.get(OASTSettings.self)
-        poller = Task { [weak self] in
-            while !Task.isCancelled {
-                await self?.reload()
-                try? await Task.sleep(for: .seconds(1))
-            }
+    }
+
+    /// Refresh health and interactions every second until cancelled (the view's `.task`: Beacon is
+    /// polled only while it is shown).
+    func poll() async {
+        while !Task.isCancelled {
+            await reload()
+            try? await Task.sleep(for: .seconds(1))
         }
     }
 
@@ -283,11 +280,11 @@ final class BeaconModel {
 
 /// The Beacon tool (F10 §3).
 public struct BeaconView: View {
-    @State private var model: BeaconModel
+    @Bindable private var model: BeaconModel
 
-    /// Beacon for `session`.
-    public init(session: ProjectSession) {
-        _model = State(initialValue: BeaconModel(session: session))
+    /// Beacon of the project whose tool models are `models`.
+    public init(models: ToolModels) {
+        model = models.beacon
     }
 
     public var body: some View {
@@ -356,6 +353,7 @@ public struct BeaconView: View {
             }
         }
         .navigationTitle("Beacon")
+        .task { await model.poll() }
     }
 }
 #endif

@@ -369,22 +369,16 @@ final class FuzzerModel {
 
 /// Fuzzer and Discover content.
 public struct FuzzerView: View {
-    let session: ProjectSession
-    /// Built once when the view appears: `View.init` runs on every parent re-render.
-    @State private var model: FuzzerModel?
+    private let model: FuzzerModel
 
-    /// The Fuzzer for `session`.
-    public init(session: ProjectSession) {
-        self.session = session
+    /// The Fuzzer of the project whose tool models are `models`.
+    public init(models: ToolModels) {
+        model = models.fuzzer
     }
 
     public var body: some View {
-        if let model {
-            FuzzerPanel(model: model)
-                .task { await model.followInbox() }
-        } else {
-            ProgressView().task { model = FuzzerModel(session: session) }
-        }
+        FuzzerPanel(model: model)
+            .task { await model.followInbox() }
     }
 }
 
