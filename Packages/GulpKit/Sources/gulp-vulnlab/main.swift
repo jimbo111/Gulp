@@ -25,7 +25,14 @@ while let argument = arguments.popFirst() {
     }
 }
 
-let server = try await VulnLabServer.start(appPort: appPort, rawPort: rawPort, tlsPort: tlsPort)
+let server: VulnLabServer
+do {
+    server = try await VulnLabServer.start(appPort: appPort, rawPort: rawPort, tlsPort: tlsPort)
+} catch {
+    // e.g. a port already in use: report it instead of trapping on an error thrown at top level.
+    FileHandle.standardError.write(Data("gulp-vulnlab: could not start: \(error)\n".utf8))
+    exit(1)
+}
 let banner = """
     gulp-vulnlab \(VulnLab.version): INTENTIONALLY VULNERABLE test server. Do not expose it.
       http://127.0.0.1:\(appPort)  /echo /redirect /chunked /gzip /slow /large /continue /status/N
