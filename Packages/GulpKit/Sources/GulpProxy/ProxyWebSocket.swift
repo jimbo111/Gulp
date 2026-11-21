@@ -145,10 +145,11 @@ enum ProxyWebSocket {
     /// report every message passed on to `record`.
     static func pump(
         _ input: AsyncStream<[UInt8]>, direction: WSDirection, hooks: WSHooks,
-        record: AsyncStream<WSPassed>.Continuation, write: @escaping @Sendable ([UInt8]) -> Void
+        record: AsyncStream<WSPassed>.Continuation, maxMessage: Int = WSFrameParser.maxPayload,
+        write: @escaping @Sendable ([UInt8]) -> Void
     ) async {
         var parser = WSFrameParser()
-        var assembler = WSMessageAssembler()
+        var assembler = WSMessageAssembler(maxMessage: maxMessage)
         var unparsed: [UInt8] = []  // the bytes the parser holds, to slice frames' wire bytes from
         var raw = false
         // The wire bytes of the data message being collected whole (nil: frames go on as they come).
@@ -193,8 +194,9 @@ enum ProxyWebSocket {
                 let sent = WSMessage(opcode: message.opcode, payload: payload, frames: [info])
                 record.yield(WSPassed(direction: direction, message: sent, original: message.payload))
             }
-            if parser.failed {
-                // Not a stream we can follow (or a frame over the size limit): relay raw from here.
+            if parser.failed || assembler.failed {
+                // Not a stream we can follow (a frame or a reassembled message over the size
+                // limit): relay raw from here, so nothing is held or buffered without bound.
                 for frame in collected ?? [] { write(frame) }
                 collected = nil
                 write(unparsed)
