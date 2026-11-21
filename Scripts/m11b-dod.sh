@@ -4,7 +4,8 @@
 #    (including the three OAST checks via the dev Beacon), with zero false positives on the 'safe
 #    twin' endpoints (doc 06 §3)."
 # `gulp-cli scan active` audits every request of Tests/Fixtures/vulnlab-active.json (vulnerable
-# routes and their /safe/ twins) with the Balanced config and the dev Beacon configured for OAST;
+# routes and their /safe/ twins) with the Balanced config plus the unsafe gate (stored XSS writes
+# data, F08 §6) and the dev Beacon configured for OAST;
 # `gulp-cli scan verify-active` requires exactly the manifest's issue types per route.
 # Usage: Scripts/m11b-dod.sh   (SWIFTPM_FLAGS may carry extra swift-build flags, e.g. on Linux CI)
 set -euo pipefail
@@ -51,7 +52,7 @@ wait_port 8090
 "$GULP" scope --project "$PROJECT" --add "$LAB/" > /dev/null
 "$GULP" oast configure --project "$PROJECT" --server http://127.0.0.1:8090 --domain oast.test --poll 1 > /dev/null
 
-"$GULP" scan active --project "$PROJECT" --manifest "$MANIFEST" --base "$LAB" --config balanced | tee "$WORK/scan.txt"
+"$GULP" scan active --project "$PROJECT" --manifest "$MANIFEST" --base "$LAB" --config balanced --unsafe | tee "$WORK/scan.txt"
 grep -qE '^scan: [0-9]+ findings, [0-9]+ probes, 0 out of scope in [0-9.]+ s \(done\)$' "$WORK/scan.txt" || fail "the scan didn't finish"
 "$GULP" scan verify-active --project "$PROJECT" --manifest "$MANIFEST" | tee "$WORK/verify.txt" || fail "issues differ from the manifest"
 routes=$(grep -c '"method"' "$MANIFEST")

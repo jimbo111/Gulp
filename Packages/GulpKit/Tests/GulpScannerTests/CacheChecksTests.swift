@@ -51,13 +51,16 @@ struct CacheChecksTests {
         #expect(CacheDeceptionCheck.privateMarker(nil) == nil)
     }
 
-    @Test("WCP-003: retarget keeps method and Host, swaps the path")
+    @Test("WCP-003: retarget swaps only the path; the query and every header (credentials too) stay")
     func retarget() {
-        let base = RawRequest(Bytes("GET /account HTTP/1.1\r\nHost: app.test\r\nCookie: s=1\r\n\r\n"))
+        let base = RawRequest(
+            Bytes(
+                "GET /account?tab=1 HTTP/1.1\r\nHost: app.test\r\nCookie: s=1\r\nAuthorization: Bearer t\r\n\r\n"
+            ))
         let out = CacheDeceptionCheck.retarget(base, path: "/account.css")
-        let text = out.bytes.rawBytes.map { Character(UnicodeScalar($0)) }
-        let s = String(text)
-        #expect(s.contains("GET /account.css HTTP/1.1"))
-        #expect(s.contains("Host: app.test"))
+        #expect(
+            out.bytes.string()
+                == "GET /account.css?tab=1 HTTP/1.1\r\nHost: app.test\r\nCookie: s=1\r\nAuthorization: Bearer t\r\n\r\n"
+        )
     }
 }

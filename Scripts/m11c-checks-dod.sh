@@ -68,12 +68,13 @@ scan_expect "/safe/profile/update" '{"name":"bob"}' "active.mass-assignment" no
 echo "PASS 2: mass assignment flagged on /profile/update, clean on the safe twin"
 
 # scan a raw GET of <path-with-query> and assert the issue type fires (or not).
-scan_get_expect() {  # <path?query> <issue-type> <should-fire:yes|no>
+scan_get_expect() {  # <path?query> <issue-type> <should-fire:yes|no> [extra scan flags...]
   local path="$1" want="$2" fire="$3"
+  shift 3
   local proj="$WORK/$(echo "$path" | tr -c 'a-zA-Z0-9' '_').gulp"
   printf 'GET %s HTTP/1.1\r\nHost: 127.0.0.1:8088\r\n\r\n' "$path" > "$WORK/req.txt"
   "$GULP" scope --project "$proj" --add "$LAB/" > /dev/null
-  "$GULP" scan active --project "$proj" --raw "$WORK/req.txt" --target "$LAB" --config balanced --unsafe > "$WORK/scan.txt"
+  "$GULP" scan active --project "$proj" --raw "$WORK/req.txt" --target "$LAB" --config balanced --unsafe "$@" > "$WORK/scan.txt"
   local issues
   issues=$("$GULP" issues --project "$proj")
   echo "$issues" | grep -E "$want" || true
@@ -99,9 +100,9 @@ scan_get_expect "/ldap/login?uid=alice" "active.ldapi" yes
 scan_get_expect "/safe/ldap/login?uid=alice" "active.ldapi" no
 echo "PASS 5: LDAP injection flagged on /ldap/login, clean on the safe twin"
 
-# 7. Web cache poisoning (request-level; the check injects X-Forwarded-Host itself).
-scan_get_expect "/cache" "active.cache-poisoning" yes
-scan_get_expect "/safe/cache" "active.cache-poisoning" no
+# 7. Web cache poisoning (request-level; the check injects X-Forwarded-Host itself; opt-in family).
+scan_get_expect "/cache" "active.cache-poisoning" yes --enable-family cache-poisoning
+scan_get_expect "/safe/cache" "active.cache-poisoning" no --enable-family cache-poisoning
 echo "PASS 7: web cache poisoning flagged on /cache, clean on the safe twin"
 
 # scan a raw multipart upload of <path> and assert the issue type fires (or not).

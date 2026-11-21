@@ -15,7 +15,9 @@ public struct Probe: Sendable {
     public var response: RawResponse?
     /// The recorded exchange (0 when not recorded).
     public var exchangeID: ExchangeID
-    /// Wall-clock seconds.
+    /// Seconds on the wire: from the end of the request write to the last response byte (HTTP-010's
+    /// `ttfbMs + downloadMs`). Limiter and throttle waits, backoff and connection setup are excluded,
+    /// so time-based checks measure the server; 0 when no response arrived.
     public var seconds: Double
     /// The network error, if any (`Probe.outOfScope` when scope refused it, `budget` when the
     /// request budget was spent).
@@ -191,7 +193,8 @@ public struct ScanConfig: Sendable, Codable, Hashable {
     public var preset: Preset
     /// Highest check tier run.
     public var intensity: CheckIntensity
-    /// Check families to skip (by family name).
+    /// Check families to skip (by family name); the opt-in families (`ActiveChecks.optInFamilies`)
+    /// are in it unless a config removes them.
     public var disabledFamilies: Set<String>
     /// Insertion points.
     public var insertion: InsertionPolicy
@@ -213,7 +216,8 @@ public struct ScanConfig: Sendable, Codable, Hashable {
 
     /// A config.
     public init(
-        preset: Preset = .balanced, intensity: CheckIntensity = .balanced, disabledFamilies: Set<String> = [],
+        preset: Preset = .balanced, intensity: CheckIntensity = .balanced,
+        disabledFamilies: Set<String> = ActiveChecks.optInFamilies,
         insertion: InsertionPolicy = InsertionPolicy(), concurrency: Int = 8, timingSamples: Int = 1,
         oastGraceSeconds: Double = 8, maxRequestsPerPoint: Int = 120, unsafe: Bool = false,
         maxRequests: Int = 0,

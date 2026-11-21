@@ -130,8 +130,8 @@ struct FakeApp: Sendable {
             let alg = (headerJSON?["alg"] as? String ?? "").lowercased()
             let valid =
                 safe
-                ? (alg == "hs256" && !segments.last!.isEmpty)
-                : (alg == "none" || (alg == "hs256" && !segments.last!.isEmpty))
+                ? (alg == "hs256" && segments.last == "c2ln")
+                : (alg == "none" || (alg == "hs256" && segments.last == "c2ln"))
             return (
                 valid
                     ? Self.text("{\"user\":\"alice\"}")
@@ -493,9 +493,9 @@ struct ActiveScanTests {
 
     @Test("M11c: web cache poisoning — an unkeyed header reflected into a cacheable response is flagged")
     func test_M11c_cachePoisoning() async {
-        let (findings, _) = await scan([get("/cache")], app: FakeApp())
+        let (findings, _) = await scan([get("/cache")], app: FakeApp(), config: withCacheFamily())
         #expect(findings.contains { $0.typeID == "active.cache-poisoning" }, "\(pairs(findings))")
-        let (safe, _) = await scan([get("/cache")], app: FakeApp(safe: true))
+        let (safe, _) = await scan([get("/cache")], app: FakeApp(safe: true), config: withCacheFamily())
         #expect(!safe.contains { $0.typeID == "active.cache-poisoning" })
     }
 
@@ -587,8 +587,10 @@ struct ActiveScanTests {
     func test_SCN012_retargetedProbeChecked() async {
         let sent = SentPaths()
         let target = HTTPTarget(scheme: .http, host: "app.test")
+        var config = ScanConfig.preset(.light)
+        config.disabledFamilies.remove("cache-poisoning")  // opt-in family (WCP-002)
         let scan = ActiveScan(
-            requests: [(get("/account"), target)], config: .preset(.light),
+            requests: [(get("/account"), target)], config: config,
             checks: [CacheDeceptionCheck()],
             send: { request, _ in
                 sent.add(request.bytes[request.parsed.target].string())

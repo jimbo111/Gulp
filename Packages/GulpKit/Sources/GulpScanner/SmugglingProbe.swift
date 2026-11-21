@@ -62,12 +62,14 @@ public enum SmugglingProbe {
     /// poisoned request draws a 4xx (rather than performing anything).
     public static let confirmationMethod = "GPOST"
 
-    /// ADV-032: build a **self-poisoning** desync confirmation for `vector`. The attack request smuggles
-    /// the start of a new request whose method is the invalid `GPOST`; the back-end then prepends those
-    /// bytes to the *next* request on the **same connection** — the tester's own innocuous follow-up —
-    /// so that follow-up comes back as a 4xx that a clean request would not. Because it poisons only the
-    /// tester's own connection, it does not corrupt other users' traffic. It is **never sent
-    /// automatically**: the workbench constructs it, warns, and requires explicit, scope-gated action.
+    /// ADV-032: build a desync confirmation for `vector`. The attack request smuggles the start of a
+    /// new request whose method is the invalid `GPOST`; the back-end prepends those bytes to the *next*
+    /// request it reads on that **front-end→back-end connection**, and the tester's innocuous follow-up
+    /// coming back as a 4xx a clean request would not is the proof. That next request is only the
+    /// tester's own if nobody else's lands first: front-ends commonly reuse back-end connections across
+    /// clients, so on a live, shared target another user's request can be the one poisoned (its owner
+    /// gets the 4xx). That is why it is **never sent automatically**: the workbench constructs it, warns,
+    /// and requires explicit, scope-gated action.
     public static func confirmation(
         _ vector: SmugglingVector, base: RawRequest
     ) -> SmugglingConfirmation {

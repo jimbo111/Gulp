@@ -4,8 +4,8 @@
 // injection (time and OAST), SSTI with random operands, path traversal confirmed by file markers,
 // XXE (in-band and OAST), SSRF (OAST), open redirect confirmed by a real redirect to a canary host,
 // and CRLF injection confirmed by a parsed response header. Payloads are benign: markers,
-// arithmetic, sleeps and lookups; nothing writes or deletes data except stored XSS's marker, which
-// only runs on requests that already submit data.
+// arithmetic, sleeps and lookups. Stored XSS is the one that writes data on purpose (its marker stays
+// on a page other users see), so it runs only behind the unsafe gate (F08 §5, §6; SCN-038).
 
 import Foundation
 import GulpCore
@@ -22,6 +22,11 @@ public enum ActiveChecks {
 
     /// Family names (for configs).
     public static var families: [String] { Array(Set(all.map(\.family))).sorted() }
+
+    /// Families that only run when a config enables them: web cache poisoning/deception can leave a
+    /// response in a shared cache (F08 §3.5 "an opt-in active check family"). `ScanConfig` starts
+    /// with these in `disabledFamilies`.
+    public static let optInFamilies: Set<String> = ["cache-poisoning"]
 
     static let parameterKinds: Set<InsertionPointKind> = [
         .urlParam, .bodyParam, .jsonValue, .xmlValue, .multipartField, .cookie, .pathSegment, .custom,
@@ -49,13 +54,22 @@ struct ReflectedXSSCheck: ActiveCheck {
 
     func run(_ point: InsertionPoint?, baseline: Baseline?, context: AuditContext) async -> [IssueFinding] {
         guard let point, let baseline else { return [] }
-        let type = baseline.canary.header("content-type")?.lowercased() ?? ""
-        guard type.contains("html"), baseline.canary.body.contains(baseline.canaryValue) else { return [] }
+        guard Self.isHTML(baseline.canary), baseline.canary.body.contains(baseline.canaryValue) else {
+            return []
+        }
         var findings: [IssueFinding] = []
         for (reflection, quote) in Self.contexts(of: baseline.canaryValue, in: baseline.canary.body) {
             let token = self.token(reflection, quote: quote)
             let probe = await context.send(point.build(context.base, payload: token.payload))
-            guard probe.body.contains(token.proof) else { continue }
+            // The breakout must come back in an HTML page, in the same context it was aimed at (a
+            // copy echoed into a text node or a JSON error proves nothing).
+            guard Self.isHTML(probe),
+                probe.body.ranges(of: token.proof).contains(where: { proof in
+                    let value = probe.body.index(proof.lowerBound, offsetBy: token.valueOffset)
+                    let found = Self.context(at: value, in: probe.body)
+                    return found.0 == reflection && found.1 == quote
+                })
+            else { continue }
             findings.append(
                 context.finding(
                     id, point: point, variant: reflection.rawValue,
@@ -68,79 +82,87 @@ struct ReflectedXSSCheck: ActiveCheck {
         return findings
     }
 
-    func token(_ context: Context, quote: Character?) -> (payload: String, proof: String) {
+    /// The probe for `context`: what to send, the breakout that must come back, and where the
+    /// injected value starts inside that breakout (whose context is re-checked in the response).
+    func token(_ context: Context, quote: Character?) -> (payload: String, proof: String, valueOffset: Int) {
         let a = "g" + String(Int.random(in: 100_000...999_999))
         switch context {
-        case .html: return ("\(a)<gx\(a)>", "\(a)<gx\(a)>")
+        case .html: return ("\(a)<gx\(a)>", "\(a)<gx\(a)>", 0)
         case .attribute:
             let q = quote.map(String.init) ?? "\""
-            return ("\(a)\(q) gx\(a)=1 \(q)", "\(a)\(q) gx\(a)=1")
+            return ("\(a)\(q) gx\(a)=1 \(q)", "\(a)\(q) gx\(a)=1", 0)
         case .script:
             let q = quote.map(String.init) ?? "'"
-            return ("\(a)\(q);gx\(a)//", "\(a)\(q);gx\(a)")
-        case .url: return ("javascript:\(a)//", "\"javascript:\(a)//")
+            return ("\(a)\(q);gx\(a)//", "\(a)\(q);gx\(a)", 0)
+        case .url:
+            // The URL starts the attribute value: right after its quote, or after `=` when unquoted.
+            let opening = quote.map(String.init) ?? "="
+            return ("javascript:\(a)//", "\(opening)javascript:\(a)//", opening.count)
         }
+    }
+
+    static func isHTML(_ probe: Probe) -> Bool {
+        probe.header("content-type")?.lowercased().contains("html") == true
     }
 
     /// The contexts the canary is reflected in, with the enclosing quote for attribute/script.
     static func contexts(of canary: String, in body: String) -> [(Context, Character?)] {
-        var result: [(Context, Character?)] = []
-        var searchStart = body.startIndex
-        while let range = body.range(of: canary, range: searchStart..<body.endIndex) {
-            searchStart = range.upperBound
-            let before = body[body.startIndex..<range.lowerBound]
-            let lastOpen = before.range(of: "<", options: .backwards)
-            let lastClose = before.range(of: ">", options: .backwards)
-            let scriptOpen = before.range(of: "<script", options: [.backwards, .caseInsensitive])
-            let scriptClose = before.range(of: "</script", options: [.backwards, .caseInsensitive])
-            if let scriptOpen, scriptClose.map({ $0.lowerBound < scriptOpen.lowerBound }) ?? true,
-                let tagEnd = body[scriptOpen.upperBound...].firstIndex(of: ">"), tagEnd < range.lowerBound
-            {
-                // Inside a script block: find the open string quote on this line.
-                let line = before[
-                    (before.lastIndex(of: "\n").map { before.index(after: $0) } ?? before.startIndex)...]
-                var open: Character?
-                var escaped = false
-                for char in line {
-                    if escaped {
-                        escaped = false
-                        continue
-                    }
-                    if char == "\\" {
-                        escaped = true
-                    } else if let current = open {
-                        if char == current { open = nil }
-                    } else if char == "'" || char == "\"" || char == "`" {
-                        open = char
-                    }
-                }
-                result.append((.script, open ?? "'"))
-            } else if let lastOpen, lastClose.map({ $0.lowerBound < lastOpen.lowerBound }) ?? true {
-                // Inside a tag: an attribute value.
-                let tag = before[lastOpen.upperBound...]
-                let quote: Character? = tag.last == "\"" || tag.last == "'" ? tag.last : nil
-                let attribute = tag.dropLast(quote == nil ? 0 : 1).trimmingCharacters(in: .whitespaces)
-                let name =
-                    attribute.split(whereSeparator: { $0 == " " || $0 == "=" }).last.map { $0.lowercased() }
-                    ?? ""
-                if ["href", "src", "action", "formaction"].contains(name),
-                    tag.hasSuffix("=\(quote.map(String.init) ?? "")")
-                {
-                    result.append((.url, quote))
-                } else {
-                    result.append((.attribute, quote))
-                }
-            } else {
-                result.append((.html, nil))
-            }
-        }
         // One probe per distinct context.
         var seen: Set<String> = []
-        return result.filter { seen.insert($0.0.rawValue + String($0.1 ?? " ")).inserted }
+        return body.ranges(of: canary).map { context(at: $0.lowerBound, in: body) }
+            .filter { seen.insert($0.0.rawValue + String($0.1 ?? " ")).inserted }
+    }
+
+    /// The context of the text starting at `index` in `body`, with its enclosing quote.
+    static func context(at index: String.Index, in body: String) -> (Context, Character?) {
+        let before = body[body.startIndex..<index]
+        let lastOpen = before.range(of: "<", options: .backwards)
+        let lastClose = before.range(of: ">", options: .backwards)
+        let scriptOpen = before.range(of: "<script", options: [.backwards, .caseInsensitive])
+        let scriptClose = before.range(of: "</script", options: [.backwards, .caseInsensitive])
+        if let scriptOpen, scriptClose.map({ $0.lowerBound < scriptOpen.lowerBound }) ?? true,
+            let tagEnd = body[scriptOpen.upperBound...].firstIndex(of: ">"), tagEnd < index
+        {
+            // Inside a script block: find the open string quote on this line.
+            let line = before[
+                (before.lastIndex(of: "\n").map { before.index(after: $0) } ?? before.startIndex)...]
+            var open: Character?
+            var escaped = false
+            for char in line {
+                if escaped {
+                    escaped = false
+                    continue
+                }
+                if char == "\\" {
+                    escaped = true
+                } else if let current = open {
+                    if char == current { open = nil }
+                } else if char == "'" || char == "\"" || char == "`" {
+                    open = char
+                }
+            }
+            return (.script, open ?? "'")
+        }
+        guard let lastOpen, lastClose.map({ $0.lowerBound < lastOpen.lowerBound }) ?? true else {
+            return (.html, nil)
+        }
+        // Inside a tag: an attribute value.
+        let tag = before[lastOpen.upperBound...]
+        let quote: Character? = tag.last == "\"" || tag.last == "'" ? tag.last : nil
+        let attribute = tag.dropLast(quote == nil ? 0 : 1).trimmingCharacters(in: .whitespaces)
+        let name =
+            attribute.split(whereSeparator: { $0 == " " || $0 == "=" }).last.map { $0.lowercased() } ?? ""
+        if ["href", "src", "action", "formaction"].contains(name),
+            tag.hasSuffix("=\(quote.map(String.init) ?? "")")
+        {
+            return (.url, quote)
+        }
+        return (.attribute, quote)
     }
 }
 
 /// Stored XSS: a unique canary submitted with the request, then found unencoded on the page.
+/// Unsafe-gated: the submitted marker is stored data.
 struct StoredXSSCheck: ActiveCheck {
     let id = "active.xss.stored"
     let family = "xss"
@@ -148,7 +170,7 @@ struct StoredXSSCheck: ActiveCheck {
     let kinds: Set<InsertionPointKind> = [.bodyParam, .jsonValue, .multipartField]
 
     func run(_ point: InsertionPoint?, baseline: Baseline?, context: AuditContext) async -> [IssueFinding] {
-        guard let point else { return [] }
+        guard let point, context.unsafe else { return [] }
         let method = context.base.bytes[context.base.parsed.method].string().uppercased()
         guard method == "POST" || method == "PUT" else { return [] }
         let a = "g" + String(Int.random(in: 100_000...999_999))
@@ -247,16 +269,16 @@ struct SQLInjectionCheck: ActiveCheck {
             }
         }
         // Time based (dose-response).
-        // Numeric contexts first when the value looks numeric, then quoted ones; a template that
+        // Numeric contexts first when the value looks numeric, then quoted ones; a suffix that
         // doesn't delay costs one probe.
-        var templates = [
-            "\(v)' AND SLEEP(%d)-- -", "\(v)'||pg_sleep(%d)--", "\(v)'; WAITFOR DELAY '0:0:%d'--",
+        var suffixes: [(Int) -> String] = [
+            { "' AND SLEEP(\($0))-- -" }, { "'||pg_sleep(\($0))--" }, { "'; WAITFOR DELAY '0:0:\($0)'--" },
         ]
         if Int(v) != nil {
-            templates.insert(contentsOf: ["\(v) AND SLEEP(%d)", "\(v);SELECT pg_sleep(%d)--"], at: 0)
+            suffixes.insert(contentsOf: [{ " AND SLEEP(\($0))" }, { ";SELECT pg_sleep(\($0))--" }], at: 0)
         }
         if let proof = await DoseResponse.confirm(
-            templates: templates, point: point, baseline: baseline, context: context)
+            suffixes: suffixes, point: point, baseline: baseline, context: context)
         {
             findings.append(
                 context.finding(
@@ -282,25 +304,36 @@ struct SQLInjectionCheck: ActiveCheck {
     }
 }
 
-/// Dose-response timing (SCN-032, §3.4): the delay must scale with the injected value.
+/// Dose-response timing (SCN-032, §3.4): the delay must scale with the injected value. Each payload is
+/// the point's base value followed by `suffix(seconds)`, so user data never becomes a format string.
+/// Times are the probes' wire times (`Probe.seconds`), measured against the median of several baseline
+/// samples so one cold or jittery baseline request can neither hide nor fake a delay.
 enum DoseResponse {
     struct Proof {
         var probe: Probe
         var summary: String
     }
 
-    static func confirm(templates: [String], point: InsertionPoint, baseline: Baseline, context: AuditContext)
-        async -> Proof?
-    {
-        let base = baseline.original.seconds
-        for template in templates {
-            let two = await context.time(point.build(context.base, payload: String(format: template, 2)))
-            guard two.seconds - base >= 1.6 else { continue }
-            let one = await context.time(point.build(context.base, payload: String(format: template, 1)))
-            let four = await context.time(point.build(context.base, payload: String(format: template, 4)))
-            let d1 = one.seconds - base
-            let d2 = two.seconds - base
-            let d4 = four.seconds - base
+    static func confirm(
+        suffixes: [(Int) -> String], point: InsertionPoint, baseline: Baseline, context: AuditContext
+    ) async -> Proof? {
+        // Baseline samples: the original and canary probes, plus fresh sends of the unmodified request.
+        var samples = [baseline.original.seconds, baseline.canary.seconds]
+        for _ in 0..<max(1, context.timingSamples) {
+            samples.append(await context.send(context.base).seconds)
+        }
+        let base = samples.sorted()[samples.count / 2]
+        for suffix in suffixes {
+            func measure(_ seconds: Int) async -> (delay: Double, probe: Probe) {
+                let timed = await context.time(
+                    point.build(context.base, payload: point.baseValue + suffix(seconds)))
+                return (timed.seconds - base, timed.probe)
+            }
+            let two = await measure(2)
+            guard two.delay >= 1.6 else { continue }
+            let one = await measure(1)
+            let four = await measure(4)
+            let (d1, d2, d4) = (one.delay, two.delay, four.delay)
             // Each delay within 40 % of the requested one, and increasing with it.
             if abs(d1 - 1) <= 0.6, abs(d2 - 2) <= 0.8, abs(d4 - 4) <= 1.6, d1 < d2, d2 < d4 {
                 return Proof(
@@ -327,11 +360,12 @@ struct CommandInjectionCheck: ActiveCheck {
         guard let point, let baseline else { return [] }
         var findings: [IssueFinding] = []
         let v = point.baseValue
-        let templates = [
-            "\(v);sleep %d;", "\(v)|sleep %d", "\(v)$(sleep %d)", "\(v)`sleep %d`", "\(v)&&sleep %d",
+        let suffixes: [(Int) -> String] = [
+            { ";sleep \($0);" }, { "|sleep \($0)" }, { "$(sleep \($0))" }, { "`sleep \($0)`" },
+            { "&&sleep \($0)" },
         ]
         if let proof = await DoseResponse.confirm(
-            templates: templates, point: point, baseline: baseline, context: context)
+            suffixes: suffixes, point: point, baseline: baseline, context: context)
         {
             findings.append(
                 context.finding(
@@ -341,10 +375,12 @@ struct CommandInjectionCheck: ActiveCheck {
                     evidence: proof.probe))
         }
         if let oast = context.oast {
-            for template in ["\(v);nslookup %@;", "\(v)$(nslookup %@)", "\(v)|curl http://%@/"] {
+            let commands: [(String) -> String] = [
+                { ";nslookup \($0);" }, { "$(nslookup \($0))" }, { "|curl http://\($0)/" },
+            ]
+            for command in commands {
                 guard let host = await oast.mint(note: "cmd \(point.label)") else { break }
-                let probe = await context.send(
-                    point.build(context.base, payload: String(format: template, host)))
+                let probe = await context.send(point.build(context.base, payload: v + command(host)))
                 await context.expectOAST(
                     host,
                     context.finding(
@@ -539,12 +575,7 @@ struct OpenRedirectCheck: ActiveCheck {
                         evidence: probe, marker: canary, confidence: .certain)
                 ]
             }
-            let body = probe.body.lowercased()
-            if body.contains("http-equiv=\"refresh\"") || body.contains("location"),
-                body.contains("url=\(payload.lowercased())")
-                    || body.contains("location='\(payload.lowercased())")
-                    || body.contains("location.href='\(payload.lowercased())")
-            {
+            if Self.clientSideTargets(probe.body).contains(where: { Self.host(of: $0) == canary }) {
                 return [
                     context.finding(
                         id, point: point, variant: "client-side",
@@ -555,6 +586,30 @@ struct OpenRedirectCheck: ActiveCheck {
             }
         }
         return []
+    }
+
+    /// Where the page sends the browser by itself: a meta refresh's `url=`, and a script's assignment
+    /// to `location` / `location.href` or call to `location.replace` / `location.assign` (§3.4). An
+    /// input merely echoed elsewhere (`?returnUrl=…` in a link) is not a redirect.
+    static func clientSideTargets(_ body: String) -> [String] {
+        var targets: [String] = []
+        for tag in body.matches(of: #/(?i)<meta\b[^>]*>/#)
+        where tag.output.contains(#/(?i)http-equiv\s*=\s*["']?refresh/#) {
+            targets += tag.output.matches(
+                of: #/(?i)content\s*=\s*["']?\s*\d*\s*[;,]\s*url\s*=\s*['"]?([^"'>\s]+)/#
+            )
+            .map { String($0.output.1) }
+        }
+        // Not `\b`: Swift's Unicode word boundaries treat `window.location` as one word.
+        for script in body.matches(of: #/(?is)<script\b[^>]*>(.*?)</script>/#) {
+            let code = script.output.1
+            targets += code.matches(of: #/(?:^|[^\w$])location(?:\.href)?\s*=\s*(["'`])(.*?)\1/#).map {
+                String($0.output.2)
+            }
+            targets += code.matches(of: #/(?:^|[^\w$])location\.(?:replace|assign)\(\s*(["'`])(.*?)\1/#)
+                .map { String($0.output.2) }
+        }
+        return targets
     }
 
     /// The host a browser would go to for `location`.

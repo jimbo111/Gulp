@@ -59,6 +59,8 @@ extension ScanCommand {
         @Flag(help: "Allow payloads that could change data (SCN-038).") var unsafe = false
         @Flag(help: "Scan even out of scope (explicit override).") var allowOutOfScope = false
         @Flag(help: "Print each finding as it arrives.") var verbose = false
+        @Option(help: "Enable an opt-in check family (repeatable): \(ActiveChecks.optInFamilies.sorted()).")
+        var enableFamily: [String] = []
 
         func run() async throws {
             guard let preset = ScanConfig.Preset(rawValue: config) else {
@@ -68,6 +70,12 @@ extension ScanCommand {
             if let oastGrace { scanConfig.oastGraceSeconds = oastGrace }
             if let concurrency { scanConfig.concurrency = concurrency }
             scanConfig.unsafe = unsafe
+            for family in enableFamily {
+                guard ActiveChecks.optInFamilies.contains(family) else {
+                    throw ValidationError("\(family) isn't an opt-in family")
+                }
+                scanConfig.disabledFamilies.remove(family)
+            }
             let session = try await ProjectSession.open(at: URL(fileURLWithPath: project))
             var requests: [(request: RawRequest, target: HTTPTarget)] = []
             if let manifest {
