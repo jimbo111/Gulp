@@ -41,7 +41,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.22.0"),
         .package(url: "https://github.com/apple/swift-certificates.git", from: "1.5.0"),
         .package(url: "https://github.com/apple/swift-asn1.git", from: "1.1.0"),
-        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.7.0"),
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.1"),
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),

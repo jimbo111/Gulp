@@ -57,6 +57,8 @@ where it sits on the same `GulpCodec` operations. The requirement IDs are unchan
 | ADV-032 | P1 | Guided confirmation/exploitation workbench (construct a follow-up that proves desync) with strong warnings and scope gating; never run destructive confirmations automatically. |
 | ADV-033 | P1 | Report findings with the exact probes and reasoning; integrate with the Scanner as an opt-in active check family. |
 
+*As built (2026-11-13):* `SmugglingProbe` (GulpScanner) sends CL.TE and TE.CL timing probes and classifies them against a baseline (ADV-030/031; TE.TE variants and HTTP/2 downgrade are not built); `SmugglingProbe.confirmation` is the dry-run-by-default, scope-gated confirmation workbench (ADV-032). `gulp-cli smuggle`, `gulp-cli smuggle-confirm`. ADV-033 is not built. VulnLab emulates the desync on the `/smuggle` route of :8088 (`/safe/smuggle` is the twin), not on a separate :8090 listener; acceptance test 4 runs against that route (`Scripts/smuggle-dod.sh`).
+
 ## 5. GraphQL Workbench — M13b
 
 | ID | Pri | Requirement |

@@ -5,10 +5,11 @@
 | Level | Where | Tooling | What |
 |---|---|---|---|
 | Unit | `Packages/GulpKit/Tests/<Module>Tests` | Swift Testing (`import Testing`, `@Test`, `#expect`) — XCTest is acceptable where Swift Testing lacks something | Parsers, codecs, GulpQL, diff, payload generators, statistics, cert minting, scope matching |
-| Integration | `Tests/IntegrationTests` | Swift Testing + an in-process VulnLab + an in-process proxy | Proxy ↔ engine ↔ store end-to-end; scanner against VulnLab; Beacon client ↔ dev Beacon server |
-| UI | `GulpAppUITests` (XCUITest) | Xcode | Smoke flows: create a project, see proxied traffic, send to Repeater, run an attack |
-| Performance | `Tests/PerformanceTests` (run with `make perf`, not in the default `make test`) | `ContinuousClock` measurements with budgets from doc 01 §9 | Throughput, latency, table paging, project open |
-| Fuzz | `Tests/FuzzTests` (Linux, libFuzzer via `-sanitize=fuzzer`) plus a deterministic random-input test in the unit suite | | HTTP/1 parser, HTTP/2 frame handling, GulpQL parser, decoders |
+| Integration | `Tests/IntegrationTests` | Swift Testing + an in-process VulnLab + an in-process proxy | Proxy ↔ engine ↔ store end-to-end; scanner against VulnLab; Beacon client ↔ dev Beacon server. *As built: one capture → store → passive scan → report test; the other end-to-end paths are covered by the `Scripts/*-dod.sh` acceptance scripts* |
+| Acceptance (DoD) | `Scripts/*-dod.sh` (41 scripts) | bash: start `gulp-vulnlab` (and the dev Beacon where needed), drive the real `gulp-cli`, assert exact outcomes | One per milestone or feature; the scanner precision/recall check lives here (below) |
+| UI | `GulpAppUITests` (XCUITest) | Xcode | Smoke flows: create a project, see proxied traffic, send to Repeater, run an attack. *As built: 2 tests (launch shows the sidebar; launch shows History)* |
+| Performance | `Tests/PerformanceTests` (run with `make perf`, not in the default `make test`) — **not created yet**; the M8 and M9 DoD scripts measure the Fuzzer and GulpQL budgets | `ContinuousClock` measurements with budgets from doc 01 §9 | Throughput, latency, table paging, project open |
+| Fuzz | `Tests/FuzzTests` (Linux, libFuzzer via `-sanitize=fuzzer`; **not created yet**) plus a deterministic random-input test in the unit suite (seeded with `SplitMix64`) | | HTTP/1 parser, HTTP/2 frame handling, GulpQL parser, decoders |
 
 Rules:
 
@@ -64,10 +65,10 @@ tests can measure false positives.
 | CORS | `/api/cors` (reflects Origin with credentials) | `/safe/api/cors` | SCN |
 | Header issues | Pages with missing CSP/HSTS, cookies without Secure/HttpOnly, verbose errors with stack traces, an exposed `.git/HEAD`, `/.env` | `/safe/*` with correct headers | SCN passive |
 | CRLF / header injection | `/crlf?lang=` (sets a header from input) | `/safe/crlf` | SCN |
-| Request smuggling | A raw NIO listener on :8090 that emulates a CL.TE front-end/back-end pair | — | ADV |
+| Request smuggling | `/smuggle` on :8088 emulates the desync hang on a CL+TE conflict (planned as a raw listener on :8090; built as a route, 2026-11-13) | `/safe/smuggle` | ADV |
 | Race condition | `/race/redeem` (a check-then-act with a 50 ms window; a coupon can be redeemed only once) | — | REP, F03 |
 | IDOR / access control | `/api/orders/{id}` (no owner check), `/admin` (role check by cookie `role=`) | `/safe/api/orders/{id}` | ADV (Authz Matrix) |
-| Tokens | `/token/weak` (sequential/time-based), `/token/strong` (CSPRNG) — kept for the post-1.0 Sequencer (F11 is out of v1 since 2026-11-08); no v1 test uses them | — | SEQ (post-1.0) |
+| Tokens | `/token/weak` (sequential/time-based), `/token/strong` (CSPRNG) — used by the Sequencer (F11, built 2026-11-13; `Scripts/sequencer-dod.sh`)s them | — | SEQ (post-1.0) |
 | GraphQL | `/graphql` (introspection on, a field-level authz bug) | — | ADV |
 | OpenAPI | `/openapi.json` describing the `/api/*` routes | — | ADV, SCN |
 | WebSockets | `/ws/chat` (echo + broadcast; an XSS sink in messages) | — | PRX |
@@ -125,7 +126,9 @@ issues explicit rather than incidental:
   --dev` equivalent, F10 BCN-024) and point the scan config at it; otherwise those three have no
   recall path.
 
-**Scanner accuracy test** (`IntegrationTests/ScannerAccuracyTests`): with the dev Beacon running,
+**Scanner accuracy test** (planned as `IntegrationTests/ScannerAccuracyTests`, which does not exist;
+*as built*, `Scripts/m11b-dod.sh`, `m11c-dod.sh` and `m11c-checks-dod.sh` run `gulp-cli scan` against
+VulnLab with the dev Beacon and `verify-active` against a manifest): with the dev Beacon running,
 crawl and audit VulnLab with the "Thorough" configuration, then assert:
 
 - recall: every P0 check finds its vulnerable endpoint (per the fixture manifest), including the
@@ -157,8 +160,8 @@ homes.)
 
 ## 4. Third-party targets for manual testing (optional, Docker)
 
-`Scripts/targets/docker-compose.yml` with OWASP Juice Shop and DVWA, bound to localhost only. These
-are not part of automated tests.
+Planned: `Scripts/targets/docker-compose.yml` with OWASP Juice Shop and DVWA, bound to localhost
+only (**not created yet**). These are not part of automated tests.
 
 ## 5. Performance tests
 
@@ -170,15 +173,19 @@ are not part of automated tests.
 | `FuzzerThroughputTests` | ≥ 1,000 req/s (normal), ≥ 5,000 req/s (Turbo) |
 | `ProjectOpenTests` | 1M-exchange project opens to first page < 3 s |
 
-Fixture generator: `swift run gulp-cli dev generate-project --exchanges 1000000 --out big.gulp`.
+Fixture generator: `gulp-cli seed` inserts synthetic exchanges into a project (used by
+`Scripts/m9-dod.sh` for its 1M-row GulpQL budget; see `gulp-cli seed --help`). The planned
+`gulp-cli dev generate-project` does not exist.
 
 ## 6. UI smoke tests (XCUITest)
 
 1. Launch → New Temporary Project → the sidebar shows every tool.
-2. Start VulnLab, then drive traffic with `gulp-cli dev replay` through the proxy → history rows appear.
+2. Start VulnLab, then drive traffic through the proxy (e.g. curl with `--proxy`; the planned
+   `gulp-cli dev replay` does not exist) → history rows appear.
 3. Select a row → ⌘R → the Repeater tab opens → ⌘↩ → a response appears.
 4. Send to Fuzzer → mark a position → simple list → start → the results table fills.
 5. Settings → Proxy → add a listener on port 8081 → the status shows it running.
 
 Use accessibility identifiers (`gulp.history.table`, `gulp.repeater.send`, …) defined in a shared
-`AccessibilityID` enum.
+`AccessibilityID` enum. *As built: only flows 1 (sidebar) and a History check exist, and there is
+no `AccessibilityID` enum yet.*

@@ -1,5 +1,8 @@
 # 09 — Gulp vs Burp Suite (2026-11-13)
 
+> **Snapshot, not current status.** `docs/PROGRESS.md` is authoritative for what is built; it
+> reflects the code as of 2026-11-13.
+
 A feature-by-feature comparison of Gulp against the current Burp Suite (Community and Professional,
 2025-era), and where Gulp already wins, is at parity, or still has a gap — and the plan to
 *outperform*, not just match. The comparison is deliberately honest: Burp is a mature product with a

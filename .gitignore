@@ -18,3 +18,4 @@ Secrets.local*
 
 # Agent worktrees (local only)
 .claude/worktrees/
+tasks/todo.md
