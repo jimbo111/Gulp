@@ -120,7 +120,8 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
     private var store: ProjectStore
     private var writer: StoreWriter
     private var paused = false
-    private var held: [(Exchange, CheckedContinuation<ExchangeID, Never>)] = []
+    /// Recordings and updates that arrived during a pause, in arrival order.
+    private var held: [HeldWrite] = []
     private var waiting: [CheckedContinuation<Void, Never>] = []
     /// TGT-024: when set, proxy exchanges out of this scope are not recorded.
     private var proxyScope: ScopeService?
@@ -157,7 +158,7 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
         }
         let id: ExchangeID
         if paused {
-            id = await withCheckedContinuation { held.append((exchange, $0)) }
+            id = await withCheckedContinuation { held.append(.record(exchange, $0)) }
         } else {
             id = await writer.record(exchange)
         }
@@ -173,10 +174,20 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
 
     func update(_ exchange: Exchange) async {
         guard exchange.id != Self.notRecorded else { return }
-        await writer.update(exchange)
+        if paused {
+            held.append(.update(exchange))
+        } else {
+            await writer.update(exchange)
+        }
     }
 
-    /// Hold new recordings (Save As copies the file meanwhile, PRJ-002).
+    /// A write held while Save As copies the file.
+    private enum HeldWrite {
+        case record(Exchange, CheckedContinuation<ExchangeID, Never>)
+        case update(Exchange)
+    }
+
+    /// Hold new recordings and updates (Save As copies the file meanwhile, PRJ-002).
     func pause() {
         paused = true
     }
@@ -189,8 +200,13 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
         while !held.isEmpty {
             let batch = held
             held = []
-            for (exchange, continuation) in batch {
-                continuation.resume(returning: await newWriter.record(exchange))
+            for write in batch {
+                switch write {
+                case .record(let exchange, let continuation):
+                    continuation.resume(returning: await newWriter.record(exchange))
+                case .update(let exchange):
+                    await newWriter.update(exchange)
+                }
             }
         }
         paused = false
