@@ -35,8 +35,26 @@ extension ProjectSession {
         target.port == (target.scheme == .https ? 443 : 80) ? target.host : "\(target.host):\(target.port)"
     }
 
-    /// Introspect a GraphQL endpoint and parse its schema (ADV-040).
-    public func introspectGraphQL(path: String, target: HTTPTarget) async -> GraphQLIntrospection {
+    /// Introspect a GraphQL endpoint and parse its schema (ADV-040). A user-initiated send: out of
+    /// scope (with scope rules set) throws `RPCServiceError.outOfScope` unless `allowOutOfScope`.
+    public func introspectGraphQL(path: String, target: HTTPTarget, allowOutOfScope: Bool = false)
+        async throws -> GraphQLIntrospection
+    {
+        try await requireManualScope(target, path: path, override: allowOutOfScope)
+        return await introspectionExchange(path: path, target: target)
+    }
+
+    /// Send a GraphQL operation and return the response text (ADV-041). A user-initiated send, gated
+    /// like `introspectGraphQL`.
+    public func sendGraphQL(
+        _ gql: GraphQLRequest, path: String, target: HTTPTarget, allowOutOfScope: Bool = false
+    ) async throws -> (status: Int, body: String, exchangeID: ExchangeID) {
+        try await requireManualScope(target, path: path, override: allowOutOfScope)
+        return await sendOperation(gql, path: path, target: target)
+    }
+
+    /// The introspection exchange, recorded as Scanner traffic; the caller has checked scope.
+    private func introspectionExchange(path: String, target: HTTPTarget) async -> GraphQLIntrospection {
         let request = graphQLRequest(
             GraphQLRequest(query: GraphQL.introspectionQuery), path: path, host: hostHeader(target))
         var options = SendOptions(recordAs: .scanner)
@@ -50,8 +68,8 @@ extension ProjectSession {
         return GraphQLIntrospection(schema: schema, enabled: schema != nil, exchangeID: result.exchange.id)
     }
 
-    /// Send a GraphQL operation and return the response text (ADV-041).
-    public func sendGraphQL(_ gql: GraphQLRequest, path: String, target: HTTPTarget) async -> (
+    /// One operation, recorded as a Repeater send; the caller has checked scope.
+    private func sendOperation(_ gql: GraphQLRequest, path: String, target: HTTPTarget) async -> (
         status: Int, body: String, exchangeID: ExchangeID
     ) {
         let request = graphQLRequest(gql, path: path, host: hostHeader(target))
@@ -65,12 +83,16 @@ extension ProjectSession {
 
     /// Run the GraphQL security checks against `path` and raise issues (ADV-042). `authzProbe`, when
     /// given, is a query that should be denied to an unauthenticated caller but whose `sensitiveMarker`
-    /// appearing in the unauthenticated response proves broken object/field authorization.
+    /// appearing in the unauthenticated response proves broken object/field authorization. An active
+    /// tool (CLAUDE.md "Scope safety"): out of scope throws `OutOfScope` unless `allowOutOfScope`; both
+    /// probes go to `target`/`path`, the one place checked.
     public func scanGraphQL(
-        path: String, target: HTTPTarget, authzProbe: GraphQLRequest? = nil, sensitiveMarker: String? = nil
+        path: String, target: HTTPTarget, authzProbe: GraphQLRequest? = nil, sensitiveMarker: String? = nil,
+        allowOutOfScope: Bool = false
     ) async throws -> [IssueID] {
+        try await scopeGuard.require(target, path: path, override: allowOutOfScope)
         var raised: [IssueID] = []
-        let introspection = await introspectGraphQL(path: path, target: target)
+        let introspection = await introspectionExchange(path: path, target: target)
         let origin = Issue.origin(target)
 
         if introspection.enabled {
@@ -90,7 +112,7 @@ extension ProjectSession {
 
         if let authzProbe, let sensitiveMarker {
             // Send the probe with no credentials; if the sensitive marker comes back, authz is missing.
-            let result = await sendGraphQL(authzProbe, path: path, target: target)
+            let result = await sendOperation(authzProbe, path: path, target: target)
             if result.body.contains(sensitiveMarker) {
                 await store.writer.flush()
                 let finding = graphQLFinding(
