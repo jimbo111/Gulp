@@ -12,8 +12,9 @@
 //                                               bytes (SES-016…018).
 //
 // Config (identities/rules/macros) persists as a SettingsGroup; the active identity's cookies and the
-// captured variables are live state. Keys are passed in the scheme for now (the Keychain-backed store
-// is a carry-over); nothing here weakens verification.
+// captured variables are live state. Its secrets (signing keys, identity credentials, macro steps)
+// are kept in the environment's secret store, not the project file (SessionSecrets.swift); the
+// state here always holds them resolved.
 
 import Foundation
 import GulpCore
@@ -35,6 +36,9 @@ public struct SessionSettings: SettingsGroup, Hashable {
     public var macros: [Macro]
     /// The active identity's id.
     public var activeIdentity: UUID?
+    /// Identities and macros whose credentials or steps are in the secret store and not loaded
+    /// here: id (`uuidString`) → secret name (SessionSecrets.swift).
+    var credentialRefs: [String: String] = [:]
 
     /// Session settings.
     public init(
@@ -45,6 +49,20 @@ public struct SessionSettings: SettingsGroup, Hashable {
         self.rules = rules
         self.macros = macros
         self.activeIdentity = activeIdentity
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case identities, rules, macros, activeIdentity, credentialRefs
+    }
+
+    /// Decode, accepting settings saved before credentials moved to the secret store.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        identities = try container.decode([Identity].self, forKey: .identities)
+        rules = try container.decode([SessionRule].self, forKey: .rules)
+        macros = try container.decode([Macro].self, forKey: .macros)
+        activeIdentity = try container.decodeIfPresent(UUID.self, forKey: .activeIdentity)
+        credentialRefs = try container.decodeIfPresent([String: String].self, forKey: .credentialRefs) ?? [:]
     }
 }
 

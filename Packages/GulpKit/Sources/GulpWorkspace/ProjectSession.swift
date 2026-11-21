@@ -316,13 +316,13 @@ public actor ProjectSession {
                 await events.publish(.log(LogEntry(level: .info, message: message, module: "gulp.session")))
             }
         }
-        // Signing keys come from the secret store, never the project file (see SessionSecrets.swift).
+        // Session secrets come from the secret store, never the project file (see SessionSecrets.swift).
         let (sessionSettings, missingSecrets) = settings.get(SessionSettings.self)
-            .resolvingSigningSecrets(from: environment.secretStore)
+            .resolvingSecrets(from: environment.secretStore)
         if !missingSecrets.isEmpty {
             let message =
-                "\(missingSecrets.count) signing key(s) of this project aren't in this machine's secret store; "
-                + "re-enter them in the session rules to sign requests."
+                "\(missingSecrets.count) session secret(s) of this project (signing keys, identity credentials, "
+                + "macro steps) aren't in this machine's secret store; re-enter them in the session settings."
             Task {
                 await events.publish(
                     .log(LogEntry(level: .warning, message: message, module: "gulp.session")))
@@ -428,6 +428,7 @@ public actor ProjectSession {
             let values = try await template.allSettingsJSON()
             try await template.close()
             try await settings.importProjectSettings(values)
+            try await settings.copySessionSecrets(in: environment.secretStore)
         }
         let minter = (try? environment.certificateAuthority()).flatMap { try? LeafMinter(authority: $0) }
         let session = ProjectSession(
@@ -441,7 +442,7 @@ public actor ProjectSession {
         await session.startPassiveScan()
         await session.applyNetworkSettings()
         await session.startSession()
-        await session.moveInlineSigningSecrets()
+        await session.moveInlineSecrets()
         if session.settings.get(OASTSettings.self).enabled {
             do {
                 try await session.startOAST()
@@ -454,7 +455,8 @@ public actor ProjectSession {
     }
 
     /// Save the project to `url` and continue working there (PRJ-002). A saved temporary project
-    /// becomes a normal one and its temporary file is removed.
+    /// becomes a normal one and its temporary file is removed (the new file takes over its secrets);
+    /// otherwise the new file gets its own copies of the session secrets.
     public func saveAs(_ destination: URL) async throws {
         let current = store.url.standardizedFileURL.resolvingSymlinksInPath()
         guard destination.standardizedFileURL.resolvingSymlinksInPath() != current else {
@@ -486,7 +488,11 @@ public actor ProjectSession {
         await recorder.resume(with: newStore)
         await siteMap.idle()  // a site-map read still on the old file would make close fail
         try await oldStore.close()
-        if isTemporary { Self.removeDatabaseFiles(oldStore.url) }
+        if isTemporary {
+            Self.removeDatabaseFiles(oldStore.url)
+        } else {
+            try await settings.copySessionSecrets(in: environment.secretStore)
+        }
         isTemporary = false
         RecentProjects.note(destination, in: environment)
     }
@@ -550,7 +556,10 @@ public actor ProjectSession {
         await http.shutdown()
         await passiveScan.drain()  // headless runs (gulp-cli proxy) finish scanning what they recorded
         try await store.close()
-        if isTemporary && !keepTemporary { Self.removeDatabaseFiles(store.url) }
+        if isTemporary && !keepTemporary {
+            Self.removeDatabaseFiles(store.url)
+            await deleteSecrets(settings.get(SessionSettings.self).secretRefs)  // discarded with it
+        }
     }
 
     static func removeDatabaseFiles(_ url: URL) {

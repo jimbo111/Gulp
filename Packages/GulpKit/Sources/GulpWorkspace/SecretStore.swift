@@ -1,8 +1,8 @@
 // GulpWorkspace — where secrets live instead of the project file (CLAUDE.md "No secrets in the
-// repo"). A `.gulp` project is a file people share, attach to tickets and commit; signing keys and
-// cloud credentials must not travel with it. The project stores a reference; the material goes here:
-// the macOS Keychain for the app, a directory of mode-0600 files elsewhere (Linux, CLI, tests) — the
-// same split as the CA key (`CAStore`).
+// repo"). A `.gulp` project is a file people share, attach to tickets and commit; signing keys,
+// identity credentials and OAST tokens must not travel with it. The project stores a reference; the
+// material goes here: the macOS Keychain for the app, a directory of mode-0600 files elsewhere
+// (Linux, CLI, tests) — the same split as the CA key (`CAStore`).
 
 import Foundation
 
@@ -110,7 +110,7 @@ public struct KeychainSecretStore: SecretStore {
         var item = query(name)
         item[kSecValueData as String] = data
         item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        item[kSecAttrLabel as String] = "Gulp signing key (\(name))"
+        item[kSecAttrLabel as String] = "Gulp secret (\(name))"
         let status = SecItemAdd(item as CFDictionary, nil)
         guard status == errSecSuccess else {
             throw SecretStoreError(description: "Keychain write failed (\(status))")

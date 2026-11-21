@@ -74,7 +74,8 @@ touched by session rules.
   reuses `MatchReplaceHook` ordering. Config persists as a `SessionSettings` group. VulnLab verifies
   each signature with an independent implementation (`SignedLab`), so the DoD proves interop.
   Decisions: rule scope is tool-set + host-glob + path-prefix (GulpQL conditions deferred; the
-  workspace can pre-filter); signing keys are passed in config, not the Keychain yet; message-signature
+  workspace can pre-filter); signing keys, identity credentials and macro steps live in the secret
+  store (Keychain on macOS, 0600 files elsewhere) and the project holds references (doc 04 §5); message-signature
   RSA algorithms aren't supported (hmac-sha256 and ecdsa-p256-sha256 are). See doc 07.
 
 
