@@ -84,11 +84,14 @@ public actor ProxyServer {
                     let upstream = ProxyUpstream(
                         engine: engine, client: client, forceHTTP1: tls?.forceHTTP1ToServer ?? false,
                         intercept: intercept, matchReplace: matchReplace, webSockets: webSockets)
-                    Task {
+                    let serving = Task {
                         await ProxyConnection.serve(
                             items, channel: channel, upstream: upstream, pressure: pressure,
                             intercepts: tls != nil)
                     }
+                    // The client left: stop its work (a held request is dropped, an upstream send
+                    // or WebSocket relay ends).
+                    channel.closeFuture.whenComplete { _ in serving.cancel() }
                     return channel.eventLoop.makeCompletedFuture(withResultOf: {
                         let handler = ProxyConnectionHandler(
                             items: continuation, pressure: pressure, tls: tls, upstream: upstream)

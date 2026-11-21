@@ -3,7 +3,7 @@
 //
 // Concept: the proxy's connection task simply *awaits* the user's decision (a checked continuation
 // per held item), so a held request blocks only its own exchange; other connections and other
-// HTTP/2 streams keep flowing (PRX-017).
+// HTTP/2 streams keep flowing (PRX-017). Cancelling that task (its client went away) drops the item.
 
 import Foundation
 import GulpCore
@@ -253,13 +253,20 @@ public actor InterceptQueue {
         return await hold(item)
     }
 
+    /// Queue `item` until it is decided, or dropped when the waiting task is cancelled (the client
+    /// went away). The cancel handler's `decide` runs on the actor after the item is queued, so a
+    /// task cancelled before it got here still has its item dropped.
     private func hold(_ item: InterceptItem) async -> InterceptDecision {
         let id = item.id
         nextID += 1
-        return await withCheckedContinuation { continuation in
-            held[id] = Waiter(item: item, decide: continuation)
-            order.append(id)
-            if let events { Task { await events.publish(.interceptQueued(id)) } }
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                held[id] = Waiter(item: item, decide: continuation)
+                order.append(id)
+                if let events { Task { await events.publish(.interceptQueued(id)) } }
+            }
+        } onCancel: {
+            Task { await self.decide(id, .drop) }
         }
     }
 }

@@ -1,6 +1,8 @@
 import Foundation
 import GulpCore
 import GulpHTTP
+import NIOCore
+import NIOPosix
 import Testing
 
 @testable import GulpProxy
@@ -174,6 +176,43 @@ struct InterceptProxyTests {
         let original = proxied.first?.edited?.originalRequest?.bytes.string() ?? ""
         #expect(original.hasSuffix("role=user") && !original.contains("X-Gulp"))  // what the client sent
         await client.shutdown()
+        await proxy.stopAll()
+        await origin.stop()
+    }
+
+    @Test("PRX-011: a held item whose waiter is cancelled leaves the queue as dropped")
+    func test_PRX011_cancelledHold() async throws {
+        let queue = InterceptQueue()
+        await queue.setIntercepting(requests: true)
+        let get = RawRequest(Bytes("GET / HTTP/1.1\r\nHost: x\r\n\r\n"))
+        let target = HTTPTarget(scheme: .http, host: "x", port: 80)
+        let waiting = Task { await queue.holdRequest(get, target: target) }
+        _ = try await Self.nextItem(queue)
+        waiting.cancel()
+        let (decision, held) = await waiting.value
+        #expect(held)
+        guard case .drop = decision else {
+            Issue.record("expected drop, got \(decision)")
+            return
+        }
+        #expect(await queue.items.isEmpty)
+    }
+
+    @Test("PRX-011: a request held when its client disconnects leaves the queue and is never sent")
+    func test_PRX011_clientGone() async throws {
+        let origin = try await Origin.start(reply: okReply)
+        let queue = InterceptQueue()
+        await queue.setIntercepting(requests: true)
+        let (proxy, proxyTarget) = try await Self.proxy(queue, recorder: Recorded())
+        let client = try await ClientBootstrap(group: MultiThreadedEventLoopGroup.singleton)
+            .connect(host: "127.0.0.1", port: proxyTarget.port).get()
+        let get = "GET http://127.0.0.1:\(origin.port)/ HTTP/1.1\r\nHost: x\r\n\r\n"
+        try await client.writeAndFlush(client.allocator.buffer(string: get))
+        _ = try await Self.nextItem(queue)
+        try await client.close()
+        for _ in 0..<200 where await !queue.items.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(await queue.items.isEmpty)
+        #expect(origin.connections == 0)
         await proxy.stopAll()
         await origin.stop()
     }

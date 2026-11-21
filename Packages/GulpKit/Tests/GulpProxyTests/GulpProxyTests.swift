@@ -525,6 +525,32 @@ struct ProxyHTTP2Tests {
         await origin.stop()
     }
 
+    @Test("PRX-011/017: an h2 request held when its stream is reset leaves the queue")
+    func test_PRX017_streamResetWhileHeld() async throws {
+        let origin = try await H2Origin.start()
+        let queue = InterceptQueue()
+        await queue.setIntercepting(requests: true)
+        let minter = try LeafMinter(authority: CertificateAuthority.generate(keyType: .p256))
+        let proxy = ProxyServer(
+            engine: NIOHTTPEngine(recorder: Recorded()), tls: ProxyTLSOptions(minter: minter),
+            intercept: queue)
+        let port = try await proxy.start(ProxyListenerConfig(port: 0))
+        let client = NIOHTTPEngine()
+        let target = HTTPTarget(scheme: .https, host: "localhost", port: origin.port)
+        let request = RawRequest(Bytes("GET /held HTTP/1.1\r\nHost: localhost\r\n\r\n"))
+        let options = viaProxy(port, .auto)
+        let sending = Task { await client.send(request, to: target, options: options) }
+        for _ in 0..<300 where await queue.items.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(await queue.items.count == 1)
+        sending.cancel()  // the client resets the stream (RST_STREAM CANCEL)
+        _ = await sending.value
+        for _ in 0..<300 where await !queue.items.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(await queue.items.isEmpty)
+        await client.shutdown()
+        await proxy.stopAll()
+        await origin.stop()
+    }
+
     @Test("An HTTP/1.1-only client still works against an h2 server (the proxy re-frames the reply)")
     func test_h1ClientToH2Server() async throws {
         let origin = try await H2Origin.start()

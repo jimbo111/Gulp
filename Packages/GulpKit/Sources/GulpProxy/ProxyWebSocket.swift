@@ -128,6 +128,10 @@ enum ProxyWebSocket {
                 passed, recorder: recorder, url: url, exchangeID: exchangeID, compressed: compressed)
         }
         try? await client.closeFuture.get()
+        // The client is gone: nothing more can reach it, and a message held in Intercept (PRX-033)
+        // must not keep the relay and the upstream connection open — cancelling drops it.
+        serverBound.cancel()
+        clientBound.cancel()
         toServer.finish()
         toClient.finish()
         await serverBound.value

@@ -308,6 +308,33 @@ struct WebSocketProxyTests {
         await origin.stop()
     }
 
+    @Test("PRX-033: a message held when the client disconnects is dropped and the relay ends")
+    func test_PRX033_clientGoneWhileHeld() async throws {
+        let origin = try await WSEchoOrigin.start()
+        let sockets = WSRecorded()
+        let queue = InterceptQueue()
+        await queue.setInterceptingWebSockets(true)
+        let proxy = ProxyServer(
+            engine: NIOHTTPEngine(recorder: Recorded()), intercept: queue, webSockets: sockets)
+        let port = try await proxy.start(ProxyListenerConfig(port: 0))
+        let sink = ByteSink()
+        let client = try await open(origin, via: port, sink: sink)
+        try await send("held", on: client)
+        var waited = 0
+        while await !queue.items.contains(where: { $0.kind == .webSocket(.toServer) }), waited < 300 {
+            try await Task.sleep(for: .milliseconds(10))
+            waited += 1
+        }
+        #expect(await queue.items.contains { $0.kind == .webSocket(.toServer) })
+        try await client.close()
+        for _ in 0..<300 where await sockets.closed.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(await sockets.closed.count == 1)  // the relay finished (and closed the upstream)
+        #expect(await !queue.items.contains { $0.kind == .webSocket(.toServer) })
+        await queue.decideAll(.forward(nil))
+        await proxy.stopAll()
+        await origin.stop()
+    }
+
     @Test("PRX-020/034: request Match & Replace applies to the upgrade (the compression preset works)")
     func test_PRX034_upgradeMatchReplace() async throws {
         let origin = try await WSEchoOrigin.start()
