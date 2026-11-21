@@ -28,14 +28,9 @@ extension ProjectSession {
             options.timeouts.total = .seconds(timeout)
             return await engine.send(request, to: target, options: options)
         }
-        let scopeGuard = self.scopeGuard
-        let inScope: @Sendable (HTTPTarget, String) async -> Bool
-        if allowOutOfScope {
-            inScope = { @Sendable _, _ in true }
-        } else {
-            inScope = { @Sendable target, path in await scopeGuard.permits(target, path: path) }
-        }
-        let crawler = Crawler(config: config, send: send, inScope: inScope, session: session)
+        let crawler = Crawler(
+            config: config, send: send, inScope: scanScope(allowOutOfScope: allowOutOfScope), session: session
+        )
         let source = await crawler.start()
         let (events, continuation) = AsyncStream.makeStream(of: CrawlEvent.self, bufferingPolicy: .unbounded)
         let tasks = activeTasks

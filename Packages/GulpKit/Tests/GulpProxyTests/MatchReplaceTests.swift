@@ -84,7 +84,7 @@ struct MatchReplaceTests {
         #expect(MatchReplace.apply(MatchReplaceRule.presets, to: request) == request)
     }
 
-    @Test("PRX-021: the hook rewrites proxy traffic; tools only with applyToTools; the original is kept")
+    @Test("PRX-021: the hook rewrites tool requests only with applyToTools; proxy requests are the proxy's")
     func test_PRX021_hook() async throws {
         let origin = try await Origin.start(reply: okReply)
         let addHeader = MatchReplaceRule(kind: .requestHeader, match: "", replace: "X-Gulp: 1")
@@ -93,19 +93,22 @@ struct MatchReplaceTests {
         let engine = NIOHTTPEngine(requestHooks: [hook], recorder: recorded)
         let target = HTTPTarget(scheme: .http, host: "127.0.0.1", port: origin.port)
         let get = RawRequest(Bytes("GET / HTTP/1.1\r\nHost: x\r\n\r\n"))
-        _ = await engine.send(get, to: target, options: SendOptions(recordAs: .proxy))
-        #expect(String(decoding: origin.received(0), as: UTF8.self).contains("X-Gulp: 1\r\n"))
-        let exchanges = await recorded.exchanges
-        #expect(exchanges.first?.edited?.originalRequest == get)  // PRX-012: the original is kept
-        var repeater = SendOptions(recordAs: .repeater)
-        repeater.connection = .newAndClose
-        _ = await engine.send(get, to: target, options: repeater)
+        var options = SendOptions(recordAs: .repeater)
+        options.connection = .newAndClose
+        _ = await engine.send(get, to: target, options: options)
+        #expect(!lastReceived(origin).contains("X-Gulp"))
+        // The proxy rewrites its requests itself, before Intercept (F01 §4.2): not again here.
+        var proxy = options
+        proxy.recordAs = .proxy
+        _ = await engine.send(get, to: target, options: proxy)
         #expect(!lastReceived(origin).contains("X-Gulp"))
         let forTools = MatchReplaceRule(
             kind: .requestHeader, match: "", replace: "X-Gulp: 2", applyToTools: true)
         hook.setRules([forTools])
-        _ = await engine.send(get, to: target, options: repeater)
+        _ = await engine.send(get, to: target, options: options)
         #expect(lastReceived(origin).contains("X-Gulp: 2"))
+        let exchanges = await recorded.exchanges
+        #expect(exchanges.last?.edited?.originalRequest == get)  // PRX-012: the original is kept
         await engine.shutdown()
         await origin.stop()
     }

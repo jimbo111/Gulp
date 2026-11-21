@@ -331,7 +331,7 @@ public actor Crawler {
         return String(decoding: body.rawBytes, as: UTF8.self)
     }
 
-    /// Add a request unless seen, out of scope, excluded or over a budget.
+    /// Add a request unless seen, excluded or over a budget (scope is checked when it is fetched).
     func enqueue(_ item: FrontierItem, _ continuation: AsyncStream<CrawlEvent>.Continuation) async {
         let key = item.method + " " + item.url.key(config.normalization) + (item.body.map { " " + $0 } ?? "")
         guard seen.insert(key).inserted else { return }
@@ -344,11 +344,6 @@ public actor Crawler {
         {
             report.excluded.append(text)
             continuation.yield(.skipped(url: text, reason: "excluded"))
-            return
-        }
-        guard await inScope(item.url.target, item.url.requestTarget) else {
-            report.outOfScope.append(text)
-            continuation.yield(.skipped(url: text, reason: "out_of_scope"))
             return
         }
         if config.obeyRobots,
@@ -458,6 +453,14 @@ public actor Crawler {
     }
 
     func fetch(_ item: FrontierItem, _ continuation: AsyncStream<CrawlEvent>.Continuation) async {
+        // CRL-001: scope is checked here, just before the send, so a scope narrowed mid-crawl holds
+        // for URLs already queued. A refused URL doesn't count as a fetched page.
+        guard await inScope(item.url.target, item.url.requestTarget) else {
+            fetched -= 1
+            report.outOfScope.append(item.url.string)
+            continuation.yield(.skipped(url: item.url.string, reason: "out_of_scope"))
+            return
+        }
         var result = await send(request(for: item), item.url.target)
         // CRL-006: a lost session → log in again and retry once.
         if let session, await session.isLoggedOut(result.exchange) {

@@ -1,5 +1,5 @@
-// GulpProxy — WebSockets through the proxy (F01 PRX-030…PRX-034). The upgrade request is sent with
-// the engine's `upgrade`; on `101` the proxy writes the 101 to the client and then relays each
+// GulpProxy — WebSockets through the proxy (F01 PRX-030…PRX-034). The upgrade request goes through
+// request Match & Replace and is sent with the engine's `upgrade`; on `101` the proxy writes the 101 to the client and then relays each
 // direction through a pump that parses frames:
 //   - frames are forwarded as their original wire bytes (raw bytes are the truth), one frame at a
 //     time, unless a WebSocket Match & Replace rule or WebSocket Intercept applies to the direction;
@@ -76,8 +76,11 @@ enum ProxyWebSocket {
             return (ProxyConnection.errorPage(502, "WebSockets need the NIO engine."), false)
         }
         let (fromServer, toClient) = AsyncStream.makeStream(of: [UInt8].self)
+        var options = upstream.options
+        let rewritten = upstream.rewritten(request, to: target)
+        if rewritten != request { options.originalRequest = request }
         let (result, connection) = await engine.upgrade(
-            request, to: target, options: upstream.options,
+            rewritten, to: target, options: options,
             onRead: { toClient.yield($0) },
             onClose: { toClient.finish() })  // the client-bound pump closes the client when done
         guard let connection, let response = result.exchange.response else {
@@ -101,7 +104,7 @@ enum ProxyWebSocket {
         let (passed, record) = AsyncStream.makeStream(of: WSPassed.self)
         let (fromClient, toServer) = AsyncStream.makeStream(of: [UInt8].self)
         let hooks = WSHooks(
-            intercept: upstream.intercept, matchReplace: upstream.matchReplace, upgrade: request,
+            intercept: upstream.intercept, matchReplace: upstream.matchReplace, upgrade: rewritten,
             target: target)
         let serverBound = Task {
             await pump(fromClient, direction: .toServer, hooks: hooks, record: record) { bytes in
@@ -125,6 +128,10 @@ enum ProxyWebSocket {
                 passed, recorder: recorder, url: url, exchangeID: exchangeID, compressed: compressed)
         }
         try? await client.closeFuture.get()
+        // The client is gone: nothing more can reach it, and a message held in Intercept (PRX-033)
+        // must not keep the relay and the upstream connection open — cancelling drops it.
+        serverBound.cancel()
+        clientBound.cancel()
         toServer.finish()
         toClient.finish()
         await serverBound.value

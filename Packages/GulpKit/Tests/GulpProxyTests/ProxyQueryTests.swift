@@ -30,13 +30,12 @@ struct ProxyQueryTests {
                 when: "resp.status >= 500 and in_scope"),
         ])
         hook.setScope(ScopeService(rules: [ScopeRule(host: "api.lab")]))
-        var toAPI = OutgoingRequest(request: request("GET /v1", host: "api.lab"), target: api)
-        var toWWW = OutgoingRequest(request: request("GET /", host: "www.lab"), target: www)
-        try await hook.willSend(&toAPI, context: HookContext(source: .proxy))
-        try await hook.willSend(&toWWW, context: HookContext(source: .proxy))
-        let apiText = toAPI.request.bytes.string()
+        // Proxy requests: rewritten by the proxy before Intercept (F01 §4.2).
+        let apiText = hook.rewrite(request("GET /v1", host: "api.lab"), target: api, source: .proxy).bytes
+            .string()
         #expect(apiText.contains("X-Api: 1") && apiText.contains("X-All: 1") && !apiText.contains("X-Bad"))
-        let wwwText = toWWW.request.bytes.string()
+        let wwwText = hook.rewrite(request("GET /", host: "www.lab"), target: www, source: .proxy).bytes
+            .string()
         #expect(!wwwText.contains("X-Api") && wwwText.contains("X-All: 1"))
 
         func respond(_ status: Int, _ target: HTTPTarget) async throws -> String {

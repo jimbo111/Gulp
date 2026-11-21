@@ -1,6 +1,8 @@
 import Foundation
 import GulpCore
 import GulpHTTP
+import NIOCore
+import NIOPosix
 import Testing
 
 @testable import GulpProxy
@@ -39,6 +41,39 @@ struct InterceptRuleTests {
         let header = InterceptCondition(field: .header, pattern: "^cookie: session=")
         let withCookie = request("GET /", headers: "Cookie: session=1\r\n")
         #expect(InterceptRules.matches([header], request: withCookie, target: target))
+    }
+
+    @Test("PRX-013: the in-scope field follows the project scope; the default in-scope rule ships off")
+    func test_PRX013_inScope() async {
+        let scope = ScopeService(rules: [ScopeRule(host: "app.test", path: "^/api")])
+        let inScope = [InterceptCondition(field: .inScope, pattern: "^true$")]
+        let api = request("POST /api/login")
+        #expect(InterceptRules.matches(inScope, request: api, target: target, scope: scope))
+        #expect(
+            !InterceptRules.matches(inScope, request: request("POST /login"), target: target, scope: scope))
+        let elsewhere = HTTPTarget(scheme: .http, host: "other.test", port: 80)
+        #expect(!InterceptRules.matches(inScope, request: api, target: elsewhere, scope: scope))
+        #expect(!InterceptRules.matches(inScope, request: api, target: target))  // no scope: nothing is in
+        // The default "only in-scope" rule is there but off, so a project without a scope still intercepts.
+        let defaults = InterceptCondition.defaultRequestRules
+        #expect(defaults.contains { $0.field == .inScope && !$0.enabled })
+        #expect(InterceptRules.matches(defaults, request: request("POST /login"), target: target))
+        let scoped = defaults.map { rule -> InterceptCondition in
+            var on = rule
+            on.enabled = true
+            return on
+        }
+        #expect(InterceptRules.matches(scoped, request: api, target: target, scope: scope))
+        #expect(
+            !InterceptRules.matches(scoped, request: request("GET /api/app.js"), target: target, scope: scope)
+        )
+        // The queue evaluates its rules against the scope it was given.
+        let queue = InterceptQueue()
+        await queue.setIntercepting(requests: true)
+        await queue.setRules(requests: scoped)
+        await queue.setScope(scope)
+        let (_, held) = await queue.holdRequest(request("POST /login"), target: target)
+        #expect(!held)
     }
 
     @Test("PRX-014: response conditions see status, MIME and whether the request was held")
@@ -101,6 +136,83 @@ struct InterceptProxyTests {
         #expect(proxied.first?.edited?.originalRequest?.bytes.string().hasSuffix("user=alice") == true)
         #expect(proxied.first?.request.bytes.string().hasSuffix("user=administrator") == true)
         await client.shutdown()
+        await proxy.stopAll()
+        await origin.stop()
+    }
+
+    @Test("PRX-012/020: request Match & Replace runs before Intercept; the user's edit is sent as is")
+    func test_PRX020_matchReplaceBeforeIntercept() async throws {
+        let origin = try await Origin.start(reply: okReply)
+        let queue = InterceptQueue()
+        await queue.setIntercepting(requests: true)
+        let hook = MatchReplaceHook(rules: [
+            MatchReplaceRule(kind: .requestBody, match: "role=user", replace: "role=guest"),
+            MatchReplaceRule(kind: .requestHeader, match: "", replace: "X-Gulp: 1"),
+        ])
+        let recorded = Recorded()
+        let engine = NIOHTTPEngine(requestHooks: [hook], responseHooks: [hook], recorder: recorded)
+        let proxy = ProxyServer(engine: engine, intercept: queue, matchReplace: hook)
+        let port = try await proxy.start(ProxyListenerConfig(port: 0))
+        let proxyTarget = HTTPTarget(scheme: .http, host: "127.0.0.1", port: port)
+        let client = NIOHTTPEngine()
+        let text =
+            "POST http://127.0.0.1:\(origin.port)/p HTTP/1.1\r\nHost: x\r\n"
+            + "Content-Length: 9\r\n\r\nrole=user"
+        let sending = Task {
+            await client.send(RawRequest(Bytes(text)), to: proxyTarget, options: clientOptions())
+        }
+        let item = try await Self.nextItem(queue)
+        // The held request is what goes on the wire: already rewritten.
+        let held = item.request.bytes.string()
+        #expect(held.contains("X-Gulp: 1\r\n") && held.hasSuffix("role=guest"))
+        // The user puts the value back; Match & Replace must not rewrite the edit again.
+        await queue.decide(
+            item.id, .forward(Bytes(held.replacingOccurrences(of: "role=guest", with: "role=user"))))
+        #expect(await sending.value.exchange.response?.parsed.statusCode == 200)
+        let received = String(decoding: origin.received(), as: UTF8.self)
+        #expect(received.hasSuffix("\r\n\r\nrole=user"))
+        #expect(received.components(separatedBy: "X-Gulp: 1\r\n").count == 2)  // added once
+        let proxied = await recorded.settled(1)
+        let original = proxied.first?.edited?.originalRequest?.bytes.string() ?? ""
+        #expect(original.hasSuffix("role=user") && !original.contains("X-Gulp"))  // what the client sent
+        await client.shutdown()
+        await proxy.stopAll()
+        await origin.stop()
+    }
+
+    @Test("PRX-011: a held item whose waiter is cancelled leaves the queue as dropped")
+    func test_PRX011_cancelledHold() async throws {
+        let queue = InterceptQueue()
+        await queue.setIntercepting(requests: true)
+        let get = RawRequest(Bytes("GET / HTTP/1.1\r\nHost: x\r\n\r\n"))
+        let target = HTTPTarget(scheme: .http, host: "x", port: 80)
+        let waiting = Task { await queue.holdRequest(get, target: target) }
+        _ = try await Self.nextItem(queue)
+        waiting.cancel()
+        let (decision, held) = await waiting.value
+        #expect(held)
+        guard case .drop = decision else {
+            Issue.record("expected drop, got \(decision)")
+            return
+        }
+        #expect(await queue.items.isEmpty)
+    }
+
+    @Test("PRX-011: a request held when its client disconnects leaves the queue and is never sent")
+    func test_PRX011_clientGone() async throws {
+        let origin = try await Origin.start(reply: okReply)
+        let queue = InterceptQueue()
+        await queue.setIntercepting(requests: true)
+        let (proxy, proxyTarget) = try await Self.proxy(queue, recorder: Recorded())
+        let client = try await ClientBootstrap(group: MultiThreadedEventLoopGroup.singleton)
+            .connect(host: "127.0.0.1", port: proxyTarget.port).get()
+        let get = "GET http://127.0.0.1:\(origin.port)/ HTTP/1.1\r\nHost: x\r\n\r\n"
+        try await client.writeAndFlush(client.allocator.buffer(string: get))
+        _ = try await Self.nextItem(queue)
+        try await client.close()
+        for _ in 0..<200 where await !queue.items.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(await queue.items.isEmpty)
+        #expect(origin.connections == 0)
         await proxy.stopAll()
         await origin.stop()
     }
