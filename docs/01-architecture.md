@@ -30,16 +30,19 @@ Gulp/
 ├── README.md
 ├── LICENSE                          # MIT (docs/07 decision #2)
 ├── Makefile
-├── Brewfile                         # Homebrew deps for `make bootstrap` (xcodegen, swift-format)
+├── Brewfile                         # Homebrew deps for `make bootstrap` (xcodegen)
 ├── project.yml                      # XcodeGen spec: Gulp.app target + GulpAppUITests
 ├── .swift-format                    # formatting rules
-├── .github/workflows/ci.yml
+├── ExportOptions.plist              # developer-id export options for Scripts/release.sh
+├── .github/workflows/ci.yml         # not running at the moment (Actions minutes exhausted)
 ├── App/                             # macOS app target (thin: composition + windows)
 │   ├── GulpApp.swift                # @main, WindowGroup/DocumentGroup, commands
 │   ├── AppDelegate.swift
+│   ├── ProjectWindow.swift          # one window per project; routes the sidebar tools
+│   ├── Tool.swift                   # the sidebar's tool list
 │   ├── Info.plist
 │   ├── Gulp.entitlements
-│   └── Resources/ (Assets.xcassets, Credits.rtf)
+│   └── Resources/ (Assets.xcassets)
 ├── Packages/
 │   └── GulpKit/                     # ALL logic lives here (SwiftPM)
 │       ├── Package.swift
@@ -54,31 +57,38 @@ Gulp/
 │       │   ├── GulpSession/         # cookie jar, session rules, macros, identities
 │       │   ├── GulpRepeater/        # repeater model & send logic (UI-free)
 │       │   ├── GulpFuzzer/          # attack engine, payload generators/processors, grep
-│       │   ├── GulpScanner/         # passive/active checks, insertion points, issue model, recipes
+│       │   ├── GulpScanner/         # passive/active checks, insertion points, recipes; also the SSO,
+│       │   │                        #   LLM, smuggling, param-mining and JS-recon analyzers (issue model is in GulpCore)
 │       │   ├── GulpCrawler/         # HTML/JS link extraction, crawl frontier, (CDP-backed mode)
 │       │   ├── GulpOAST/            # Beacon client + interactsh client
-│       │   ├── GulpSequencer/       # token capture + statistical tests (F11, post-1.0: placeholder in v1)
+│       │   ├── GulpSequencer/       # token capture + statistical tests (F11; built 2026-11-13)
 │       │   ├── GulpDiff/            # Myers diff, similarity scoring
 │       │   ├── GulpBrowser/         # Chromium discovery/launch, CDP client  (macOS only)
 │       │   ├── GulpScript/          # JavaScriptCore runtime, Snippets, JS extension host (macOS only)
 │       │   ├── GulpExtensions/      # extension manager, JSON-RPC host, API surface
 │       │   ├── GulpReport/          # HTML/MD/JSON/SARIF report generation
 │       │   ├── GulpAI/              # LLM provider abstraction, prompts, redaction
-│       │   ├── GulpAutomation/      # REST API + MCP server (Hummingbird)
+│       │   ├── GulpAutomation/      # MCP server over stdio (built); REST API (Hummingbird) not built yet
 │       │   ├── GulpWorkspace/       # ProjectSession: wires engines + store + event bus for one project
 │       │   ├── GulpUI/              # reusable AppKit/SwiftUI components (macOS only)
 │       │   ├── GulpFeatures/        # feature screens + view models (macOS only)
 │       │   ├── gulp-cli/            # headless executable
 │       │   └── gulp-vulnlab/        # intentionally vulnerable test server (executable)
-│       └── Tests/  (one test target per module, + IntegrationTests)
+│       └── Tests/  (one test target per library module, GulpVulnLabTests, IntegrationTests,
+│                    GulpTestSupport (shared seeded RNG), Fixtures/)
 ├── Beacon/                          # OAST server: separate SwiftPM package (v1: dev mode for tests; deployable server post-1.0)
 │   ├── Package.swift
-│   ├── Sources/gulp-beacon/
+│   ├── Sources/BeaconKit/           # dev Beacon: HTTP capture + UDP DNS
+│   ├── Sources/gulp-beacon/         # executable (`--dev` only in v1)
+│   ├── Tests/BeaconTests/
 │   └── Dockerfile
 ├── SDK/
-│   ├── js/gulp.d.ts                 # TypeScript typings for JS extensions
-│   └── python/gulp_sdk/             # out-of-process extension SDK
-├── Scripts/                         # build, sign, notarize, dmg, fixtures
+│   └── examples/                    # header-leak (process runtime), js-header-leak (js runtime)
+│                                    # planned, not built: js/gulp.d.ts (EXT-011), python/gulp_sdk (EXT-012)
+├── UITests/                         # GulpAppUITests (XCUITest)
+├── Wordlists/                       # repo-level lists used by DoD scripts (jwt-secrets.txt)
+├── Scripts/                         # *-dod.sh acceptance scripts, arch-check.sh, rules-check.sh,
+│                                    # jsc-host-typecheck.sh, release.sh
 └── docs/
 ```
 
@@ -123,6 +133,16 @@ Rules:
      Linux the driver is simply absent and only static-mode crawling is available.
    - `GulpFuzzer` → `GulpOAST`, `GulpSession`
    - `GulpExtensions` → any engine (it exposes them to extensions)
+   - `GulpBrowser` → `GulpCrawler` (it implements the crawler's `BrowserDriver`)
+   - `GulpScript` → `GulpExtensions` (its JavaScriptCore host runs extensions in-process)
+
+   As built (2026-11-20), `Package.swift` declares these engine edges: GulpCrawler → GulpSession,
+   GulpFuzzer → GulpOAST + GulpSession, GulpBrowser → GulpCrawler, GulpScript → GulpExtensions. Only
+   GulpScript → GulpExtensions is an actual `import`; the others are declared but unused. GulpScanner
+   declares none of its allowed engines, and GulpExtensions depends only on GulpCore and GulpHTTP.
+   `Scripts/arch-check.sh` enforces the layer order, the GulpCore and GulpCrawler→GulpBrowser bans
+   and the platform-framework rule; it does **not** enforce this engine-to-engine table, so check
+   new edges against it by hand.
 2. Engines never import `GulpUI`, `GulpFeatures`, SwiftUI or AppKit.
 3. `GulpCore` has no dependencies except `swift-collections` and `swift-log`.
 4. The platform-capability modules (`GulpBrowser`, `GulpScript`, `GulpUI`, `GulpFeatures`) are
@@ -169,7 +189,12 @@ This lets most of the engine be built and tested in Linux CI or cloud containers
 
 ### 5.2 ProjectSession (GulpWorkspace)
 
-`ProjectSession` is an `actor` that owns everything for one open project:
+`ProjectSession` is an `actor` that owns everything for one open project. The sketch below is
+illustrative: the real type (`GulpWorkspace/ProjectSession.swift`) holds `events`, `http`
+(`NIOHTTPEngine`), `sessionState`, `proxy`, `settings`, `environment`, `store`, `minter`,
+`intercept` and `matchReplace`, and adds the scan, fuzz, OAST, crawl and other services as
+extensions in separate files (`ScanService.swift`, `FuzzerService.swift`, …). It opens with
+`open(…)` / `openTemporary(…)` and closes with `close(keepTemporary:)`.
 
 ```swift
 public actor ProjectSession {

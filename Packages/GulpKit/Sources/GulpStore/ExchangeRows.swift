@@ -26,7 +26,7 @@ public struct ExchangeSummary: Sendable, Hashable, Identifiable {
     public var query: String?
     /// Response status.
     public var status: Int?
-    /// Response body length.
+    /// Response body length in bytes as framed on the wire (a chunked body counts its chunk framing).
     public var responseLength: Int?
     /// Response MIME type.
     public var mime: String?
@@ -96,14 +96,49 @@ enum ExchangeRows {
         title, extension, param_count, highlight, comment, state, error, timing_json, http_version
         """
 
-    /// Remove an exchange row and its search text (before re-inserting an updated version).
-    static func delete(_ id: ExchangeID, in db: Database) throws {
-        try db.execute(sql: "DELETE FROM fts_exchanges WHERE rowid = ?", arguments: [id])
-        try db.execute(sql: "DELETE FROM exchanges WHERE id = ?", arguments: [id])
+    /// A column name and the value written to it.
+    typealias ColumnValue = (name: String, value: (any DatabaseValueConvertible)?)
+
+    /// Insert `exchange` (whose `id` is already assigned) with its blobs, annotation, tags and search
+    /// text.
+    static func insert(_ exchange: Exchange, inScope: Bool = false, in db: Database) throws {
+        let note = exchange.annotation
+        let columns: [ColumnValue] =
+            [("id", exchange.id)] + (try dataColumns(exchange, inScope: inScope, in: db))
+            + [("highlight", note.highlight?.rawValue), ("comment", note.comment)]
+        let names = columns.map(\.name).joined(separator: ", ")
+        let marks = Array(repeating: "?", count: columns.count).joined(separator: ", ")
+        try db.execute(
+            sql: "INSERT INTO exchanges (\(names)) VALUES (\(marks))",
+            arguments: StatementArguments(columns.map(\.value)))
+        for tag in note.tags {
+            try db.execute(
+                sql: "INSERT OR IGNORE INTO exchange_tags (exchange_id, tag) VALUES (?, ?)",
+                arguments: [exchange.id, tag])
+        }
+        try insertSearchText(exchange, in: db)
     }
 
-    /// Insert `exchange` (whose `id` is already assigned) with its blobs, tags and search text.
-    static func insert(_ exchange: Exchange, inScope: Bool = false, in db: Database) throws {
+    /// Rewrite a recorded exchange in place (HIS-007: a streamed response has finished): its data
+    /// columns and search text change, while what the user added meanwhile (highlight, comment,
+    /// tags) and rows that point at it (Notebook items, issue evidence) stay; `exchange.annotation`
+    /// is not read. Nothing is written when the row is gone (deleted while it streamed).
+    static func update(_ exchange: Exchange, inScope: Bool, in db: Database) throws {
+        let columns = try dataColumns(exchange, inScope: inScope, in: db)
+        let assignments = columns.map { "\($0.name) = ?" }.joined(separator: ", ")
+        try db.execute(
+            sql: "UPDATE exchanges SET \(assignments) WHERE id = ?",
+            arguments: StatementArguments(columns.map(\.value) + [exchange.id]))
+        guard db.changesCount > 0 else { return }
+        try db.execute(sql: "DELETE FROM fts_exchanges WHERE rowid = ?", arguments: [exchange.id])
+        try insertSearchText(exchange, in: db)
+    }
+
+    /// The `exchanges` columns the exchange itself determines: all but the id and the annotation.
+    /// Stores the message blobs.
+    private static func dataColumns(_ exchange: Exchange, inScope: Bool, in db: Database) throws
+        -> [ColumnValue]
+    {
         let d = exchange.derived
         let requestBlob = try BlobStore.store(exchange.request.bytes.rawBytes, in: db)
         let responseBlob = try exchange.response.map { try BlobStore.store($0.wireBytes.rawBytes, in: db) }
@@ -118,9 +153,8 @@ enum ExchangeRows {
         let tls = try exchange.tls.map { String(decoding: try encoder.encode($0), as: UTF8.self) }
         let (state, error) = stateColumns(exchange.state)
         let target = exchange.target
-        let note = exchange.annotation
-        let columns: [(String, (any DatabaseValueConvertible)?)] = [
-            ("id", exchange.id), ("source", exchange.source.rawValue),
+        return [
+            ("source", exchange.source.rawValue),
             ("created_at", exchange.timing.start.timeIntervalSince1970), ("scheme", target.scheme.rawValue),
             ("host", target.host.lowercased()), ("port", target.port), ("ip", target.ipOverride),
             ("sni", target.sniOverride),
@@ -130,20 +164,13 @@ enum ExchangeRows {
             ("status", d.status), ("response_length", d.responseLength), ("mime", d.mime), ("title", d.title),
             ("state", state), ("error", error), ("timing_json", timing), ("tls_json", tls),
             ("connection_id", Int64(bitPattern: exchange.connectionID)),
-            ("client_address", exchange.clientAddress), ("highlight", note.highlight?.rawValue),
-            ("comment", note.comment), ("param_count", d.paramCount), ("has_cookies", d.hasCookies),
-            ("sets_cookies", d.setsCookies), ("extension", d.ext), ("in_scope", inScope),
+            ("client_address", exchange.clientAddress), ("param_count", d.paramCount),
+            ("has_cookies", d.hasCookies), ("sets_cookies", d.setsCookies), ("extension", d.ext),
+            ("in_scope", inScope),
         ]
-        let names = columns.map(\.0).joined(separator: ", ")
-        let marks = Array(repeating: "?", count: columns.count).joined(separator: ", ")
-        try db.execute(
-            sql: "INSERT INTO exchanges (\(names)) VALUES (\(marks))",
-            arguments: StatementArguments(columns.map(\.1)))
-        for tag in exchange.annotation.tags {
-            try db.execute(
-                sql: "INSERT OR IGNORE INTO exchange_tags (exchange_id, tag) VALUES (?, ?)",
-                arguments: [exchange.id, tag])
-        }
+    }
+
+    private static func insertSearchText(_ exchange: Exchange, in db: Database) throws {
         try db.execute(
             sql: "INSERT INTO fts_exchanges (rowid, request_text, response_text) VALUES (?, ?, ?)",
             arguments: [exchange.id, searchText(exchange.request.bytes), exchange.response.map(responseText)])

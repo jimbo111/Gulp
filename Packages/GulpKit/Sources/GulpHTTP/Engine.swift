@@ -340,8 +340,8 @@ public protocol ResponseHook: Sendable {
 public protocol ExchangeRecorder: Sendable {
     /// Store `exchange` and return its assigned id.
     func record(_ exchange: Exchange) async -> ExchangeID
-    /// Replace the exchange recorded earlier with the same id (a streaming response that finished,
-    /// F05 HIS-007).
+    /// Rewrite the exchange recorded earlier with the same id (a streaming response that finished,
+    /// F05 HIS-007), keeping the annotations the user gave it meanwhile.
     func update(_ exchange: Exchange) async
 }
 

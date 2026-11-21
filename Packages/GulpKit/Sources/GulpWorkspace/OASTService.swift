@@ -74,6 +74,13 @@ public struct OASTHealth: Sendable, Hashable {
     public var payloads = 0
     /// Interactions received this session.
     public var interactions = 0
+
+    /// A fresh health record; the defaults are the not-yet-registered state.
+    public init(registered: Bool = false, server: String = "", domain: String = "") {
+        self.registered = registered
+        self.server = server
+        self.domain = domain
+    }
 }
 
 /// BCN-006 "Test Beacon": the self-injected request's outcome.
