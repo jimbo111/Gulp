@@ -85,6 +85,45 @@ struct AccuracyApp: Sendable {
                 FakeApp.response(
                     400, headers: ["Content-Type: application/json"], body: #"{"bad":"\#(q)"}"#), 0.01
             )
+        case "/cache-shared":
+            // A shared cache keyed on the full request target: a request carrying the unkeyed
+            // X-Forwarded-Host reflects it and fills the entry; later requests for that URL get it.
+            let key = request.bytes[request.parsed.target].string()
+            let page = { (host: String) in "<script src=\"https://\(host)/app.js\"></script>" }
+            let body: String
+            if !safe, let forwarded = request.headerValue("x-forwarded-host")?.string() {
+                body = page(forwarded)
+                await state.store(key, body)
+            } else {
+                body = await state.cached(key) ?? page("app.test")
+            }
+            return (FakeApp.response(200, headers: ["Cache-Control: public, max-age=60"], body: body), 0.01)
+        case let path where path.hasPrefix("/account"):
+            // Private for the signed-in user; the vulnerable app lets a CDN cache it at a static-looking path.
+            guard request.headerValue("cookie")?.string() == "s=1" else {
+                return (
+                    FakeApp.response(200, headers: ["Cache-Control: no-store"], body: "Please log in"), 0.01
+                )
+            }
+            let control = !safe && path != "/account" ? "public, max-age=120" : "private, no-store"
+            return (
+                FakeApp.response(
+                    200, headers: ["Cache-Control: \(control)"], body: #"{"email":"a@app.test"}"#), 0.01
+            )
+        case let path where path.hasPrefix("/banner"):
+            // Never cacheable when signed in; the signed-out page is public and greets everyone.
+            if request.headerValue("cookie")?.string() == "s=1" {
+                return (
+                    FakeApp.response(200, headers: ["Cache-Control: no-store"], body: "Welcome back, alice"),
+                    0.01
+                )
+            }
+            return (
+                FakeApp.response(
+                    200, headers: ["Cache-Control: public, max-age=60"],
+                    body: "Welcome back! Sign in to continue."),
+                0.01
+            )
         default:
             return (FakeApp.response(404, headers: [], body: "not found"), 0.01)
         }
@@ -168,5 +207,44 @@ struct ScannerAccuracyTests {
             let quiet = await scanApp([get(path)], app: AccuracyApp())
             #expect(!quiet.contains { $0.typeID == "active.xss.reflected" }, "\(path): \(pairs(quiet))")
         }
+    }
+}
+
+/// The balanced preset with the opt-in cache family enabled (F08 §3.5).
+func withCacheFamily() -> ScanConfig {
+    var config = ScanConfig.preset(.balanced)
+    config.disabledFamilies.remove("cache-poisoning")
+    return config
+}
+
+@Suite("Cache poisoning & deception accuracy (F08 §3.5)")
+struct CacheAccuracyTests {
+    @Test("WCP-007/002: cache poisoning is opt-in, and its probes use a cache-buster no victim requests")
+    func test_WCP002_optInAndCacheBuster() async {
+        let app = AccuracyApp()
+        let defaults = await scanApp([get("/cache-shared")], app: app)
+        #expect(!defaults.contains { $0.typeID.hasPrefix("active.cache-") }, "\(pairs(defaults))")
+        let found = await scanApp([get("/cache-shared")], app: app, config: withCacheFamily())
+        #expect(
+            found.contains { $0.typeID == "active.cache-poisoning" && $0.variant == "confirmed-cached" },
+            "\(pairs(found))")
+        // A real user's request for the page (no cache-buster) is served the clean page.
+        let (victim, _) = await app.respond(get("/cache-shared"))
+        #expect(!victim.bytes.string().contains(".gulp-ca"), "\(victim.bytes.string())")
+        let safe = await scanApp(
+            [get("/cache-shared")], app: AccuracyApp(safe: true), config: withCacheFamily())
+        #expect(!safe.contains { $0.typeID == "active.cache-poisoning" }, "\(pairs(safe))")
+    }
+
+    @Test("WCP-003: cache deception keeps the request's credentials; a public greeting isn't deception")
+    func test_WCP003_deceptionKeepsCredentials() async {
+        let account = get("/account", extra: ["Cookie: s=1"])
+        let found = await scanApp([account], app: AccuracyApp(), config: withCacheFamily())
+        #expect(found.contains { $0.typeID == "active.cache-deception" }, "\(pairs(found))")
+        let safe = await scanApp([account], app: AccuracyApp(safe: true), config: withCacheFamily())
+        #expect(!safe.contains { $0.typeID == "active.cache-deception" }, "\(pairs(safe))")
+        let banner = await scanApp(
+            [get("/banner", extra: ["Cookie: s=1"])], app: AccuracyApp(), config: withCacheFamily())
+        #expect(!banner.contains { $0.typeID == "active.cache-deception" }, "\(pairs(banner))")
     }
 }

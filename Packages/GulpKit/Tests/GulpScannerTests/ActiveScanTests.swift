@@ -482,9 +482,9 @@ struct ActiveScanTests {
 
     @Test("M11c: web cache poisoning — an unkeyed header reflected into a cacheable response is flagged")
     func test_M11c_cachePoisoning() async {
-        let (findings, _) = await scan([get("/cache")], app: FakeApp())
+        let (findings, _) = await scan([get("/cache")], app: FakeApp(), config: withCacheFamily())
         #expect(findings.contains { $0.typeID == "active.cache-poisoning" }, "\(pairs(findings))")
-        let (safe, _) = await scan([get("/cache")], app: FakeApp(safe: true))
+        let (safe, _) = await scan([get("/cache")], app: FakeApp(safe: true), config: withCacheFamily())
         #expect(!safe.contains { $0.typeID == "active.cache-poisoning" })
     }
 

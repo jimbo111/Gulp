@@ -23,6 +23,11 @@ public enum ActiveChecks {
     /// Family names (for configs).
     public static var families: [String] { Array(Set(all.map(\.family))).sorted() }
 
+    /// Families that only run when a config enables them: web cache poisoning/deception can leave a
+    /// response in a shared cache (F08 §3.5 "an opt-in active check family"). `ScanConfig` starts
+    /// with these in `disabledFamilies`.
+    public static let optInFamilies: Set<String> = ["cache-poisoning"]
+
     static let parameterKinds: Set<InsertionPointKind> = [
         .urlParam, .bodyParam, .jsonValue, .xmlValue, .multipartField, .cookie, .pathSegment, .custom,
         .protobufField,

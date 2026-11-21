@@ -155,6 +155,7 @@ extension ProjectSession {
         }
         var config = ScanConfig.preset(.thorough)
         config.oastGraceSeconds = 8
+        config.disabledFamilies = []  // re-running this one check is the opt-in, whatever its family
         let label = issue.insertionPoint
         let scan = ActiveScan(
             requests: [(exchange.request, exchange.target)], config: config, checks: [check],

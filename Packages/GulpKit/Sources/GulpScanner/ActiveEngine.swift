@@ -188,7 +188,8 @@ public struct ScanConfig: Sendable, Codable, Hashable {
     public var preset: Preset
     /// Highest check tier run.
     public var intensity: CheckIntensity
-    /// Check families to skip (by family name).
+    /// Check families to skip (by family name); the opt-in families (`ActiveChecks.optInFamilies`)
+    /// are in it unless a config removes them.
     public var disabledFamilies: Set<String>
     /// Insertion points.
     public var insertion: InsertionPolicy
@@ -210,7 +211,8 @@ public struct ScanConfig: Sendable, Codable, Hashable {
 
     /// A config.
     public init(
-        preset: Preset = .balanced, intensity: CheckIntensity = .balanced, disabledFamilies: Set<String> = [],
+        preset: Preset = .balanced, intensity: CheckIntensity = .balanced,
+        disabledFamilies: Set<String> = ActiveChecks.optInFamilies,
         insertion: InsertionPolicy = InsertionPolicy(), concurrency: Int = 8, timingSamples: Int = 1,
         oastGraceSeconds: Double = 8, maxRequestsPerPoint: Int = 120, unsafe: Bool = false,
         maxRequests: Int = 0,
