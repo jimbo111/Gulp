@@ -125,6 +125,29 @@ struct CertificateAuthorityTests {
         #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
         try store.delete()
         #expect(try store.load() == nil)
+        // Saving leaves no temporary files behind.
+        _ = try CertificateAuthority.loadOrCreate(from: store, keyType: .p256)
+        let files = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
+        #expect(files == ["ca.key", "ca.pem"])
+    }
+
+    @Test("TLS-002: a CA that exists but can't be read is an error, never replaced by a new one")
+    func test_TLS002_unreadableCAIsKept() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gulp-ca-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = FileCAStore(directory: directory)
+        _ = try CertificateAuthority.loadOrCreate(from: store, keyType: .p256)
+        let certificate = try Data(contentsOf: store.certificateURL)
+        // An unreadable key (a directory where the file should be: unreadable even as root).
+        try FileManager.default.removeItem(at: store.keyURL)
+        try FileManager.default.createDirectory(at: store.keyURL, withIntermediateDirectories: false)
+        #expect(throws: TLSError.self) { _ = try CertificateAuthority.loadOrCreate(from: store) }
+        #expect(try Data(contentsOf: store.certificateURL) == certificate)
+        // Half a CA (the key gone) is an error too.
+        try FileManager.default.removeItem(at: store.keyURL)
+        #expect(throws: TLSError.self) { _ = try CertificateAuthority.loadOrCreate(from: store) }
+        #expect(try Data(contentsOf: store.certificateURL) == certificate)
     }
 }
 
