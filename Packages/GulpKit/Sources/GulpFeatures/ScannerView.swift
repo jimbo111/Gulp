@@ -200,7 +200,7 @@ struct ActiveScanView: View {
                         Text(
                             "\(summary.stopReason == "done" ? "Finished" : "Stopped"): \(summary.findings) issue(s), \(summary.probes) requests in \(String(format: "%.1f", summary.seconds)) s"
                                 + (summary.outOfScope > 0
-                                    ? " · \(summary.outOfScope) out of scope, not scanned" : ""))
+                                    ? " · \(summary.outOfScope) out of scope, not sent" : ""))
                     }
                 }
             }
