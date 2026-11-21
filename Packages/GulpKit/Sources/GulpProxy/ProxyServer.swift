@@ -1,6 +1,6 @@
 // GulpProxy — the HTTP/1 forward proxy (F01 PRX-001…PRX-007): absolute-form plain HTTP, and CONNECT
 // tunnels that are intercepted (TLS MITM), spliced (pass-through) or carry plain HTTP (Tunnel.swift).
-// HTTP/2 to the client arrives in M3b; invisible mode and the landing page later.
+// HTTP/2 to the client is in ProxyHTTP2.swift, WebSockets in ProxyWebSocket.swift.
 
 import Foundation
 import GulpCore
