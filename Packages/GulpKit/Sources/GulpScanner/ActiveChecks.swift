@@ -49,13 +49,22 @@ struct ReflectedXSSCheck: ActiveCheck {
 
     func run(_ point: InsertionPoint?, baseline: Baseline?, context: AuditContext) async -> [IssueFinding] {
         guard let point, let baseline else { return [] }
-        let type = baseline.canary.header("content-type")?.lowercased() ?? ""
-        guard type.contains("html"), baseline.canary.body.contains(baseline.canaryValue) else { return [] }
+        guard Self.isHTML(baseline.canary), baseline.canary.body.contains(baseline.canaryValue) else {
+            return []
+        }
         var findings: [IssueFinding] = []
         for (reflection, quote) in Self.contexts(of: baseline.canaryValue, in: baseline.canary.body) {
             let token = self.token(reflection, quote: quote)
             let probe = await context.send(point.build(context.base, payload: token.payload))
-            guard probe.body.contains(token.proof) else { continue }
+            // The breakout must come back in an HTML page, in the same context it was aimed at (a
+            // copy echoed into a text node or a JSON error proves nothing).
+            guard Self.isHTML(probe),
+                probe.body.ranges(of: token.proof).contains(where: { proof in
+                    let value = probe.body.index(proof.lowerBound, offsetBy: token.valueOffset)
+                    let found = Self.context(at: value, in: probe.body)
+                    return found.0 == reflection && found.1 == quote
+                })
+            else { continue }
             findings.append(
                 context.finding(
                     id, point: point, variant: reflection.rawValue,
@@ -68,75 +77,82 @@ struct ReflectedXSSCheck: ActiveCheck {
         return findings
     }
 
-    func token(_ context: Context, quote: Character?) -> (payload: String, proof: String) {
+    /// The probe for `context`: what to send, the breakout that must come back, and where the
+    /// injected value starts inside that breakout (whose context is re-checked in the response).
+    func token(_ context: Context, quote: Character?) -> (payload: String, proof: String, valueOffset: Int) {
         let a = "g" + String(Int.random(in: 100_000...999_999))
         switch context {
-        case .html: return ("\(a)<gx\(a)>", "\(a)<gx\(a)>")
+        case .html: return ("\(a)<gx\(a)>", "\(a)<gx\(a)>", 0)
         case .attribute:
             let q = quote.map(String.init) ?? "\""
-            return ("\(a)\(q) gx\(a)=1 \(q)", "\(a)\(q) gx\(a)=1")
+            return ("\(a)\(q) gx\(a)=1 \(q)", "\(a)\(q) gx\(a)=1", 0)
         case .script:
             let q = quote.map(String.init) ?? "'"
-            return ("\(a)\(q);gx\(a)//", "\(a)\(q);gx\(a)")
-        case .url: return ("javascript:\(a)//", "\"javascript:\(a)//")
+            return ("\(a)\(q);gx\(a)//", "\(a)\(q);gx\(a)", 0)
+        case .url:
+            // The URL starts the attribute value: right after its quote, or after `=` when unquoted.
+            let opening = quote.map(String.init) ?? "="
+            return ("javascript:\(a)//", "\(opening)javascript:\(a)//", opening.count)
         }
+    }
+
+    static func isHTML(_ probe: Probe) -> Bool {
+        probe.header("content-type")?.lowercased().contains("html") == true
     }
 
     /// The contexts the canary is reflected in, with the enclosing quote for attribute/script.
     static func contexts(of canary: String, in body: String) -> [(Context, Character?)] {
-        var result: [(Context, Character?)] = []
-        var searchStart = body.startIndex
-        while let range = body.range(of: canary, range: searchStart..<body.endIndex) {
-            searchStart = range.upperBound
-            let before = body[body.startIndex..<range.lowerBound]
-            let lastOpen = before.range(of: "<", options: .backwards)
-            let lastClose = before.range(of: ">", options: .backwards)
-            let scriptOpen = before.range(of: "<script", options: [.backwards, .caseInsensitive])
-            let scriptClose = before.range(of: "</script", options: [.backwards, .caseInsensitive])
-            if let scriptOpen, scriptClose.map({ $0.lowerBound < scriptOpen.lowerBound }) ?? true,
-                let tagEnd = body[scriptOpen.upperBound...].firstIndex(of: ">"), tagEnd < range.lowerBound
-            {
-                // Inside a script block: find the open string quote on this line.
-                let line = before[
-                    (before.lastIndex(of: "\n").map { before.index(after: $0) } ?? before.startIndex)...]
-                var open: Character?
-                var escaped = false
-                for char in line {
-                    if escaped {
-                        escaped = false
-                        continue
-                    }
-                    if char == "\\" {
-                        escaped = true
-                    } else if let current = open {
-                        if char == current { open = nil }
-                    } else if char == "'" || char == "\"" || char == "`" {
-                        open = char
-                    }
-                }
-                result.append((.script, open ?? "'"))
-            } else if let lastOpen, lastClose.map({ $0.lowerBound < lastOpen.lowerBound }) ?? true {
-                // Inside a tag: an attribute value.
-                let tag = before[lastOpen.upperBound...]
-                let quote: Character? = tag.last == "\"" || tag.last == "'" ? tag.last : nil
-                let attribute = tag.dropLast(quote == nil ? 0 : 1).trimmingCharacters(in: .whitespaces)
-                let name =
-                    attribute.split(whereSeparator: { $0 == " " || $0 == "=" }).last.map { $0.lowercased() }
-                    ?? ""
-                if ["href", "src", "action", "formaction"].contains(name),
-                    tag.hasSuffix("=\(quote.map(String.init) ?? "")")
-                {
-                    result.append((.url, quote))
-                } else {
-                    result.append((.attribute, quote))
-                }
-            } else {
-                result.append((.html, nil))
-            }
-        }
         // One probe per distinct context.
         var seen: Set<String> = []
-        return result.filter { seen.insert($0.0.rawValue + String($0.1 ?? " ")).inserted }
+        return body.ranges(of: canary).map { context(at: $0.lowerBound, in: body) }
+            .filter { seen.insert($0.0.rawValue + String($0.1 ?? " ")).inserted }
+    }
+
+    /// The context of the text starting at `index` in `body`, with its enclosing quote.
+    static func context(at index: String.Index, in body: String) -> (Context, Character?) {
+        let before = body[body.startIndex..<index]
+        let lastOpen = before.range(of: "<", options: .backwards)
+        let lastClose = before.range(of: ">", options: .backwards)
+        let scriptOpen = before.range(of: "<script", options: [.backwards, .caseInsensitive])
+        let scriptClose = before.range(of: "</script", options: [.backwards, .caseInsensitive])
+        if let scriptOpen, scriptClose.map({ $0.lowerBound < scriptOpen.lowerBound }) ?? true,
+            let tagEnd = body[scriptOpen.upperBound...].firstIndex(of: ">"), tagEnd < index
+        {
+            // Inside a script block: find the open string quote on this line.
+            let line = before[
+                (before.lastIndex(of: "\n").map { before.index(after: $0) } ?? before.startIndex)...]
+            var open: Character?
+            var escaped = false
+            for char in line {
+                if escaped {
+                    escaped = false
+                    continue
+                }
+                if char == "\\" {
+                    escaped = true
+                } else if let current = open {
+                    if char == current { open = nil }
+                } else if char == "'" || char == "\"" || char == "`" {
+                    open = char
+                }
+            }
+            return (.script, open ?? "'")
+        }
+        guard let lastOpen, lastClose.map({ $0.lowerBound < lastOpen.lowerBound }) ?? true else {
+            return (.html, nil)
+        }
+        // Inside a tag: an attribute value.
+        let tag = before[lastOpen.upperBound...]
+        let quote: Character? = tag.last == "\"" || tag.last == "'" ? tag.last : nil
+        let attribute = tag.dropLast(quote == nil ? 0 : 1).trimmingCharacters(in: .whitespaces)
+        let name =
+            attribute.split(whereSeparator: { $0 == " " || $0 == "=" }).last.map { $0.lowercased() } ?? ""
+        if ["href", "src", "action", "formaction"].contains(name),
+            tag.hasSuffix("=\(quote.map(String.init) ?? "")")
+        {
+            return (.url, quote)
+        }
+        return (.attribute, quote)
     }
 }
 
@@ -553,12 +569,7 @@ struct OpenRedirectCheck: ActiveCheck {
                         evidence: probe, marker: canary, confidence: .certain)
                 ]
             }
-            let body = probe.body.lowercased()
-            if body.contains("http-equiv=\"refresh\"") || body.contains("location"),
-                body.contains("url=\(payload.lowercased())")
-                    || body.contains("location='\(payload.lowercased())")
-                    || body.contains("location.href='\(payload.lowercased())")
-            {
+            if Self.clientSideTargets(probe.body).contains(where: { Self.host(of: $0) == canary }) {
                 return [
                     context.finding(
                         id, point: point, variant: "client-side",
@@ -569,6 +580,30 @@ struct OpenRedirectCheck: ActiveCheck {
             }
         }
         return []
+    }
+
+    /// Where the page sends the browser by itself: a meta refresh's `url=`, and a script's assignment
+    /// to `location` / `location.href` or call to `location.replace` / `location.assign` (§3.4). An
+    /// input merely echoed elsewhere (`?returnUrl=…` in a link) is not a redirect.
+    static func clientSideTargets(_ body: String) -> [String] {
+        var targets: [String] = []
+        for tag in body.matches(of: #/(?i)<meta\b[^>]*>/#)
+        where tag.output.contains(#/(?i)http-equiv\s*=\s*["']?refresh/#) {
+            targets += tag.output.matches(
+                of: #/(?i)content\s*=\s*["']?\s*\d*\s*[;,]\s*url\s*=\s*['"]?([^"'>\s]+)/#
+            )
+            .map { String($0.output.1) }
+        }
+        // Not `\b`: Swift's Unicode word boundaries treat `window.location` as one word.
+        for script in body.matches(of: #/(?is)<script\b[^>]*>(.*?)</script>/#) {
+            let code = script.output.1
+            targets += code.matches(of: #/(?:^|[^\w$])location(?:\.href)?\s*=\s*(["'`])(.*?)\1/#).map {
+                String($0.output.2)
+            }
+            targets += code.matches(of: #/(?:^|[^\w$])location\.(?:replace|assign)\(\s*(["'`])(.*?)\1/#)
+                .map { String($0.output.2) }
+        }
+        return targets
     }
 
     /// The host a browser would go to for `location`.

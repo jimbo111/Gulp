@@ -43,6 +43,7 @@ struct AccuracyApp: Sendable {
             let value = parts.count > 1 ? parts[1] : ""
             query[parts[0]] = value.replacingOccurrences(of: "+", with: " ").removingPercentEncoding ?? value
         }
+        let q = query["q"] ?? ""
         switch derived.path ?? "/" {
         case "/ping":
             let host = query["host"] ?? ""
@@ -51,9 +52,50 @@ struct AccuracyApp: Sendable {
                 seconds += Double(host[range].split(separator: " ")[1]) ?? 0
             }
             return (FakeApp.text("PING ok"), seconds)
+        case "/login":
+            // Echoes `returnUrl` into a link and mentions `location` in a script: no redirect at all.
+            let back = query["returnUrl"] ?? ""
+            return (
+                FakeApp.html(
+                    "<a href=\"/next?returnUrl=\(back)\">Continue</a><script>var q = location.search;</script>"
+                ),
+                0.01
+            )
+        case "/jsgo":
+            let next = safe ? "/home" : query["next"] ?? ""
+            return (FakeApp.html("<script>window.location.href = \"\(next)\";</script>"), 0.01)
+        case "/meta":
+            let next = safe ? "/home" : query["next"] ?? ""
+            return (FakeApp.html("<meta http-equiv=\"refresh\" content=\"0; url=\(next)\">"), 0.01)
+        case "/xss/url1":
+            return (FakeApp.html("<a href='\(safe ? Self.link(q) : q)'>go</a>"), 0.01)
+        case "/xss/url0":
+            return (FakeApp.html("<a href=\(safe ? Self.link(q) : q)>go</a>"), 0.01)
+        case "/xss/urltext":
+            // A sanitized link plus a text echo that leaves quotes alone (harmless in a text node).
+            let text = q.replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(
+                of: ">", with: "&gt;")
+            return (FakeApp.html("<a href=\"\(Self.link(q))\">go</a><p>Your link: \"\(text)\"</p>"), 0.01)
+        case "/xss/json":
+            // An HTML link for plain values; anything else is rejected as JSON that echoes it.
+            if q.allSatisfy({ $0.isLetter || $0.isNumber }) {
+                return (FakeApp.html("<a href=\"\(q)\">go</a>"), 0.01)
+            }
+            return (
+                FakeApp.response(
+                    400, headers: ["Content-Type: application/json"], body: #"{"bad":"\#(q)"}"#), 0.01
+            )
         default:
             return (FakeApp.response(404, headers: [], body: "not found"), 0.01)
         }
+    }
+
+    /// A link target that only keeps http(s) URLs and plain words, HTML-encoded.
+    static func link(_ value: String) -> String {
+        let allowed =
+            value.hasPrefix("http://") || value.hasPrefix("https://")
+            || value.allSatisfy { $0.isLetter || $0.isNumber }
+        return allowed ? FakeApp.escape(value) : "#"
     }
 }
 
@@ -94,5 +136,37 @@ struct ScannerAccuracyTests {
         let safe = await scanApp(
             [get("/ping?host=127.0.0.1")], app: AccuracyApp(safe: true, coldStart: 6), pointsOnly: true)
         #expect(!safe.contains { $0.typeID.hasSuffix(".time") }, "\(pairs(safe))")
+    }
+
+    @Test(
+        "SCN-030 §3.4: a reflected returnUrl is not a client-side redirect; meta refresh and JS location are")
+    func test_SCN030_clientSideRedirectNeedsARealRedirect() async {
+        let reflected = await scanApp([get("/login?returnUrl=/home")], app: AccuracyApp())
+        #expect(!reflected.contains { $0.typeID == "active.open-redirect" }, "\(pairs(reflected))")
+        for path in ["/jsgo?next=/home", "/meta?next=/home"] {
+            let found = await scanApp([get(path)], app: AccuracyApp())
+            #expect(
+                found.contains { $0.typeID == "active.open-redirect" && $0.variant == "client-side" },
+                "\(path): \(pairs(found))")
+            let safe = await scanApp([get(path)], app: AccuracyApp(safe: true))
+            #expect(!safe.contains { $0.typeID == "active.open-redirect" }, "safe \(path): \(pairs(safe))")
+        }
+    }
+
+    @Test("SCN-030 §3.4: URL-context XSS uses the attribute's own quoting and is confirmed at the reflection")
+    func test_SCN030_urlContextXSS() async {
+        for path in ["/xss/url1?q=hello", "/xss/url0?q=hello"] {
+            let found = await scanApp([get(path)], app: AccuracyApp())
+            #expect(
+                found.contains { $0.typeID == "active.xss.reflected" && $0.variant == "url" },
+                "\(path): \(pairs(found))")
+            let safe = await scanApp([get(path)], app: AccuracyApp(safe: true))
+            #expect(!safe.contains { $0.typeID == "active.xss.reflected" }, "safe \(path): \(pairs(safe))")
+        }
+        // The breakout only shows up in a text node, or in a JSON error: neither is the URL context.
+        for path in ["/xss/urltext?q=hello", "/xss/json?q=hello"] {
+            let quiet = await scanApp([get(path)], app: AccuracyApp())
+            #expect(!quiet.contains { $0.typeID == "active.xss.reflected" }, "\(path): \(pairs(quiet))")
+        }
     }
 }
