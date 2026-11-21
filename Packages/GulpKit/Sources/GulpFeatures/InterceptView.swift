@@ -36,13 +36,26 @@ final class InterceptModel {
         listener = Task { [weak self] in
             for await delivery in await events.subscribe() {
                 guard let self else { return }
-                if case .interceptQueued = delivery.event { await self.refresh() }
+                switch delivery.event {
+                case .interceptQueued: await self.refresh()
+                case .interceptDecided(let id): self.removed(id)
+                default: break
+                }
             }
         }
         Task { await refresh() }
     }
 
+    /// Stop following the intercept queue (the project window is closing).
+    func stop() { listener?.cancel() }
+
     var selected: InterceptItem? { items.first { $0.id == selectedID } }
+
+    /// A held item left the queue (decided here, or dropped when its client went away).
+    private func removed(_ id: InterceptItemID) {
+        items.removeAll { $0.id == id }
+        if selectedID == id { selectedID = items.first?.id }
+    }
 
     func refresh() async {
         items = await session.intercept.items
@@ -119,19 +132,38 @@ final class InterceptModel {
     }
 }
 
-/// Proxy → Intercept.
-public struct InterceptView: View {
-    @State private var model: InterceptModel
-    @State private var editingRules = false
-    let session: ProjectSession
+extension InterceptModel: SessionFollowing {}
 
-    /// The Intercept screen for `session`.
-    public init(session: ProjectSession) {
-        _model = State(initialValue: InterceptModel(session: session))
-        self.session = session
+/// The window toolbar's global Intercept toggle (docs/05 §2, ⌘⇧I): request interception on or off.
+public struct InterceptToolbarToggle: View {
+    private let model: InterceptModel
+
+    /// The toggle for the project whose tool models are `models`.
+    public init(models: ToolModels) {
+        model = models.intercept
     }
 
+    /// The screen.
     public var body: some View {
+        Toggle(
+            isOn: Binding(get: { model.interceptRequests }, set: { model.setIntercepting(requests: $0) })
+        ) {
+            Label(
+                model.interceptRequests ? "Intercept: On" : "Intercept: Off",
+                systemImage: model.interceptRequests ? "hand.raised.fill" : "hand.raised")
+        }
+        .keyboardShortcut("i", modifiers: [.command, .shift])
+        .help("Hold matching requests in Proxy → Intercept until you forward or drop them (⌘⇧I)")
+    }
+}
+
+/// Proxy → Intercept.
+struct InterceptView: View {
+    @Bindable var model: InterceptModel
+    let session: ProjectSession
+    @State private var editingRules = false
+
+    var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Toggle(
@@ -139,7 +171,6 @@ public struct InterceptView: View {
                     isOn: Binding(
                         get: { model.interceptRequests }, set: { model.setIntercepting(requests: $0) })
                 )
-                .keyboardShortcut("i", modifiers: [.command, .shift])
                 Toggle(
                     "Responses",
                     isOn: Binding(

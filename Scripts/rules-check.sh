@@ -34,13 +34,14 @@ done < <(grep -rnE "SystemRandomNumberGenerator|\.random\(in:[^)]*\)|\.randomEle
 # 3. Store writes never fail silently in the orchestration layer: a dropped `store.record(finding)`
 #    loses an issue, a dropped `appendAudit` loses an agent action. In GulpWorkspace wrap the write in
 #    `persisting(_:events:_:)`, which reports failures to the Event Log; in GulpAutomation/GulpAI let
-#    the error propagate (the APIGate fails the call). Matches any receiver ending in `store` or
-#    `Store()` (`session.store.`, `currentStore().`).
+#    the error propagate (the APIGate fails the call); in GulpFeatures show it to the user (the view
+#    model's message). Matches any receiver ending in `store` or `Store()` (`session.store.`,
+#    `currentStore().`).
 while IFS= read -r hit; do
   [ -z "$hit" ] && continue
   problem "$hit — a store write behind try? fails silently; propagate it, or use persisting(\"…\", events: events) { try await … }"
 done < <(grep -rnE "try\? await [A-Za-z_.]*[Ss]tore(\(\))?\.(record|append|set|add|attach|save|insert|update|delete|write|put|upsert|open|close)" \
-  "$SRC/GulpWorkspace" "$SRC/GulpAutomation" "$SRC/GulpAI" --include='*.swift' || true)
+  "$SRC/GulpWorkspace" "$SRC/GulpAutomation" "$SRC/GulpAI" "$SRC/GulpFeatures" --include='*.swift' || true)
 
 # 4. Registry lookups go through the checked `require`, which names what is missing, never a
 #    force-unwrapped named(…)! — issue definitions (IssueIDCoverageTests checks the ids themselves) and

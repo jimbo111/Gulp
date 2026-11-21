@@ -1,5 +1,5 @@
 // GulpFeatures — Proxy → HTTP History (F05 HIS-001…HIS-006): filter chips, the paged table, and the
-// read-only request/response viewer (Raw and Hex; the full editor arrives with M5).
+// read-only request/response viewer (Raw and Hex; editing happens in Repeater and Intercept).
 
 #if canImport(AppKit)
 import AppKit
@@ -40,6 +40,7 @@ public struct ProxyHistoryView: View {
         self.sendToRepeater = sendToRepeater
     }
 
+    /// The screen.
     public var body: some View {
         if let model {
             VSplitView {
@@ -359,6 +360,7 @@ public struct ProxyListenersView: View {
         _listeners = State(initialValue: session.settings.get(ProxySettings.self).listeners)
     }
 
+    /// The screen.
     public var body: some View {
         VStack(alignment: .leading) {
             Text("Proxy listeners").font(.headline)
@@ -434,6 +436,7 @@ public struct SessionHistoryView: View {
         return view
     }
 
+    /// The screen.
     public var body: some View {
         Group {
             if let store {

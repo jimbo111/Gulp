@@ -1,7 +1,7 @@
 import Foundation
 
-// The sidebar's tool list (docs/05-ui-ux.md §2). This is UI navigation metadata
-// only; the actual tools live in the GulpFeatures package and are wired later.
+// The sidebar's tool list (docs/05-ui-ux.md §2). This is UI navigation metadata only; the tool
+// screens live in GulpFeatures and `ProjectWindow.detail` shows the selected one.
 
 /// A selectable tool in the sidebar.
 enum Tool: String, Identifiable, CaseIterable, Hashable {

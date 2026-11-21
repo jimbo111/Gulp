@@ -9,9 +9,6 @@ options:
 packages:
   GulpKit:
     path: Packages/GulpKit
-  Sparkle:
-    url: https://github.com/sparkle-project/Sparkle
-    from: "2.6.0"
 
 settings:
   base:
@@ -42,15 +39,22 @@ targets:
         product: GulpFeatures
       - package: GulpKit
         product: GulpWorkspace
-      - package: Sparkle
+      # Built (not linked) so the phase below can embed it.
+      - package: GulpKit
+        product: gulp-cli
+        link: false
     # Embed the CLI so users can symlink it into their PATH (docs/02 §4).
     postCompileScripts:
       - script: |
-          # gulp-cli is built from the SwiftPM package; copy it in when available.
-          BIN="$BUILT_PRODUCTS_DIR/gulp-cli"
+          set -euo pipefail
           DEST="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
-          if [ -f "$BIN" ]; then mkdir -p "$DEST" && cp "$BIN" "$DEST/gulp"; fi
+          mkdir -p "$DEST"
+          cp "$BUILT_PRODUCTS_DIR/gulp-cli" "$DEST/gulp"
         name: Embed gulp-cli
+        inputFiles:
+          - $(BUILT_PRODUCTS_DIR)/gulp-cli
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/gulp
 
   GulpAppUITests:
     type: bundle.ui-testing
@@ -65,6 +69,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.gulp.app.uitests
     dependencies:
       - target: Gulp
+      # The end-to-end test starts VulnLab from the built products (not linked).
+      - package: GulpKit
+        product: gulp-vulnlab
+        link: false
 
 schemes:
   Gulp:
@@ -77,3 +85,21 @@ schemes:
       config: Debug
       targets:
         - GulpAppUITests
+      # test_REP002 sends from the app to a VulnLab started here (the sandboxed UI-test runner
+      # cannot listen on a port itself). The port is the test's `vulnLabPort`.
+      preActions:
+        - name: Start VulnLab
+          settingsTarget: GulpAppUITests
+          script: |
+            pkill -f "gulp-vulnlab --port 28188" || true
+            "$BUILT_PRODUCTS_DIR/gulp-vulnlab" --port 28188 --raw-port 28189 --tls-port 28190 \
+              > "$TARGET_TEMP_DIR/vulnlab.log" 2>&1 &
+            for _ in $(seq 1 50); do
+              curl -s -o /dev/null http://127.0.0.1:28188/ && exit 0
+              sleep 0.2
+            done
+            echo "VulnLab did not start; see $TARGET_TEMP_DIR/vulnlab.log" >&2
+            exit 1
+      postActions:
+        - name: Stop VulnLab
+          script: pkill -f "gulp-vulnlab --port 28188" || true

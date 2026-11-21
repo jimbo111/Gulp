@@ -109,16 +109,11 @@ final class CrawlerModel {
 }
 
 /// Scanner → Crawl (static mode, F09).
-public struct CrawlerView: View {
-    @State private var model: CrawlerModel
+struct CrawlerView: View {
+    @Bindable var model: CrawlerModel
     @State private var confirmForms = false
 
-    /// The crawler for `session`.
-    public init(session: ProjectSession) {
-        _model = State(initialValue: CrawlerModel(session: session))
-    }
-
-    public var body: some View {
+    var body: some View {
         HSplitView {
             Form {
                 Section("Seeds (one URL per line)") {
@@ -202,25 +197,31 @@ public struct CrawlerView: View {
 final class BeaconModel {
     var settings: OASTSettings
     var token = ""
-    private(set) var health = OASTHealth()
+    /// Nil until the first poll.
+    private(set) var health: OASTHealth?
     private(set) var interactions: [StoredOASTInteraction] = []
     private(set) var message: String?
     private(set) var testing = false
     var selected: Int64?
     var raw = ""
     @ObservationIgnored let session: ProjectSession
-    @ObservationIgnored private var poller: Task<Void, Never>?
 
     init(session: ProjectSession) {
         self.session = session
         settings = session.settings.get(OASTSettings.self)
-        poller = Task { [weak self] in
-            while !Task.isCancelled {
-                await self?.reload()
-                try? await Task.sleep(for: .seconds(1))
-            }
+    }
+
+    /// Refresh health and interactions every second until cancelled (the view's `.task`: Beacon is
+    /// polled only while it is shown).
+    func poll() async {
+        while !Task.isCancelled {
+            await reload()
+            try? await Task.sleep(for: .seconds(1))
         }
     }
+
+    /// OAST is configured and registered.
+    var registered: Bool { health?.registered == true }
 
     func reload() async {
         health = await session.oast.currentHealth
@@ -279,13 +280,14 @@ final class BeaconModel {
 
 /// The Beacon tool (F10 §3).
 public struct BeaconView: View {
-    @State private var model: BeaconModel
+    @Bindable private var model: BeaconModel
 
-    /// Beacon for `session`.
-    public init(session: ProjectSession) {
-        _model = State(initialValue: BeaconModel(session: session))
+    /// Beacon of the project whose tool models are `models`.
+    public init(models: ToolModels) {
+        model = models.beacon
     }
 
+    /// The screen.
     public var body: some View {
         VSplitView {
             Form {
@@ -307,18 +309,20 @@ public struct BeaconView: View {
                                     || (!model.settings.isLocal && !model.settings.thirdPartyAcknowledged))
                         Button("Turn Off") { model.apply(enabled: false) }
                         Button(model.testing ? "Testing…" : "Test Beacon") { model.test() }.disabled(
-                            !model.health.registered || model.testing)
+                            !model.registered || model.testing)
                     }
                     HStack {
-                        Circle().fill(model.health.registered ? Color.green : Color.secondary).frame(
+                        Circle().fill(model.registered ? Color.green : Color.secondary).frame(
                             width: 8, height: 8)
-                        Text(
-                            model.health.registered
-                                ? "\(model.health.domain) · \(model.health.payloads) payloads · \(model.health.interactions) interactions"
-                                    + (model.health.lastError.map { " · \($0)" } ?? "")
-                                : "Not registered"
-                        )
-                        .font(.caption)
+                        if let health = model.health, health.registered {
+                            Text(
+                                "\(health.domain) · \(health.payloads) payloads · \(health.interactions) interactions"
+                                    + (health.lastError.map { " · \($0)" } ?? "")
+                            )
+                            .font(.caption)
+                        } else {
+                            Text("Not registered").font(.caption)
+                        }
                     }
                     if let message = model.message {
                         Text(message).font(.caption).foregroundStyle(.secondary)
@@ -350,6 +354,7 @@ public struct BeaconView: View {
             }
         }
         .navigationTitle("Beacon")
+        .task { await model.poll() }
     }
 }
 #endif

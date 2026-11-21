@@ -18,6 +18,8 @@ import SwiftUI
 final class ActiveScanModel {
     var preset = ScanConfig.Preset.balanced
     var unsafe = false
+    /// Run the opt-in cache-poisoning family (F08 §3.5): off unless chosen for this scan.
+    var cachePoisoning = false
     var allowOutOfScope = false
     private(set) var queued: [ExchangeID] = []
     private(set) var running = false
@@ -44,10 +46,17 @@ final class ActiveScanModel {
         }
     }
 
-    func start() {
-        guard !queued.isEmpty, !running else { return }
+    /// The scan as configured.
+    var scanConfig: ScanConfig {
         var config = ScanConfig.preset(preset)
         config.unsafe = unsafe
+        if cachePoisoning { config.disabledFamilies.subtract(ActiveChecks.optInFamilies) }
+        return config
+    }
+
+    func start() {
+        guard !queued.isEmpty, !running else { return }
+        let config = scanConfig
         running = true
         paused = false
         summary = nil
@@ -122,12 +131,13 @@ final class ActiveScanModel {
 public struct ScannerView: View {
     enum Pane: String, CaseIterable { case audit = "Audit", crawl = "Crawl" }
 
-    let session: ProjectSession
+    let models: ToolModels
     @State private var pane = Pane.audit
 
-    /// The Scanner for `session`.
-    public init(session: ProjectSession) { self.session = session }
+    /// The Scanner of the project whose tool models are `models`.
+    public init(models: ToolModels) { self.models = models }
 
+    /// The screen.
     public var body: some View {
         VStack(spacing: 0) {
             Picker("", selection: $pane) {
@@ -139,8 +149,8 @@ public struct ScannerView: View {
             .padding(8)
             Divider()
             switch pane {
-            case .audit: ActiveScanView(session: session)
-            case .crawl: CrawlerView(session: session)
+            case .audit: ActiveScanView(model: models.activeScan)
+            case .crawl: CrawlerView(model: models.crawler)
             }
         }
     }
@@ -148,11 +158,9 @@ public struct ScannerView: View {
 
 /// Scanner → Audit (SCN-034/035).
 struct ActiveScanView: View {
-    @State private var model: ActiveScanModel
+    @Bindable var model: ActiveScanModel
     @State private var confirmOutOfScope = false
     @State private var confirmUnsafe = false
-
-    init(session: ProjectSession) { _model = State(initialValue: ActiveScanModel(session: session)) }
 
     var body: some View {
         HSplitView {
@@ -179,6 +187,13 @@ struct ActiveScanView: View {
                         .help(
                             "Off by default (SCN-038): stored-XSS markers still run on requests that already submit data."
                         )
+                    Toggle(
+                        "Cache poisoning checks (send cache-busted poisoning probes)",
+                        isOn: $model.cachePoisoning
+                    )
+                    .help(
+                        "Off by default: these probes try to get a poisoned response cached. Each uses a cache buster, but a cache that ignores it could serve the probe to other users."
+                    )
                     Toggle("Scan out-of-scope requests", isOn: outOfScopeBinding)
                         .help("Only in-scope requests are sent unless you override it for this scan.")
                 }
@@ -202,7 +217,7 @@ struct ActiveScanView: View {
                         Text(
                             "\(summary.stopReason == "done" ? "Finished" : "Stopped"): \(summary.findings) issue(s), \(summary.probes) requests in \(String(format: "%.1f", summary.seconds)) s"
                                 + (summary.outOfScope > 0
-                                    ? " · \(summary.outOfScope) out of scope, not scanned" : ""))
+                                    ? " · \(summary.outOfScope) out of scope, not sent" : ""))
                     }
                 }
             }

@@ -1,8 +1,8 @@
-// GulpFeatures — the Assistant screen (F18, AI-001…). The agent loop, the provider adapters and the
-// pre-send redaction all live in GulpAI and are tested on Linux; this file drives the part that must be
-// visible before anything leaves the machine: the redaction gate. The user sees exactly what would be
-// masked (secrets, tokens, cookies) before a prompt is ever sent to a provider. The live agent run
-// needs a provider API key (stored in the Keychain) and network, configured here.
+// GulpFeatures — the Assistant screen (F22, AI-001…). The agent loop, the provider adapters and the
+// pre-send redaction all live in GulpAI and are tested on Linux; this screen shows only the part that
+// must be visible before anything leaves the machine: the redaction gate. The user sees exactly what
+// would be masked (secrets, tokens, cookies). It sends nothing: the live agent run (a provider API
+// key in the Keychain, network) is not wired into the app yet.
 
 #if canImport(AppKit)
 import AppKit
@@ -47,13 +47,14 @@ public final class AssistantModel {
     }
 }
 
-/// The Assistant: compose a prompt, see the pre-send redaction, and configure the provider.
+/// The Assistant: compose a prompt and see what the pre-send redaction would mask.
 public struct AssistantView: View {
     @State private var model = AssistantModel()
 
     /// An Assistant view.
     public init() {}
 
+    /// The screen.
     public var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: 6) {
@@ -70,7 +71,7 @@ public struct AssistantView: View {
                 .font(.callout)
                 Button("Preview redaction") { model.previewRedaction() }
                     .keyboardShortcut(.return, modifiers: .command)
-                Text("The live ask needs a provider API key in the Keychain; the prompt is redacted first.")
+                Text("Preview only: this screen sends nothing to a provider yet.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding(6)

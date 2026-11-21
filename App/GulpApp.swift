@@ -1,3 +1,4 @@
+import Foundation
 import GulpFeatures
 import GulpWorkspace
 import SwiftUI
@@ -14,14 +15,15 @@ struct GulpApp: App {
         WindowGroup(for: ProjectRef.self) { $ref in
             ProjectWindow(ref: ref)
                 .frame(minWidth: 1000, minHeight: 640)
+                .defaultAppStorage(AppDefaults.store)
         } defaultValue: {
             ProjectRef()
         }
+        // Opened `.gulp` files reach AppDelegate, which opens each in its own window; without this
+        // SwiftUI would also open an extra temporary-project window per open event.
+        .handlesExternalEvents(matching: ["gulp-project-window"])
         .commands {
             ProjectCommands()
-            CommandGroup(replacing: .appInfo) {
-                Button("About Gulp") {}  // real About panel in M16
-            }
         }
 
         Settings {
@@ -32,8 +34,23 @@ struct GulpApp: App {
                     .tabItem { Label("Proxy", systemImage: "network") }
             }
             .frame(width: 620, height: 440)
+            .defaultAppStorage(AppDefaults.store)
         }
     }
+}
+
+/// Where `@AppStorage` view preferences live: the standard defaults, or — when the UI tests set
+/// `GULP_DEFAULTS_SUITE` — a suite emptied at launch, so a test never sees (or changes) the
+/// user's remembered tabs and layouts.
+@MainActor
+enum AppDefaults {
+    static let store: UserDefaults = {
+        guard let suite = ProcessInfo.processInfo.environment["GULP_DEFAULTS_SUITE"], !suite.isEmpty,
+            let defaults = UserDefaults(suiteName: suite)
+        else { return .standard }
+        defaults.removePersistentDomain(forName: suite)
+        return defaults
+    }()
 }
 
 /// Identifies what a window shows: a project file, or (no path) a new temporary project.

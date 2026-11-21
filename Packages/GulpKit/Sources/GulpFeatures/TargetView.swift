@@ -77,19 +77,21 @@ public final class SiteMapModel {
 
     @ObservationIgnored let session: ProjectSession
     @ObservationIgnored private var map = SiteMap()
-    @ObservationIgnored private var watcher: Task<Void, Never>?
 
     /// The site map of `session`.
     public init(session: ProjectSession) {
         self.session = session
-        watcher = Task { [weak self] in
-            guard let siteMap = self?.session.siteMap else { return }
-            await self?.refresh()
-            for await _ in await siteMap.changes() {
-                await self?.refresh()
-                // Coalesce traffic-driven updates: at most one redraw per 100 ms (CLAUDE.md §4).
-                try? await Task.sleep(for: .milliseconds(100))
-            }
+    }
+
+    /// Follow the site map until cancelled (the view's `.task`, so only while it is shown): refresh
+    /// now, then as traffic changes it.
+    func follow() async {
+        let changes = await session.siteMap.changes()
+        await refresh()
+        for await _ in changes {
+            await refresh()
+            // Coalesce traffic-driven updates: at most one redraw per 100 ms (CLAUDE.md §4).
+            try? await Task.sleep(for: .milliseconds(100))
         }
     }
 
@@ -440,16 +442,15 @@ public struct TargetView: View {
         case scope = "Scope"
     }
 
-    let session: ProjectSession
+    let models: ToolModels
     @State private var tab = Tab.siteMap
-    @State private var siteMap: SiteMapModel?
-    @State private var scope: ScopeModel?
 
-    /// The Target tool of `session`.
-    public init(session: ProjectSession) {
-        self.session = session
+    /// The Target tool of the project whose tool models are `models`.
+    public init(models: ToolModels) {
+        self.models = models
     }
 
+    /// The screen.
     public var body: some View {
         VStack(spacing: 0) {
             Picker("", selection: $tab) {
@@ -462,16 +463,13 @@ public struct TargetView: View {
             Divider()
             switch tab {
             case .siteMap:
-                if let siteMap { SiteMapView(model: siteMap) } else { ProgressView() }
+                SiteMapView(model: models.siteMap)
+                    .task { await models.siteMap.follow() }
             case .scope:
-                if let scope { ScopeView(model: scope) } else { ProgressView() }
+                ScopeView(model: models.scope)
             }
         }
         .navigationTitle("Target")
-        .task {
-            if siteMap == nil { siteMap = SiteMapModel(session: session) }
-            if scope == nil { scope = ScopeModel(session: session) }
-        }
     }
 }
 

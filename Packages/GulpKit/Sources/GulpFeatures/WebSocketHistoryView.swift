@@ -111,6 +111,7 @@ public struct WebSocketHistoryView: View {
         self.sendToRepeater = sendToRepeater
     }
 
+    /// The screen.
     public var body: some View {
         if let model {
             VSplitView {
@@ -232,6 +233,7 @@ public struct SessionWebSocketHistoryView: View {
         self.generation = generation
     }
 
+    /// The screen.
     public var body: some View {
         Group {
             if let store {

@@ -15,6 +15,7 @@ import SwiftUI
 
 /// One editable step of the stacked editor.
 public struct DecoderStepRow: Identifiable, Hashable {
+    /// Row identity.
     public var id = UUID()
     /// Operation name.
     public var name: String
@@ -51,22 +52,24 @@ public final class DecoderModel {
     @ObservationIgnored let session: ProjectSession
     @ObservationIgnored private var watcher: Task<Void, Never>?
 
-    /// The Decoder for `session`.
+    /// The Decoder for `session`. Follows "Send to Decoder" until `stop()`.
     public init(session: ProjectSession) {
         self.session = session
+        let inbox = session.inbox
         watcher = Task { [weak self] in
-            guard let inbox = self?.session.inbox else { return }
-            for await tool in await inbox.opened() where tool == .decoder {
+            let opened = await inbox.opened()
+            let pending = await inbox.decoderInput
+            if let self, self.input.isEmpty { self.input = pending }
+            for await tool in opened where tool == .decoder {
                 let bytes = await inbox.decoderInput
-                self?.input = bytes
+                guard let self else { return }
+                self.input = bytes
             }
         }
-        Task { [weak self] in
-            guard let inbox = self?.session.inbox else { return }
-            let bytes = await inbox.decoderInput
-            if self?.input.isEmpty == true { self?.input = bytes }
-        }
     }
+
+    /// Stop following "Send to Decoder" (the project window is closing).
+    public func stop() { watcher?.cancel() }
 
     /// Every operation name, sorted.
     public static let operations = Transforms.all.keys.sorted()
@@ -121,11 +124,16 @@ public final class DecoderModel {
         }
     }
 
-    /// Load the input from a file.
+    /// Load the input from a file (read off the main thread).
     public func load() {
         let panel = NSOpenPanel()
-        if panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url) {
-            input = [UInt8](data)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task {
+            do {
+                input = try await Task.detached { [UInt8](try Data(contentsOf: url)) }.value
+            } catch {
+                self.error = "Could not read \(url.lastPathComponent): \(error.localizedDescription)"
+            }
         }
     }
 
@@ -151,14 +159,15 @@ public final class DecoderModel {
 
 /// The Decoder: input, then one pane per step (DEC-001).
 public struct DecoderView: View {
-    @State private var model: DecoderModel
+    @Bindable private var model: DecoderModel
     @State private var hexLevels: Set<Int> = []
 
-    /// The Decoder for `session`.
-    public init(session: ProjectSession) {
-        _model = State(initialValue: DecoderModel(session: session))
+    /// The Decoder of the project whose tool models are `models`.
+    public init(models: ToolModels) {
+        model = models.decoder
     }
 
+    /// The screen.
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -264,6 +273,8 @@ public struct DecoderView: View {
 public final class ComparerModel {
     /// The items (from Send to Comparer, paste or files).
     public private(set) var items: [ComparerItem] = []
+    /// Why the last file could not be added, if it could not.
+    public private(set) var message: String?
     /// Slot A.
     public var left: UUID? { didSet { recompute() } }
     /// Slot B.
@@ -283,14 +294,24 @@ public final class ComparerModel {
     @ObservationIgnored private var watcher: Task<Void, Never>?
     @ObservationIgnored private var job: Task<Void, Never>?
 
-    /// The Comparer for `session`.
+    /// The Comparer for `session`. Follows "Send to Comparer" until `stop()`.
     public init(session: ProjectSession) {
         self.session = session
+        let inbox = session.inbox
         watcher = Task { [weak self] in
-            guard let inbox = self?.session.inbox else { return }
+            let opened = await inbox.opened()
             await self?.reload()
-            for await tool in await inbox.opened() where tool == .comparer { await self?.reload() }
+            for await tool in opened where tool == .comparer {
+                guard let self else { return }
+                await self.reload()
+            }
         }
+    }
+
+    /// Stop following "Send to Comparer" (the project window is closing).
+    public func stop() {
+        watcher?.cancel()
+        job?.cancel()
     }
 
     func reload() async {
@@ -312,17 +333,21 @@ public final class ComparerModel {
         }
     }
 
-    /// Add a file.
+    /// Add a file (read off the main thread).
     public func addFile() {
         let panel = NSOpenPanel()
-        guard panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url) else {
-            return
-        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
         let inbox = session.inbox
         Task {
-            await inbox.addToComparer(
-                ComparerItem(label: url.lastPathComponent, source: "file", bytes: [UInt8](data)))
-            await reload()
+            do {
+                let bytes = try await Task.detached { [UInt8](try Data(contentsOf: url)) }.value
+                await inbox.addToComparer(
+                    ComparerItem(label: url.lastPathComponent, source: "file", bytes: bytes))
+                message = nil
+                await reload()
+            } catch {
+                message = "Could not read \(url.lastPathComponent): \(error.localizedDescription)"
+            }
         }
     }
 
@@ -361,14 +386,15 @@ public final class ComparerModel {
 
 /// The Comparer: items, A/B slots, the diff with toggles and navigation.
 public struct ComparerView: View {
-    @State private var model: ComparerModel
+    @Bindable private var model: ComparerModel
     @State private var selection: Set<UUID> = []
 
-    /// The Comparer for `session`.
-    public init(session: ProjectSession) {
-        _model = State(initialValue: ComparerModel(session: session))
+    /// The Comparer of the project whose tool models are `models`.
+    public init(models: ToolModels) {
+        model = models.comparer
     }
 
+    /// The screen.
     public var body: some View {
         HSplitView {
             VStack(alignment: .leading) {
@@ -378,6 +404,9 @@ public struct ComparerView: View {
                         Text("\(item.bytes.count) bytes · \(item.source)").font(.caption).foregroundStyle(
                             .secondary)
                     }
+                }
+                if let message = model.message {
+                    Text(message).font(.caption).foregroundStyle(.red).padding(.horizontal, 6)
                 }
                 HStack {
                     Button("Paste") { model.addPaste() }
@@ -617,6 +646,7 @@ public struct JWTWorkbenchView: View {
     /// A workbench.
     public init() {}
 
+    /// The screen.
     public var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: 6) {
@@ -630,64 +660,78 @@ public struct JWTWorkbenchView: View {
             }
             .padding(6)
             .frame(minWidth: 360)
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Picker("Algorithm", selection: $model.algorithm) {
-                        ForEach(
-                            [
-                                "HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "PS256", "PS512",
-                                "ES256", "ES384", "ES512",
-                            ], id: \.self
-                        ) {
-                            Text($0)
-                        }
-                    }
-                    .frame(maxWidth: 200)
-                    Button("Generate Key") { model.generateKey() }
-                }
-                Text("Secret, or PEM / JWK key").font(.caption)
-                TextEditor(text: $model.keyText).font(.system(.caption, design: .monospaced)).frame(
-                    minHeight: 70)
-                HStack {
-                    Button("Sign") { model.sign() }
-                    Button("Verify") { model.verify() }
-                }
-                Divider()
-                Text("Attacks (clearly labelled; sends are scope-gated)").font(.headline)
-                HStack {
-                    Button("alg:none") { model.forge("none") }
-                    Button("kid → /dev/null") { model.forge("kid") }
-                    Button("exp / nbf") { model.forge("times") }
-                }
-                Text("Server public key PEM (RS→HS confusion)").font(.caption)
-                TextEditor(text: $model.publicKeyPEM).font(.system(.caption, design: .monospaced)).frame(
-                    minHeight: 50)
-                Button("RS→HS Confusion") { model.forge("confusion") }
-                Text("Wordlist (weak HMAC secret)").font(.caption)
-                TextEditor(text: $model.wordlist).font(.system(.caption, design: .monospaced)).frame(
-                    minHeight: 50)
-                Button("Crack Secret") { model.crack() }
-                if let status = model.status { Text(status).font(.callout) }
-                List(model.forgeries, id: \.token) { forgery in
-                    VStack(alignment: .leading) {
-                        Text(forgery.label).bold()
-                        Text(forgery.token).font(.system(.caption, design: .monospaced)).textSelection(
-                            .enabled
-                        ).lineLimit(2)
-                    }
-                    .contextMenu {
-                        Button("Copy Token") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(forgery.token, forType: .string)
-                        }
-                    }
-                }
-                .frame(minHeight: 120)
+            // The controls scroll: their combined minimum height is taller than a 640 pt window, and
+            // a stack that cannot fit makes AppKit's constraint pass loop until it raises.
+            VSplitView {
+                ScrollView { controls.padding(6) }
+                    .frame(minHeight: 200)
+                forgeries.frame(minHeight: 120)
             }
-            .padding(6)
             .frame(minWidth: 360)
         }
         .navigationTitle("JWT Workbench")
     }
+
+    private var controls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Picker("Algorithm", selection: $model.algorithm) {
+                    ForEach(
+                        [
+                            "HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "PS256", "PS512",
+                            "ES256", "ES384", "ES512",
+                        ], id: \.self
+                    ) {
+                        Text($0)
+                    }
+                }
+                .frame(maxWidth: 200)
+                Button("Generate Key") { model.generateKey() }
+            }
+            Text("Secret, or PEM / JWK key").font(.caption)
+            TextEditor(text: $model.keyText).font(.system(.caption, design: .monospaced)).frame(
+                minHeight: 70)
+            HStack {
+                Button("Sign") { model.sign() }
+                Button("Verify") { model.verify() }
+            }
+            Divider()
+            Text("Attacks (clearly labelled; sends are scope-gated)").font(.headline)
+            HStack {
+                Button("alg:none") { model.forge("none") }
+                Button("kid → /dev/null") { model.forge("kid") }
+                Button("exp / nbf") { model.forge("times") }
+            }
+            Text("Server public key PEM (RS→HS confusion)").font(.caption)
+            TextEditor(text: $model.publicKeyPEM).font(.system(.caption, design: .monospaced)).frame(
+                minHeight: 50)
+            Button("RS→HS Confusion") { model.forge("confusion") }
+            Text("Wordlist (weak HMAC secret)").font(.caption)
+            TextEditor(text: $model.wordlist).font(.system(.caption, design: .monospaced)).frame(
+                minHeight: 50)
+            Button("Crack Secret") { model.crack() }
+            if let status = model.status { Text(status).font(.callout) }
+        }
+    }
+
+    private var forgeries: some View {
+        List(model.forgeries, id: \.token) { forgery in
+            VStack(alignment: .leading) {
+                Text(forgery.label).bold()
+                Text(forgery.token).font(.system(.caption, design: .monospaced)).textSelection(
+                    .enabled
+                ).lineLimit(2)
+            }
+            .contextMenu {
+                Button("Copy Token") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(forgery.token, forType: .string)
+                }
+            }
+        }
+    }
 }
+
+extension DecoderModel: SessionFollowing {}
+extension ComparerModel: SessionFollowing {}
 #endif

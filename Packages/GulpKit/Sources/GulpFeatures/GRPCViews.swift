@@ -64,6 +64,7 @@ public struct RPCCallView: View {
         let json: String?
     }
 
+    /// The screen.
     public var body: some View {
         if let call = RPC.parse(request: exchange.request, response: exchange.response) {
             let detail = RPCCallDetail(call: call, schema: schema)
@@ -165,6 +166,7 @@ public struct GRPCSchemasView: View {
         self.onChange = onChange
     }
 
+    /// The screen.
     public var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("gRPC Schemas").font(.title2)

@@ -8,6 +8,8 @@ import UniformTypeIdentifiers
 struct ProjectWindow: View {
     let ref: ProjectRef
     @State private var session: ProjectSession?
+    /// One model per tool for this session, created with it (doc 05 §8).
+    @State private var models: ToolModels?
     @State private var projectName = ""
     @State private var generation = 0
     @State private var failure: String?
@@ -25,16 +27,20 @@ struct ProjectWindow: View {
     /// Gulp Browser (BRW-001…004): offer Chrome for Testing when nothing is installed.
     @State private var offerDownload = false
     @State private var browserStatus: String?
+    /// The ports the proxy listens on (the toolbar's listener status, docs/05 §2).
+    @State private var listenerPorts: [Int] = []
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
-            if let session {
+            if let session, let models {
                 NavigationSplitView {
                     List(selection: $selection) {
                         ForEach(ToolSection.allCases) { section in
                             Section(section.title) {
                                 ForEach(section.tools) { tool in
                                     Label(tool.title, systemImage: tool.symbol).tag(tool)
+                                        .accessibilityIdentifier("sidebar.\(tool.rawValue)")
                                 }
                             }
                         }
@@ -42,11 +48,15 @@ struct ProjectWindow: View {
                     .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 300)
                     .listStyle(.sidebar)
                 } detail: {
-                    detail(session: session)
+                    detail(session: session, models: models)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("tool.\(selection?.rawValue ?? "none")")
                         .safeAreaInset(edge: .top) { bindErrorBanner }
                         .grpcSchemas(from: session, revision: grpcRevision)
                 }
                 .sheet(isPresented: $showListeners) {
+                    Task { listenerPorts = await session.listenerPorts }
+                } content: {
                     ProxyListenersView(session: session)
                 }
                 .sheet(isPresented: $showSearch) {
@@ -57,6 +67,23 @@ struct ProjectWindow: View {
                     GRPCSchemasView(session: session) { grpcRevision += 1 }
                 }
                 .toolbar {
+                    // docs/05 §2: the global Intercept toggle (⌘⇧I) and the listener status.
+                    ToolbarItem(placement: .primaryAction) {
+                        InterceptToolbarToggle(models: models)
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            showListeners = true
+                        } label: {
+                            Label(
+                                listenerStatus,
+                                systemImage: listenerPorts.isEmpty ? "network.slash" : "network"
+                            )
+                            .labelStyle(.titleAndIcon)
+                        }
+                        .accessibilityIdentifier("listeners")
+                        .help("Proxy listeners for this project (PRX-001)")
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Button {
                             showSearch = true
@@ -142,44 +169,45 @@ struct ProjectWindow: View {
                 }
             }
         }
+        .onChange(of: OpenProjects.shared.pendingFiles, initial: true) {
+            // `.gulp` files from Finder / Open With / the Dock: one window opens each (PRJ-002).
+            for url in OpenProjects.shared.takePendingFiles() {
+                openWindow(value: ProjectRef(path: url.path))
+            }
+        }
         .onDisappear {
-            // Temporary projects are kept (recoverable in Caches) until a save/discard prompt lands.
-            let session = self.session
-            Task { try? await session?.close(keepTemporary: true) }
+            guard let session else { return }
+            Task { await OpenProjects.shared.close(session) }
         }
         .focusedSceneValue(\.projectActions, actions)
         .navigationSubtitle(projectName)
     }
 
     @ViewBuilder
-    private func detail(session: ProjectSession) -> some View {
+    private func detail(session: ProjectSession, models: ToolModels) -> some View {
         switch selection {
         case .proxy:
-            ProxyToolView(session: session, generation: generation)
-                .toolbar {
-                    Button("Listeners…") { showListeners = true }
-                        .help("Proxy listeners for this project (PRX-001)")
-                }
+            ProxyToolView(models: models, generation: generation)
         case .target:
-            TargetView(session: session)
+            TargetView(models: models)
         case .repeater:
-            RepeaterView(session: session)
+            RepeaterView(models: models)
         case .fuzzer:
-            FuzzerView(session: session)
+            FuzzerView(models: models)
         case .scanner:
-            ScannerView(session: session)
+            ScannerView(models: models)
         case .beacon:
-            BeaconView(session: session)
+            BeaconView(models: models)
         case .dashboard:
             IssuesDashboard(session: session)
         case .logger:
-            LoggerView(session: session)
+            LoggerView(session: session, generation: generation)
         case .notebook:
             NotebookView(session: session)
         case .decoder:
-            DecoderView(session: session)
+            DecoderView(models: models)
         case .comparer:
-            ComparerView(session: session)
+            ComparerView(models: models)
         case .jwt:
             JWTWorkbenchView()
         case .sequencer:
@@ -195,12 +223,18 @@ struct ProjectWindow: View {
         case .assistant:
             AssistantView()
         case .authzMatrix:
-            AuthzMatrixView(session: session)
-        default:
+            AuthzMatrixView(models: models)
+        case nil:
             ContentUnavailableView(
-                selection?.title ?? "Gulp", systemImage: selection?.symbol ?? "network",
-                description: Text("This tool arrives in a later milestone. See docs/03-roadmap.md."))
+                "No tool selected", systemImage: "sidebar.left",
+                description: Text("Choose a tool in the sidebar."))
         }
+    }
+
+    /// The toolbar's listener status: where the proxy listens, or that it does not.
+    private var listenerStatus: String {
+        listenerPorts.isEmpty
+            ? "Proxy off" : "Proxy :" + listenerPorts.map(String.init).joined(separator: ", :")
     }
 
     private func openBrowser(_ session: ProjectSession) {
@@ -271,7 +305,9 @@ struct ProjectWindow: View {
                         if url.pathExtension == "gulp" {
                             report = try await session.importExport.importProject(at: url)
                         } else {
-                            report = try await session.importExport.importFile(try Data(contentsOf: url))
+                            // Read off the main thread: traffic files can be large (CLAUDE.md §4).
+                            let data = try await Task.detached { try Data(contentsOf: url) }.value
+                            report = try await session.importExport.importFile(data)
                         }
                         let skipped = report.skipped.prefix(3).map { "\($0.item): \($0.reason)" }
                         browserStatus = ([report.summary] + skipped).joined(separator: " · ")
@@ -284,7 +320,8 @@ struct ProjectWindow: View {
                 // HIS-044: the whole history, as HAR (with Gulp's exact bytes) or CSV.
                 Task {
                     do {
-                        try await session.importExport.export(as: format).write(to: url)
+                        let data = try await session.importExport.export(as: format)
+                        try await Task.detached { try data.write(to: url) }.value
                         browserStatus = "Exported history to \(url.lastPathComponent)"
                     } catch {
                         browserStatus = "Export failed: \(ProjectSession.describe(error))"
@@ -307,7 +344,11 @@ struct ProjectWindow: View {
                 if case .failure(let error) = result { return error.message }
                 return nil
             }
+            listenerPorts = await opened.listenerPorts
             projectName = await opened.url.lastPathComponent
+            let created = ToolModels(session: opened)
+            OpenProjects.shared.add(opened, models: created)
+            models = created
             session = opened
         } catch {
             failure = "\(error)"
@@ -350,7 +391,7 @@ struct ProjectCommands: Commands {
                     openWindow(value: ProjectRef(path: url.path))
                 }
             }
-            .keyboardShortcut("n", modifiers: [.command, .shift])
+            // No shortcut: ⌘⇧N is Add to Notebook (docs/05 §5).
             Button("Open…") {
                 if let url = ProjectPanels.open() { openWindow(value: ProjectRef(path: url.path)) }
             }
@@ -376,7 +417,7 @@ struct ProjectCommands: Commands {
                 panel.allowsMultipleSelection = false
                 if let actions, panel.runModal() == .OK, let url = panel.url { actions.importFile(url) }
             }
-            .keyboardShortcut("i", modifiers: [.command, .shift])
+            // No shortcut: ⌘⇧I toggles Intercept (docs/05 §5).
             .disabled(actions == nil)
             Menu("Export History") {
                 ForEach(ExportFormat.allCases, id: \.self) { format in
