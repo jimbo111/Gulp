@@ -4,8 +4,8 @@
 // injection (time and OAST), SSTI with random operands, path traversal confirmed by file markers,
 // XXE (in-band and OAST), SSRF (OAST), open redirect confirmed by a real redirect to a canary host,
 // and CRLF injection confirmed by a parsed response header. Payloads are benign: markers,
-// arithmetic, sleeps and lookups; nothing writes or deletes data except stored XSS's marker, which
-// only runs on requests that already submit data.
+// arithmetic, sleeps and lookups. Stored XSS is the one that writes data on purpose (its marker stays
+// on a page other users see), so it runs only behind the unsafe gate (F08 §5, §6; SCN-038).
 
 import Foundation
 import GulpCore
@@ -162,6 +162,7 @@ struct ReflectedXSSCheck: ActiveCheck {
 }
 
 /// Stored XSS: a unique canary submitted with the request, then found unencoded on the page.
+/// Unsafe-gated: the submitted marker is stored data.
 struct StoredXSSCheck: ActiveCheck {
     let id = "active.xss.stored"
     let family = "xss"
@@ -169,7 +170,7 @@ struct StoredXSSCheck: ActiveCheck {
     let kinds: Set<InsertionPointKind> = [.bodyParam, .jsonValue, .multipartField]
 
     func run(_ point: InsertionPoint?, baseline: Baseline?, context: AuditContext) async -> [IssueFinding] {
-        guard let point else { return [] }
+        guard let point, context.unsafe else { return [] }
         let method = context.base.bytes[context.base.parsed.method].string().uppercased()
         guard method == "POST" || method == "PUT" else { return [] }
         let a = "g" + String(Int.random(in: 100_000...999_999))

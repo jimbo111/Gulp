@@ -113,6 +113,14 @@ struct AccuracyApp: Sendable {
                 valid ? FakeApp.text(#"{"user":"alice"}"#) : FakeApp.response(401, headers: [], body: "no"),
                 0.01
             )
+        case "/guestbook":
+            // POST stores the message; every page renders them unencoded.
+            if request.bytes[request.parsed.method].string() == "POST" {
+                let form = request.bytes[request.parsed.body].string()
+                await state.sign(
+                    form.replacingOccurrences(of: "+", with: " ").removingPercentEncoding ?? form)
+            }
+            return (FakeApp.html(await state.messages.joined(separator: "<br>")), 0.01)
         case "/public":
             return (FakeApp.text(#"{"news":[]}"#), 0.01)  // never looks at the token
         case let path where path.hasPrefix("/account"):
@@ -224,6 +232,20 @@ struct ScannerAccuracyTests {
             let quiet = await scanApp([get(path)], app: AccuracyApp())
             #expect(!quiet.contains { $0.typeID == "active.xss.reflected" }, "\(path): \(pairs(quiet))")
         }
+    }
+}
+
+@Suite("Unsafe gate (F08 SCN-038, §6)")
+struct UnsafeGateTests {
+    @Test("SCN-038: stored XSS writes data, so it runs only with the unsafe gate")
+    func test_SCN038_storedXSSIsUnsafeGated() async {
+        let request = post("/guestbook", type: "application/x-www-form-urlencoded", body: "message=hello")
+        let gated = await scanApp([request], app: AccuracyApp())
+        #expect(!gated.contains { $0.typeID == "active.xss.stored" }, "\(pairs(gated))")
+        var unsafe = ScanConfig.preset(.balanced)
+        unsafe.unsafe = true
+        let found = await scanApp([request], app: AccuracyApp(), config: unsafe)
+        #expect(found.contains { $0.typeID == "active.xss.stored" }, "\(pairs(found))")
     }
 }
 
