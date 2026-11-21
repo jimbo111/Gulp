@@ -73,6 +73,20 @@ struct DiscoveryTests {
         #expect(skipped == 2)  // /private and /private/
     }
 
+    @Test("ETL-003 / CLAUDE.md scope safety: the soft-404 fingerprint probes are scope-checked too")
+    func test_ETL003_fingerprintScope() async throws {
+        let engine = FakeEngine { _, _ in (404, "not found") }
+        let config = DiscoveryConfig(
+            baseURL: "http://lab:8088/", words: .list(["real"]), extensions: [], backupSuffixes: [],
+            maxDepth: 0, concurrency: 1)
+        // Only the two word candidates are in scope; the random fingerprint paths are not.
+        let (_, sent, skipped) = try await discover(
+            config, engine, inScope: { _, path in path == "/real" || path == "/real/" })
+        let lines = engine.sent.map { $0.split(separator: "\r\n").first.map(String.init) ?? "" }
+        #expect(Set(lines) == ["GET /real HTTP/1.1", "GET /real/ HTTP/1.1"])
+        #expect(sent == 2 && skipped == 2)
+    }
+
     @Test("FUZ-011: the bundled wordlists ship and install without overwriting the user's edits")
     func test_FUZ011_wordlists() throws {
         let content = try #require(BundledWordlists.url("content.txt"))

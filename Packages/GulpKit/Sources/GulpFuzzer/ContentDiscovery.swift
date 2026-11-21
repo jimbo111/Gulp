@@ -5,7 +5,8 @@
 //
 // Soft 404s: before probing a directory, two random paths are requested; a candidate that answers
 // like them (same status, same length — allowing for a reflected path) counts as not found. Every
-// candidate is scope-checked; probes are sent unrecorded and the caller records only what was found.
+// request (fingerprints included) is scope-checked and rate-limited in `fetch`, just before it goes
+// out; probes are sent unrecorded and the caller records only what was found.
 
 import Foundation
 import GulpCore
@@ -71,7 +72,7 @@ public struct DiscoveredPath: Sendable {
 public enum DiscoveryEvent: Sendable {
     /// A path was found.
     case found(DiscoveredPath)
-    /// Done (requests sent, paths skipped as out of scope).
+    /// Done (requests sent, requests skipped as out of scope).
     case finished(sent: Int, outOfScope: Int, seconds: Double)
 }
 
@@ -190,8 +191,8 @@ public actor ContentDiscovery {
         for suffix in ["", ".html"] {
             let random = String((0..<16).map { _ in "abcdefghijklmnopqrstuvwxyz0123456789".randomElement()! })
             let path = directory + random + suffix
-            let response = await fetch(path).exchange.response
-            await didSend()  // fingerprints are real requests too
+            guard let result = await fetch(path) else { continue }  // out of scope: no fingerprint
+            let response = result.exchange.response
             prints.append(
                 NotFound(
                     status: response?.parsed.statusCode, length: response?.bytes.count ?? 0,
@@ -209,14 +210,23 @@ public actor ContentDiscovery {
         }
     }
 
-    nonisolated func fetch(_ path: String) async -> ExchangeResult {
+    /// GET `path` — nil, unsent, when it is out of scope. The one place discovery sends: every
+    /// request is scope-checked, takes a rate slot and is counted here.
+    nonisolated func fetch(_ path: String) async -> ExchangeResult? {
+        if let inScope, await !inScope(target, path) {
+            await skipped()
+            return nil
+        }
+        if let slot = await reserveSlot() { try? await Task.sleep(until: slot, clock: .continuous) }
         var options = SendOptions(recordAs: .fuzzer)
         options.record = false
         options.timeouts.total = .seconds(config.timeoutSeconds)
         options.applyHooks.remove(.transformTags)
         let request = RawRequest(
             Bytes("GET \(path) HTTP/1.1\r\nHost: \(host)\r\nUser-Agent: Gulp\r\nAccept: */*\r\n\r\n"))
-        return await engine.send(request, to: target, options: options)
+        let result = await engine.send(request, to: target, options: options)
+        await didSend()
+        return result
     }
 
     nonisolated func probe(
@@ -244,15 +254,8 @@ public actor ContentDiscovery {
         _ path: String, depth: Int, prints: [NotFound],
         _ continuation: AsyncStream<DiscoveryEvent>.Continuation
     ) async {
-        guard await markSeen(path) else { return }
-        if let inScope, await !inScope(target, path) {
-            await skipped()
-            return
-        }
-        if let slot = await reserveSlot() { try? await Task.sleep(until: slot, clock: .continuous) }
-        let result = await fetch(path)
-        await didSend()
-        guard let response = result.exchange.response else { return }
+        guard await markSeen(path), let result = await fetch(path), let response = result.exchange.response
+        else { return }
         let status = response.parsed.statusCode
         guard config.foundStatuses.contains(status),
             !looksNotFound(status, length: response.bytes.count, path: path, prints)
