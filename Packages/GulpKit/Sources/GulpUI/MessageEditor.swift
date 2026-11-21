@@ -1,5 +1,5 @@
 // GulpUI — the shared MessageEditor (doc 05 UI-010…UI-014, UI-020): Pretty / Raw / Hex tabs and an
-// Inspector sidebar, used by History (read-only), Intercept (editable) and, later, Repeater.
+// Inspector sidebar, used editable by Intercept, Repeater and the Fuzzer.
 //
 // The Raw tab edits text through `MessageText`, so bytes the user doesn't touch never change: valid
 // UTF-8 is edited as UTF-8, anything else in a byte-exact Latin-1 view.

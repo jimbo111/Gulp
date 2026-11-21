@@ -1,13 +1,8 @@
-// GulpUI — Reusable AppKit/SwiftUI components (macOS-only code).
-// Placeholder for M0 scaffolding. Real types land in later milestones
-// (see docs/03-roadmap.md and the feature specs in docs/features).
+// GulpUI — Reusable AppKit/SwiftUI components and the message model behind them.
+// The views are `#if canImport(AppKit)`; `MessageInspection.swift` is the half tested on Linux.
 
-/// Namespace and module marker for the `GulpUI` module.
-///
-/// This is a scaffolding stand-in so the package graph builds on macOS and
-/// Linux from milestone M0 onward. It is replaced by real types as features
-/// are implemented; do not rely on it at runtime.
+/// Module marker for `GulpUI`.
 public enum GulpUI {
-    /// The module's name, used only in diagnostics until real types exist.
+    /// The module's name.
     public static let moduleName = "GulpUI"
 }

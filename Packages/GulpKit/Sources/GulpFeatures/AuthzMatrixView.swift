@@ -1,6 +1,6 @@
 // GulpFeatures — the Authz Matrix screen (F23 §1, ADV-001…003). The matrix engine (replay each request
 // as every identity, classify authorized / enforced / bypassed) lives in GulpWorkspace and is tested on
-// Linux; this file drives it: it replays the requests queued for analysis as each configured identity
+// Linux; this file drives it: it replays the requests queued with "Actively scan" as each configured identity
 // and shows the verdict grid, so an access-control bypass (a privileged response under a lower identity)
 // stands out. The main thread never waits on the network — the run is a cancellable task.
 
@@ -18,7 +18,8 @@ public final class AuthzMatrixModel {
     /// The last finished matrix.
     public private(set) var result: AuthzMatrixResult?
     /// A status line.
-    public private(set) var status: String = "Send exchanges to analysis from History, then Run."
+    public private(set) var status: String =
+        "Select requests in HTTP History and choose Actively scan, then Run."
 
     @ObservationIgnored let session: ProjectSession
     @ObservationIgnored private var task: Task<Void, Never>?
@@ -33,7 +34,7 @@ public final class AuthzMatrixModel {
             status = "Running…"
             let ids = await session.inbox.scanInput
             guard !ids.isEmpty else {
-                status = "No requests queued. Send exchanges to analysis from History first."
+                status = "No requests queued. Select requests in HTTP History and choose Actively scan first."
                 return
             }
             do {

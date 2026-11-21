@@ -1,8 +1,8 @@
-// GulpFeatures — the Assistant screen (F18, AI-001…). The agent loop, the provider adapters and the
-// pre-send redaction all live in GulpAI and are tested on Linux; this file drives the part that must be
-// visible before anything leaves the machine: the redaction gate. The user sees exactly what would be
-// masked (secrets, tokens, cookies) before a prompt is ever sent to a provider. The live agent run
-// needs a provider API key (stored in the Keychain) and network, configured here.
+// GulpFeatures — the Assistant screen (F22, AI-001…). The agent loop, the provider adapters and the
+// pre-send redaction all live in GulpAI and are tested on Linux; this screen shows only the part that
+// must be visible before anything leaves the machine: the redaction gate. The user sees exactly what
+// would be masked (secrets, tokens, cookies). It sends nothing: the live agent run (a provider API
+// key in the Keychain, network) is not wired into the app yet.
 
 #if canImport(AppKit)
 import AppKit

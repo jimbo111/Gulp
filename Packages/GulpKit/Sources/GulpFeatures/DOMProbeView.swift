@@ -1,8 +1,8 @@
 // GulpFeatures — the DOM Probe screen (F16/M13a, DOM-001…). The CDP instrumentation and the finding
 // parser live in GulpBrowser and are tested on Linux against a mock transport (and against real
 // Chromium in the DoD); this file shows the shipped instrumentation script and decodes a captured
-// `__gulpReport` payload into a source→sink DOM-XSS finding. The live run (navigate + collect) needs a
-// browser, which `GulpBrowser.DOMProbe.run` drives from the macOS app.
+// `__gulpReport` payload into a source→sink DOM-XSS finding. The live run (navigate + collect,
+// `GulpBrowser.DOMProbe.run`) needs a browser and is not wired into this screen yet.
 
 #if canImport(AppKit)
 import AppKit

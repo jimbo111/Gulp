@@ -1,13 +1,9 @@
 // GulpFeatures — Feature screens and view models (macOS-only code).
-// Placeholder for M0 scaffolding. Real types land in later milestones
-// (see docs/03-roadmap.md and the feature specs in docs/features).
+// Every other file is `#if canImport(AppKit)`; this marker is the module's only declaration on
+// Linux, so the package graph stays identical there (docs/07 ADR-010).
 
-/// Namespace and module marker for the `GulpFeatures` module.
-///
-/// This is a scaffolding stand-in so the package graph builds on macOS and
-/// Linux from milestone M0 onward. It is replaced by real types as features
-/// are implemented; do not rely on it at runtime.
+/// Module marker for `GulpFeatures`.
 public enum GulpFeatures {
-    /// The module's name, used only in diagnostics until real types exist.
+    /// The module's name.
     public static let moduleName = "GulpFeatures"
 }
