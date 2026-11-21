@@ -115,9 +115,12 @@ public enum UpstreamTLS {
         if now > leaf.notValidAfter { return .failed("expired") }
         if now < leaf.notValidBefore { return .failed("notYetValid") }
         let roots = roots ?? SystemRoots.store
+        // An IP-literal target is checked against the leaf's IP SANs, a name against its DNS SANs.
+        var ip: String?
+        if case .ip(_, let text) = CertificateSubject(host: host) { ip = text }
         var verifier = Verifier(rootCertificates: roots) {
             RFC5280Policy(validationTime: now)
-            ServerIdentityPolicy(serverHostname: serverName(for: host), serverIP: nil)
+            ServerIdentityPolicy(serverHostname: serverName(for: host), serverIP: ip)
         }
         let result = await verifier.validate(
             leafCertificate: leaf, intermediates: CertificateStore(Array(certificates.dropFirst())))

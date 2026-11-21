@@ -358,4 +358,17 @@ struct UpstreamValidationTests {
         #expect(UpstreamTLS.serverName(for: "10.0.0.1") == nil)
         #expect(UpstreamTLS.serverName(for: "example.com") == "example.com")
     }
+
+    @Test("TLS-008: an IP-literal target validates against the leaf's IP SAN (v4 and bracketed v6)")
+    func test_TLS008_ipLiteralTarget() async throws {
+        let authority = try CertificateAuthority.generate(keyType: .p256)
+        let roots = CertificateStore([authority.certificate])
+        for host in ["10.0.0.5", "[2001:db8::1]"] {
+            let leaf = try authority.mintLeaf(
+                for: CertificateSubject(host: host), key: SigningKey.generate(.p256))
+            #expect(await UpstreamTLS.validate(chain: [leaf.der], host: host, roots: roots) == .ok)
+            let other = await UpstreamTLS.validate(chain: [leaf.der], host: "10.0.0.6", roots: roots)
+            #expect(other == .failed("untrusted"))
+        }
+    }
 }
