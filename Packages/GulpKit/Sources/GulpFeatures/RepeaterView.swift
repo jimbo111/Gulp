@@ -773,7 +773,6 @@ public struct RepeaterView: View {
                 Image(systemName: "slider.horizontal.3")
             }
             .help("Send options")
-            .popover(isPresented: $showOptions) { optionsForm.padding().frame(width: 300) }
             if model.draftIsRPC {
                 Button {
                     showRPCEditor = true
@@ -783,6 +782,7 @@ public struct RepeaterView: View {
                 .help("Edit a protobuf field or the whole message as JSON; the call is re-encoded (F33)")
                 .sheet(isPresented: $showRPCEditor) { RPCMessageEditor(model: model) }
             }
+            .popover(isPresented: $showOptions) { optionsForm.padding().frame(width: 300) }
             if let group = model.selectedGroup {
                 Divider().frame(height: 16)
                 Picker("Group mode", selection: Binding(get: { group.mode }, set: { model.setGroupMode($0) }))

@@ -70,30 +70,28 @@ extension ProjectStore {
         var after: Int64 = 0
         while true {
             let start = after
-            // GRDB rows are not Sendable, so they are read into changes inside the read.
-            let (last, changes): (Int64?, [(Int64, Bool)]) = try await pool.read { db in
-                let rows = try Row.fetchAll(
+            let rows: [Row] = try await pool.read { db in
+                try Row.fetchAll(
                     db,
                     sql: """
                         SELECT id, scheme, host, port, path, query, in_scope FROM exchanges WHERE id > ? \
                         ORDER BY id LIMIT ?
                         """,
                     arguments: [start, batch])
-                var changes: [(Int64, Bool)] = []
-                for row in rows {
-                    let scheme: String = row["scheme"] ?? "http"
-                    let target = HTTPTarget(
-                        scheme: scheme == "https" ? .https : .http, host: row["host"] ?? "",
-                        port: row["port"] ?? 0)
-                    let query: String? = row["query"]
-                    let path = (row["path"] ?? "/") + (query.map { "?\($0)" } ?? "")
-                    let inScope = service.isInScope(target, path: path)
-                    if inScope != ((row["in_scope"] as Int?) == 1) { changes.append((row["id"], inScope)) }
-                }
-                return (rows.last?["id"], changes)
             }
-            guard let last else { return }
-            after = last
+            guard let last = rows.last else { return }
+            after = last["id"]
+            var changes: [(Int64, Bool)] = []
+            for row in rows {
+                let scheme: String = row["scheme"] ?? "http"
+                let target = HTTPTarget(
+                    scheme: scheme == "https" ? .https : .http, host: row["host"] ?? "",
+                    port: row["port"] ?? 0)
+                let query: String? = row["query"]
+                let path = (row["path"] ?? "/") + (query.map { "?\($0)" } ?? "")
+                let inScope = service.isInScope(target, path: path)
+                if inScope != ((row["in_scope"] as Int?) == 1) { changes.append((row["id"], inScope)) }
+            }
             if !changes.isEmpty {
                 let updates = changes
                 try await pool.write { db in
