@@ -234,14 +234,14 @@ struct HistoryTableView: NSViewRepresentable {
         }
 
         /// Rows a menu action applies to: the clicked row if it is outside the selection, otherwise
-        /// the whole selection (resolved through the store, so unloaded pages count too).
-        func targetIDs() async -> [ExchangeID] {
+        /// the whole selection. Read it in the action itself (`clickedRow` is -1 once the menu
+        /// action returns), then resolve the ids through the store (`HistoryModel.ids(forRows:)`,
+        /// so unloaded pages count too).
+        func targetRows() -> IndexSet {
             guard let table else { return [] }
             let clicked = table.clickedRow
-            if clicked >= 0, !table.selectedRowIndexes.contains(clicked) {
-                return await model.ids(forRows: IndexSet(integer: clicked))
-            }
-            return await model.ids(forRows: table.selectedRowIndexes)
+            if clicked >= 0, !table.selectedRowIndexes.contains(clicked) { return IndexSet(integer: clicked) }
+            return table.selectedRowIndexes
         }
 
         // MARK: menus (HIS-004/005)
@@ -326,50 +326,58 @@ struct HistoryTableView: NSViewRepresentable {
 
         @objc func setHighlight(_ sender: NSMenuItem) {
             let color = (sender.representedObject as? String).flatMap(Highlight.init(rawValue:))
-            Task { model.highlight(await targetIDs(), color) }
+            let rows = targetRows()
+            Task { model.highlight(await model.ids(forRows: rows), color) }
         }
 
         @objc func sendToRepeater() {
+            let rows = targetRows()
             Task {
-                let ids = await targetIDs()
+                let ids = await model.ids(forRows: rows)
                 model.sendToRepeater?(ids)
             }
         }
 
         @objc func sendToComparer() {
-            Task { model.sendToComparer?(await targetIDs()) }
+            let rows = targetRows()
+            Task { model.sendToComparer?(await model.ids(forRows: rows)) }
         }
 
         @objc func sendToDecoder() {
+            let rows = targetRows()
             Task {
-                if let first = await targetIDs().first { model.sendToDecoder?(first) }
+                if let first = await model.ids(forRows: rows).first { model.sendToDecoder?(first) }
             }
         }
 
         @objc func sendToFuzzer() {
+            let rows = targetRows()
             Task {
-                if let first = await targetIDs().first { model.sendToFuzzer?(first) }
+                if let first = await model.ids(forRows: rows).first { model.sendToFuzzer?(first) }
             }
         }
 
         @objc func activelyScan() {
-            Task { model.activelyScan?(await targetIDs()) }
+            let rows = targetRows()
+            Task { model.activelyScan?(await model.ids(forRows: rows)) }
         }
 
         @objc func addToNotebook() {
-            Task { model.addToNotebook?(await targetIDs()) }
+            let rows = targetRows()
+            Task { model.addToNotebook?(await model.ids(forRows: rows)) }
         }
 
         @objc func editComment() {
-            Task { await editComment(ids: await targetIDs()) }
+            let rows = targetRows()
+            Task { await editComment(ids: await model.ids(forRows: rows), rows: rows) }
         }
 
-        private func editComment(ids: [ExchangeID]) async {
+        private func editComment(ids: [ExchangeID], rows: IndexSet) async {
             guard !ids.isEmpty else { return }
             let alert = NSAlert()
             alert.messageText = ids.count == 1 ? "Comment" : "Comment \(ids.count) items"
             let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-            let existing = ids.count == 1 ? model.loadedRow(table?.clickedRow ?? -1)?.comment : nil
+            let existing = rows.count == 1 ? rows.first.flatMap(model.loadedRow)?.comment : nil
             field.stringValue = existing ?? ""
             alert.accessoryView = field
             alert.addButton(withTitle: "Save")
@@ -381,8 +389,9 @@ struct HistoryTableView: NSViewRepresentable {
 
         @objc func copyURLs() {
             let model = self.model
+            let rows = targetRows()
             Task {
-                let text = await model.urls(await targetIDs())
+                let text = await model.urls(await model.ids(forRows: rows))
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
             }
@@ -393,15 +402,17 @@ struct HistoryTableView: NSViewRepresentable {
                 let format = RequestExportFormat(rawValue: raw)
             else { return }
             let model = self.model
+            let rows = targetRows()
             Task {
-                let text = await model.copyAs(await targetIDs(), format: format)
+                let text = await model.copyAs(await model.ids(forRows: rows), format: format)
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
             }
         }
 
         @objc func deleteRows() {
-            Task { model.delete(await targetIDs()) }
+            let rows = targetRows()
+            Task { model.delete(await model.ids(forRows: rows)) }
         }
     }
 }

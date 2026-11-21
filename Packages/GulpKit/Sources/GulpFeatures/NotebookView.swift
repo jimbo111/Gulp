@@ -30,6 +30,8 @@ final class NotebookModel {
     @ObservationIgnored private var pendingSave: Task<Void, Never>?
     /// Edits not yet written, merged per item (a later edit of another field mustn't drop them).
     @ObservationIgnored private var pendingEdits: [Int64: NotebookEdit] = [:]
+    /// Counts reloads, so a slower, older query cannot overwrite a newer one.
+    @ObservationIgnored private var reloads = 0
 
     init(session: ProjectSession) {
         self.session = session
@@ -45,14 +47,16 @@ final class NotebookModel {
         let session = self.session
         let filter = NotebookFilter(filterText)
         let grouping = self.grouping
+        reloads += 1
+        let reload = reloads
         Task {
             let loaded = (try? await session.notebook(filter)) ?? []
+            var grouped: [(name: String, items: [NotebookItem])] = []
+            if let grouping { grouped = (try? await session.notebookGroups(grouping, filter: filter)) ?? [] }
+            // A newer reload (the filter changed meanwhile) wins, whichever query finishes last.
+            guard reload == reloads else { return }
             items = loaded
-            if let grouping {
-                groups = (try? await session.notebookGroups(grouping, filter: filter)) ?? []
-            } else {
-                groups = []
-            }
+            groups = grouped
         }
     }
 

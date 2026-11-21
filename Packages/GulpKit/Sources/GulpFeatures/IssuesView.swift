@@ -28,6 +28,8 @@ final class IssuesModel {
     @ObservationIgnored let session: ProjectSession
     @ObservationIgnored private var listener: Task<Void, Never>?
     @ObservationIgnored private var pending: Task<Void, Never>?
+    /// Counts reloads, so a slower, older query cannot overwrite a newer one.
+    @ObservationIgnored private var reloads = 0
 
     init(session: ProjectSession) {
         self.session = session
@@ -87,8 +89,13 @@ final class IssuesModel {
         filter.host = hostFilter.isEmpty ? nil : hostFilter
         filter.confidences = Set(IssueConfidence.allCases.filter { $0 >= minimumConfidence })
         let session = self.session
+        reloads += 1
+        let reload = reloads
         Task {
-            issues = (try? await session.store.issues(filter)) ?? []
+            let found = (try? await session.store.issues(filter)) ?? []
+            // A newer reload (the filter changed meanwhile) wins, whichever query finishes last.
+            guard reload == reloads else { return }
+            issues = found
             if let current = detail?.id { load(current) }
         }
     }

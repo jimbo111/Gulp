@@ -719,6 +719,7 @@ public struct RepeaterView: View {
             } primaryAction: {
                 model.newTab()
             }
+            .accessibilityLabel("New tab")
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("New tab (hold for a WebSocket tab)")
@@ -727,6 +728,7 @@ public struct RepeaterView: View {
             } label: {
                 Image(systemName: "arrow.uturn.backward")
             }
+            .accessibilityLabel("Reopen closed tab")
             .buttonStyle(.borderless)
             .keyboardShortcut("t", modifiers: [.command, .shift])
             .help("Reopen closed tab (⌘⇧T)")
@@ -752,6 +754,7 @@ public struct RepeaterView: View {
             } label: {
                 Image(systemName: "xmark").font(.caption2)
             }
+            .accessibilityLabel("Close \(tab.title)")
             .buttonStyle(.borderless)
         }
         .padding(.horizontal, 8)
@@ -841,6 +844,7 @@ public struct RepeaterView: View {
             } label: {
                 Image(systemName: "slider.horizontal.3")
             }
+            .accessibilityLabel("Send options")
             .help("Send options")
             .popover(isPresented: $showOptions) { optionsForm.padding().frame(width: 300) }
             if model.draftIsRPC {
@@ -875,6 +879,7 @@ public struct RepeaterView: View {
             } label: {
                 Image(systemName: "chevron.left")
             }
+            .accessibilityLabel("Previous send")
             .disabled(!model.canStep(-1))
             .keyboardShortcut("[", modifiers: .command)
             Text(historyLabel).monospacedDigit().foregroundStyle(.secondary)
@@ -883,6 +888,7 @@ public struct RepeaterView: View {
             } label: {
                 Image(systemName: "chevron.right")
             }
+            .accessibilityLabel("Next send")
             .disabled(!model.canStep(1))
             .keyboardShortcut("]", modifiers: .command)
         }
