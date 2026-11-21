@@ -99,9 +99,7 @@ public final class ProjectStore: Sendable {
             _ = try await pool.writeWithoutTransaction { db in try db.checkpoint(.truncate) }
         }
         try await Self.retryingBusy { try pool.close() }
-        // Unlink while still holding the lock, so nobody can lock the old file in between.
-        try? FileManager.default.removeItem(atPath: ProjectLock.path(for: url))
-        lock.release()
+        lock.release()  // the lock file stays (see ProjectLock)
     }
 
     /// Run `operation`, retrying (up to ~1.4 s) while SQLite reports BUSY or LOCKED.

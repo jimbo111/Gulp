@@ -350,6 +350,22 @@ struct StoreTests {
         try await again.close()
     }
 
+    @Test("F20 §5: a session that opened the lock file before a close still excludes the next one")
+    func test_lockFileOutlivesClose() async throws {
+        let url = temporaryProject()
+        let store = try ProjectStore.open(at: url)
+        // Another session has opened the lock file and is about to try flock (it fails while held).
+        let waiting = open(ProjectLock.path(for: url), O_RDWR)
+        #expect(waiting >= 0)
+        defer { close(waiting) }
+        try await store.close()
+        #expect(flock(waiting, LOCK_EX | LOCK_NB) == 0)  // it gets the lock once the store closes
+        // So a third session must not: had close() unlinked the file, it would lock a new inode.
+        #expect(throws: StoreError.alreadyOpen(url.lastPathComponent)) { try ProjectStore.ensureNotOpen(url) }
+        flock(waiting, LOCK_UN)
+        try ProjectStore.ensureNotOpen(url)
+    }
+
     @Test("Project settings are stored as JSON per key (doc 04 §6)")
     func test_settings() async throws {
         let store = try ProjectStore.open(at: temporaryProject())
