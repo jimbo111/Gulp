@@ -148,17 +148,24 @@ public struct GulpQLFilterField: View {
 /// set, GulpQL filter and a capture switch.
 public struct LoggerView: View {
     let session: ProjectSession
+    let generation: Int
     @State private var model: HistoryModel?
     @State private var settings = LoggerSettings()
     @State private var query: GulpQLExpression?
     static let tools = ["proxy", "repeater", "fuzzer", "scanner", "crawler", "sequencer", "automation", "ai"]
 
-    /// The Logger of `session`.
-    public init(session: ProjectSession) {
+    /// The Logger of `session`; bump `generation` after the project file changes (Save As), and the
+    /// Logger reopens on the new store.
+    public init(session: ProjectSession, generation: Int) {
         self.session = session
+        self.generation = generation
     }
 
     public var body: some View {
+        content.task(id: generation) { await start() }
+    }
+
+    @ViewBuilder private var content: some View {
         if let model {
             VSplitView {
                 VStack(spacing: 0) {
@@ -191,7 +198,7 @@ public struct LoggerView: View {
             }
             .navigationTitle("Logger")
         } else {
-            ProgressView().task { await start() }
+            ProgressView()
         }
     }
 

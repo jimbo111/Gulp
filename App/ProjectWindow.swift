@@ -176,7 +176,7 @@ struct ProjectWindow: View {
         case .dashboard:
             IssuesDashboard(session: session)
         case .logger:
-            LoggerView(session: session)
+            LoggerView(session: session, generation: generation)
         case .notebook:
             NotebookView(session: session)
         case .decoder:
