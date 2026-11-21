@@ -249,10 +249,24 @@ public struct H2RequestSpec: Sendable, Codable {
 }
 ```
 
-## 4. SQLite schema (GulpStore, schema version 1)
+## 4. SQLite schema (GulpStore)
 
 A project is **one SQLite file** with the extension `.gulp`, opened in WAL mode
 (`PRAGMA journal_mode=WAL; synchronous=NORMAL; foreign_keys=ON`).
+
+The listing below is **schema v1** (`v1_initial`). The code (`GulpStore/Schema.swift`) is at
+**v7**; the additive migrations since v1 are:
+
+| Migration | Change |
+|---|---|
+| `v2_scope_rule_identity` | `scope_rules` + `uid TEXT`, `host_is_regex INTEGER NOT NULL DEFAULT 1` (TGT-020) |
+| `v3_site_map_notes` | `CREATE TABLE site_map_notes (node_key TEXT PRIMARY KEY, comment TEXT, highlight TEXT, notes TEXT)` (TGT-007) |
+| `v4_import_index_audit_log` | index `ix_ex_request_blob`; `CREATE TABLE audit_log (id INTEGER PRIMARY KEY, at REAL NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, target TEXT, outcome TEXT NOT NULL, detail TEXT)` (PRJ-012, AUT-023) |
+| `v5_gulpql` | hosts lowercased; index `ix_nb_exchange`; `notebook_items` + `truncated` |
+| `v6_issue_triage` | `issues` + `severity_user`, `confidence_user`, `notes_md`; indexes `ix_evidence_issue`, `ix_issues_host` (SCN-004) |
+| `v7_oast` | `oast_payloads` + `exchange_id`, `host`; `oast_interactions` + `unique_id`; two indexes (BCN-002) |
+
+`Schema.swift` is authoritative when this listing and the code differ.
 
 ```sql
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);       -- schema_version, project_uuid, created_at, app_version
@@ -365,13 +379,15 @@ CREATE TABLE settings (scope TEXT, key TEXT, value_json TEXT, PRIMARY KEY(scope,
 CREATE TABLE extension_state (extension_id TEXT, key TEXT, value BLOB, PRIMARY KEY(extension_id, key));
 ```
 
-### Post-1.0 expansion tables (Phase F, migration v2+)
+### Post-1.0 expansion tables (Phase F, later migrations)
 
-These back the timeline markers and the post-1.0 issue retest. They ship as **two** later additive
-migrations, not in schema v1, so each lands with its feature under the "never edit a shipped
-migration" rule: `v2_journal` at **M16b** (only `journal_markers`, for F14 JRN-008; the coverage index
-F04 JRN-001 needs no table) and `v3_drift` at M25 (only `issue_proofs` and `retest_runs`, for F08
-§2.4). Defined here together so the schema stays centralized.
+These back the timeline markers and the post-1.0 issue retest. They were planned as two additive
+migrations named `v2_journal` (M16b, only `journal_markers`, for F14 JRN-008) and `v3_drift` (M25,
+`issue_proofs` and `retest_runs`, for F08 §2.4). Those version numbers are now taken (see the table
+above), so each will use the next free number (v8 or later) when it lands. **Neither exists yet.**
+M25 shipped without `issue_proofs`/`retest_runs`: the retest reuses the issue's stored proving
+exchange and writes its verdict to `issues.status` (doc 07). Defined here together so the schema
+stays centralized.
 
 > **2026-11-08 feature review.** F30 and F31 were merged into F08/F21 and F04/F14. Their endpoint
 > **baselines** (DRF-001/002/006) and **methodology checklists** (JRN-006) were cut, so the
@@ -456,6 +472,7 @@ CREATE TABLE journal_markers (id INTEGER PRIMARY KEY, at REAL, label TEXT, note 
 | Check Recipes | `~/Library/Application Support/Gulp/recipes/` |
 | Managed browser | `~/Library/Application Support/Gulp/browser/` (Chrome for Testing) and `…/browser-profile/` |
 | API keys (AI, Beacon) | Keychain |
+| Session secrets (request-signing private keys, HMAC and AWS secret keys) | Keychain service `com.gulp.app.secrets` on macOS (`KeychainSecretStore`), 0600 files in `<support>/secrets/` elsewhere (`FileSecretStore`); the project stores only `SigningSecret.stored(ref:)` (`GulpWorkspace/SessionSecrets.swift`). Identity headers and variables are still stored in the project |
 | Logs | `~/Library/Logs/Gulp/` |
 
 ## 6. Settings model
