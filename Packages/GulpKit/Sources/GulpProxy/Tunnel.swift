@@ -155,7 +155,6 @@ final class TunnelSniffer: ChannelInboundHandler, RemovableChannelHandler {
     private enum State {
         case sniffing
         case preparing
-        case relaying(any Channel)
         case done
     }
 
@@ -181,8 +180,6 @@ final class TunnelSniffer: ChannelInboundHandler, RemovableChannelHandler {
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let bytes = unwrapInboundIn(data)
         switch state {
-        case .relaying(let upstream):
-            upstream.writeAndFlush(bytes, promise: nil)
         case .sniffing:
             pending += bytes.readableBytesView
             sniff(context: context)
@@ -191,11 +188,6 @@ final class TunnelSniffer: ChannelInboundHandler, RemovableChannelHandler {
         case .done:
             context.fireChannelRead(data)
         }
-    }
-
-    func channelInactive(context: ChannelHandlerContext) {
-        if case .relaying(let upstream) = state { upstream.close(promise: nil) }
-        context.fireChannelInactive()
     }
 
     private func sniff(context: ChannelHandlerContext) {
@@ -274,7 +266,8 @@ final class TunnelSniffer: ChannelInboundHandler, RemovableChannelHandler {
         context.pipeline.removeHandler(context: context, promise: nil)
     }
 
-    /// PRX-007: splice the bytes to the real server without decrypting.
+    /// PRX-007: splice the bytes to the real server without decrypting: a `RelayHandler` on each
+    /// side, the buffered ClientHello first.
     private func startRelay(context: ChannelHandlerContext) {
         let client = context.channel
         let bound = NIOLoopBound((self, context), eventLoop: context.eventLoop)
@@ -289,11 +282,21 @@ final class TunnelSniffer: ChannelInboundHandler, RemovableChannelHandler {
                 let (sniffer, context) = bound.value
                 switch result {
                 case .success(let upstream):
-                    sniffer.state = .relaying(upstream)
-                    var buffer = upstream.allocator.buffer(capacity: sniffer.pending.count)
-                    buffer.writeBytes(sniffer.pending)
+                    guard client.isActive else {
+                        upstream.close(promise: nil)  // the client left while we connected
+                        return
+                    }
+                    sniffer.state = .done
+                    upstream.writeAndFlush(upstream.allocator.buffer(bytes: sniffer.pending), promise: nil)
                     sniffer.pending = []
-                    upstream.writeAndFlush(buffer, promise: nil)
+                    do {
+                        let relay = RelayHandler(peer: upstream)
+                        try context.pipeline.syncOperations.addHandler(relay, position: .after(sniffer))
+                        context.pipeline.removeHandler(context: context, promise: nil)
+                    } catch {
+                        upstream.close(promise: nil)
+                        context.close(promise: nil)
+                    }
                 case .failure:
                     context.close(promise: nil)
                 }
@@ -301,7 +304,10 @@ final class TunnelSniffer: ChannelInboundHandler, RemovableChannelHandler {
     }
 }
 
-/// Copies bytes from an upstream connection to the client and closes the client when it ends.
+/// One side of a pass-through splice (PRX-007): copies the bytes read here to `peer`, closes `peer`
+/// when this side ends, and stops `peer` reading while this side can't take more writes — so a fast
+/// sender and a slow receiver can't grow the proxy's buffers without bound. Both channels share an
+/// event loop.
 final class RelayHandler: ChannelInboundHandler {
     typealias InboundIn = ByteBuffer
     private let peer: any Channel
@@ -312,6 +318,11 @@ final class RelayHandler: ChannelInboundHandler {
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         peer.writeAndFlush(unwrapInboundIn(data), promise: nil)
+    }
+
+    func channelWritabilityChanged(context: ChannelHandlerContext) {
+        peer.setOption(ChannelOptions.autoRead, value: context.channel.isWritable).whenComplete { _ in }
+        context.fireChannelWritabilityChanged()
     }
 
     func channelInactive(context: ChannelHandlerContext) {

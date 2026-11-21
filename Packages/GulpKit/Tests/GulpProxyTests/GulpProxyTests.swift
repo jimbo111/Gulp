@@ -379,6 +379,29 @@ struct TunnelTests {
         await origin.stop()
     }
 
+    @Test("PRX-007: a pass-through tunnel stops reading the server while the client isn't reading")
+    func test_PRX007_passThroughBackpressure() async throws {
+        let size = 64 << 20  // far more than the socket buffers along the way can hold
+        let blaster = try await Blaster.start(bytes: size)
+        let (proxy, port, _) = try await Self.interceptingProxy(recorder: Recorded(), passThrough: ["*"])
+        // A client that never reads: the proxy must not buffer the server's 64 MB for it.
+        let client = try await ClientBootstrap(group: MultiThreadedEventLoopGroup.singleton)
+            .channelOption(ChannelOptions.autoRead, value: false)
+            .connect(host: "127.0.0.1", port: port).get()
+        // CONNECT, then a minimal ClientHello (no SNI) so the sniffer picks pass-through.
+        let body: [UInt8] = [3, 3] + Array(repeating: 7, count: 32) + [0, 0, 2, 0x13, 0x01, 1, 0, 0, 0]
+        let hello: [UInt8] = [0x16, 3, 1, 0, UInt8(body.count + 4), 1, 0, 0, UInt8(body.count)] + body
+        let connect = Array("CONNECT 127.0.0.1:\(blaster.port) HTTP/1.1\r\nHost: x\r\n\r\n".utf8)
+        try await client.writeAndFlush(client.allocator.buffer(bytes: connect + hello))
+        for _ in 0..<100 where blaster.sent == 0 { try await Task.sleep(for: .milliseconds(10)) }
+        try await Task.sleep(for: .seconds(1))
+        #expect(blaster.sent > 0)  // the splice is up
+        #expect(blaster.sent < size)  // the server is held back instead of the proxy buffering it all
+        try await client.close()
+        await proxy.stopAll()
+        await blaster.stop()
+    }
+
     @Test("F01 §5: plain HTTP inside a CONNECT tunnel is proxied and recorded")
     func test_plainHTTPInTunnel() async throws {
         let origin = try await Origin.start(reply: okReply)
@@ -518,5 +541,57 @@ struct ProxyHTTP2Tests {
         await client.shutdown()
         await proxy.stopAll()
         await origin.stop()
+    }
+}
+
+/// A server that writes `bytes` to each connection as fast as the connection takes them, in 1 MB
+/// writes, counting what the socket accepted.
+final class Blaster: Sendable {
+    let channel: any Channel
+    private let written: NIOLockedValueBox<Int>
+
+    private init(channel: any Channel, written: NIOLockedValueBox<Int>) {
+        self.channel = channel
+        self.written = written
+    }
+
+    var port: Int { channel.localAddress?.port ?? 0 }
+    var sent: Int { written.withLockedValue { $0 } }
+
+    static func start(bytes: Int) async throws -> Blaster {
+        let written = NIOLockedValueBox(0)
+        let channel = try await ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton)
+            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .childChannelInitializer { channel in
+                channel.eventLoop.makeCompletedFuture {
+                    try channel.pipeline.syncOperations.addHandler(
+                        BlastHandler(bytes: bytes, written: written))
+                }
+            }
+            .bind(host: "127.0.0.1", port: 0).get()
+        return Blaster(channel: channel, written: written)
+    }
+
+    func stop() async { try? await channel.close().get() }
+}
+
+final class BlastHandler: ChannelInboundHandler {
+    typealias InboundIn = ByteBuffer
+    private let bytes: Int
+    private let written: NIOLockedValueBox<Int>
+
+    init(bytes: Int, written: NIOLockedValueBox<Int>) {
+        self.bytes = bytes
+        self.written = written
+    }
+
+    func channelActive(context: ChannelHandlerContext) {
+        let chunk = 1 << 20
+        let written = self.written
+        for _ in 0..<(bytes / chunk) {
+            let buffer = context.channel.allocator.buffer(repeating: 0x41, count: chunk)
+            context.channel.writeAndFlush(buffer).whenSuccess { written.withLockedValue { $0 += chunk } }
+        }
+        context.fireChannelActive()
     }
 }
