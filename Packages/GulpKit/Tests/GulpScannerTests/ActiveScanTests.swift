@@ -300,15 +300,26 @@ func post(_ target: String, type: String, body: String) -> RawRequest {
     return RawRequest(Bytes(Array((head.joined(separator: "\r\n") + "\r\n\r\n" + body).utf8)))
 }
 
-/// Run a scan of `requests` against `app`; returns the findings and the summary.
+/// The request-targets a test's fake sender received.
+final class SentPaths: @unchecked Sendable {
+    // @unchecked: `paths` is only touched while holding `lock`.
+    private let lock = NSLock()
+    private var paths: [String] = []
+    func add(_ path: String) { lock.withLock { paths.append(path) } }
+    var all: [String] { lock.withLock { paths } }
+}
+
+/// Run a scan of `requests` against `app`; returns the findings and the summary. `sent`, when
+/// given, records the request-target of every probe that reached the app.
 func scan(
-    _ requests: [RawRequest], app: FakeApp, config: ScanConfig = .preset(.balanced),
+    _ requests: [RawRequest], app: FakeApp, config: ScanConfig = .preset(.balanced), sent: SentPaths? = nil,
     inScope: @escaping @Sendable (HTTPTarget, String) async -> Bool = { _, _ in true }
 ) async -> (findings: [IssueFinding], summary: ScanSummary?) {
     let target = HTTPTarget(scheme: .http, host: "app.test")
     let scan = ActiveScan(
         requests: requests.map { ($0, target) }, config: config,
         send: { request, _ in
+            sent?.add(request.bytes[request.parsed.target].string())
             let (response, seconds) = await app.respond(request)
             return Probe(request: request, response: response, exchangeID: 0, seconds: seconds)
         }, inScope: inScope, oast: app.oast)
@@ -550,10 +561,50 @@ struct ActiveScanTests {
 
     @Test("SCN-012 / CLAUDE.md scope safety: out-of-scope requests are never sent")
     func test_SCN012_outOfScopeSkipped() async {
+        let sent = SentPaths()
         let (findings, summary) = await scan(
-            plantedRequests, app: FakeApp(), inScope: { _, path in path.hasPrefix("/tpl") })
-        #expect(summary?.outOfScope == plantedRequests.count - 1)
+            plantedRequests, app: FakeApp(), sent: sent, inScope: { _, path in path.hasPrefix("/tpl") })
+        #expect((summary?.outOfScope ?? 0) > 0)
         #expect(Set(findings.map(\.path)) == ["/tpl"])
+        #expect(!sent.all.isEmpty && sent.all.allSatisfy { $0.hasPrefix("/tpl") })
+    }
+
+    @Test("SCN-012 / TGT-023: scope is checked per probe at send time — a narrowed scope stops the scan")
+    func test_SCN012_scopeCheckedAtSendTime() async {
+        let sent = SentPaths()
+        let open = SentPaths()  // non-empty once the scope is "narrowed"
+        let (_, summary) = await scan(
+            [get("/tpl?name=bob")], app: FakeApp(), sent: sent,
+            inScope: { _, _ in
+                defer { open.add("narrowed") }
+                return open.all.isEmpty
+            })
+        #expect(sent.all.count == 1, "only the probe sent before the scope narrowed went out")
+        #expect((summary?.outOfScope ?? 0) > 0)
+    }
+
+    @Test("SCN-012: a probe that changes the path (cache deception) is checked against its own path")
+    func test_SCN012_retargetedProbeChecked() async {
+        let sent = SentPaths()
+        let target = HTTPTarget(scheme: .http, host: "app.test")
+        let scan = ActiveScan(
+            requests: [(get("/account"), target)], config: .preset(.light),
+            checks: [CacheDeceptionCheck()],
+            send: { request, _ in
+                sent.add(request.bytes[request.parsed.target].string())
+                let body = "Welcome back, alice"
+                let response = RawResponse(
+                    Bytes(
+                        "HTTP/1.1 200 OK\r\nCache-Control: public, max-age=60\r\nContent-Length: \(body.utf8.count)\r\n\r\n\(body)"
+                    ))
+                return Probe(request: request, response: response, exchangeID: 0, seconds: 0)
+            }, inScope: { _, path in path == "/account" })
+        var findings: [IssueFinding] = []
+        for await event in await scan.start() {
+            if case .finding(let finding) = event { findings.append(finding) }
+        }
+        #expect(sent.all == ["/account"], "the /account/x.css-style probes are out of scope")
+        #expect(findings.isEmpty)
     }
 
     @Test("SCN-038: the per-point budget caps probes")

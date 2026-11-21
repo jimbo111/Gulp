@@ -94,8 +94,35 @@ struct ScopeTests {
         let other = HTTPTarget(scheme: .https, host: "other.com", port: 443)
         await #expect(throws: OutOfScope.self) { try await guardian.require(other, path: "/") }
         try await guardian.require(other, path: "/", override: true)
+    }
+
+    @Test(
+        "TGT-023: \"don't ask again for this host\" silences manual sends only; active tools keep the rules")
+    func test_TGT023_allowedHostDoesNotWidenActiveTools() async throws {
+        let guardian = ScopeGuard(
+            ScopeService(rules: [
+                ScopeRule(host: "example.com"),
+                ScopeRule(kind: .exclude, host: "example.com", path: "^/logout"),
+            ]))
+        let other = HTTPTarget(scheme: .https, host: "other.com", port: 443)
         await guardian.allowWithoutAsking(host: "OTHER.com")
-        #expect(await guardian.permits(other, path: "/x"))
+        await guardian.allowWithoutAsking(host: "example.com")
+        #expect(await guardian.permitsManualSend(other, path: "/x"))
+        #expect(await guardian.permitsManualSend(https, path: "/logout"))
+        #expect(!(await guardian.permits(other, path: "/x")))
+        #expect(!(await guardian.permits(https, path: "/logout")))
+        await #expect(throws: OutOfScope.self) { try await guardian.require(https, path: "/logout") }
+    }
+
+    @Test("requestPath: path and query of a raw request, as isInScope takes it")
+    func test_TGT020_requestPathOfRequest() {
+        func path(_ line: String) -> String {
+            ScopeService.requestPath(
+                of: RawRequest(Bytes("GET \(line) HTTP/1.1\r\nHost: x\r\n\r\n")), target: http)
+        }
+        #expect(path("/a/b?c=d") == "/a/b?c=d")
+        #expect(path("/") == "/")
+        #expect(path("/a") == "/a")
     }
 
     @Test("requestPath: path and query of a URL, as isInScope takes it")

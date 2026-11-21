@@ -19,6 +19,8 @@ struct GraphQLCommand: AsyncParsableCommand {
             abstract: "Introspect an endpoint and print its schema.")
         @Option(help: "Project file (created if missing).") var project: String
         @Option(help: "Endpoint URL, e.g. http://127.0.0.1:8088/graphql.") var url: String
+        @Flag(help: "Send even when the endpoint is out of scope (explicit override).")
+        var allowOutOfScope = false
 
         func run() async throws {
             guard let target = HTTPTarget(url: url), let parsed = URL(string: url) else {
@@ -26,7 +28,8 @@ struct GraphQLCommand: AsyncParsableCommand {
             }
             let path = parsed.path.isEmpty ? "/graphql" : parsed.path
             let session = try await ProjectSession.open(at: URL(fileURLWithPath: project))
-            let result = await session.introspectGraphQL(path: path, target: target)
+            let result = try await session.introspectGraphQL(
+                path: path, target: target, allowOutOfScope: allowOutOfScope)
             if let schema = result.schema {
                 print("graphql: introspection ENABLED")
                 print(schema.render())
@@ -46,6 +49,8 @@ struct GraphQLCommand: AsyncParsableCommand {
         var probe: String?
         @Option(help: "A marker whose presence in the probe's response proves the authz bug (e.g. an email).")
         var marker: String?
+        @Flag(help: "Scan even when the endpoint is out of scope (explicit override).")
+        var allowOutOfScope = false
 
         func run() async throws {
             guard let target = HTTPTarget(url: url), let parsed = URL(string: url) else {
@@ -55,7 +60,8 @@ struct GraphQLCommand: AsyncParsableCommand {
             let session = try await ProjectSession.open(at: URL(fileURLWithPath: project))
             let probeRequest = probe.map { GraphQLRequest(query: $0) }
             let raised = try await session.scanGraphQL(
-                path: path, target: target, authzProbe: probeRequest, sensitiveMarker: marker)
+                path: path, target: target, authzProbe: probeRequest, sensitiveMarker: marker,
+                allowOutOfScope: allowOutOfScope)
             print("graphql: \(raised.count) issue(s) raised")
             for issue in try await session.store.issues() where issue.typeID.hasPrefix("graphql.") {
                 print("  \(issue.typeID)\t\(issue.host)\(issue.path)")
