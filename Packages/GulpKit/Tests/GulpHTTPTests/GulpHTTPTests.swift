@@ -310,6 +310,17 @@ struct EngineTests {
         await server.stop()
     }
 
+    @Test("HTTP-008: Update Content-Length never adds one to a Transfer-Encoding request (RFC 9112 §6.2)")
+    func test_HTTP008_noLengthBesideTransferEncoding() {
+        let chunked = RawRequest(
+            Bytes("POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\n"))
+        #expect(chunked.updatingContentLength() == chunked)
+        // A Content-Length the user wrote next to it is still theirs to have fixed (smuggling tests).
+        let both = RawRequest(
+            Bytes("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\nContent-Length: 1\r\n\r\n0\r\n\r\n"))
+        #expect(both.updatingContentLength().headerValue("content-length")?.string() == "5")
+    }
+
     // MARK: HTTP-009
 
     @Test("HTTP-009: cancelling the task closes the connection and records .cancelled")
