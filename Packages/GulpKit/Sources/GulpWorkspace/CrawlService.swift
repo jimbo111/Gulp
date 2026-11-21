@@ -44,7 +44,7 @@ extension ProjectSession {
             ActiveTask(
                 id: taskID, kind: "crawler", name: config.seeds.first ?? "crawl",
                 pause: { await crawler.pause() },
-                resume: { await crawler.resume() }))
+                resume: { await crawler.resume() }, cancel: { await crawler.cancel() }))
         let writer = store.writer
         Task {
             for await event in source {

@@ -88,7 +88,7 @@ extension ProjectSession {
         await tasks.add(
             ActiveTask(
                 id: taskID, kind: "scanner", name: name, pause: { await scan.pause() },
-                resume: { await scan.resume() }))
+                resume: { await scan.resume() }, cancel: { await scan.cancel() }))
         let current = currentStore
         let eventBus = events_
         Task {

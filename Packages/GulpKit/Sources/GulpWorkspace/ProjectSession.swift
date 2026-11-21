@@ -536,9 +536,10 @@ public actor ProjectSession {
         if let notes { try await store.setMeta("notes", notes) }
     }
 
-    /// Stop the proxy, flush everything and close the file. A temporary project is deleted unless
-    /// `keepTemporary` (PRJ-001: "prompt to save on close (or discard)").
+    /// Stop active tools and the proxy, flush everything and close the file. A temporary project is
+    /// deleted unless `keepTemporary` (PRJ-001: "prompt to save on close (or discard)").
     public func close(keepTemporary: Bool = false) async throws {
+        await activeTasks.cancelAll()  // scans, attacks, crawls: stopped and their results written
         let tasks = backgroundTasks
         backgroundTasks = []
         for task in tasks { task.cancel() }

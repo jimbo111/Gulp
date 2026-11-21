@@ -43,7 +43,9 @@ extension ProjectSession {
         let tasks = activeTasks
         let taskID = UUID()
         await tasks.add(
-            ActiveTask(id: taskID, kind: "discovery", name: config.baseURL, pause: {}, resume: {}))
+            ActiveTask(
+                id: taskID, kind: "discovery", name: config.baseURL, pause: {}, resume: {},
+                cancel: { await discovery.cancel() }))
         Task {
             for await event in source {
                 if case .found(var found) = event {

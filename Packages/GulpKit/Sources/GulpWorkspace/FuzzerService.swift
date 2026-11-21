@@ -49,7 +49,7 @@ extension ProjectSession {
         await tasks.add(
             ActiveTask(
                 id: taskID, kind: "fuzzer", name: config.name, pause: { await attack.pause() },
-                resume: { await attack.resume() }))
+                resume: { await attack.resume() }, cancel: { await attack.cancel() }))
         Task {
             var pending: [FuzzerResultRow] = []
             var lastFlush = ContinuousClock.now

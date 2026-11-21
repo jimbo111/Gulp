@@ -57,4 +57,17 @@ struct SessionLifecycleTests {
         #expect(try await session.attackResults(run.id).count == 3)
         try await session.close()
     }
+
+    @Test("GOV-001: close() cancels running active tools and waits for them before shutting down")
+    func test_GOV001_closeCancelsActiveTasks() async throws {
+        let environment = isolatedEnvironment()
+        let session = try await open(environment, "close-running")
+        await session.panicStop()  // the attack can't finish on its own
+        let run = try await session.startAttack(Self.refusedAttack(), allowOutOfScope: true)
+        try await session.close()
+        try #require(await session.activeTasks.all.isEmpty, "close() returned with a tool still running")
+        var summary: FuzzSummary?
+        for await event in run.events { if case .finished(let done) = event { summary = done } }
+        #expect(summary?.stopReason == "cancelled")
+    }
 }
