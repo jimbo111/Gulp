@@ -48,7 +48,8 @@ final class GulpAppUITests: XCTestCase {
 
     func test_M0_appLaunchesAndShowsSidebar() throws {
         app.launch()
-        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 10))
+        // 20 s like the tests below: the first test of a run is a cold launch.
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 20))
         // The sidebar lists the tools; Repeater is a stable anchor.
         let repeater = app.staticTexts["sidebar.repeater"]
         XCTAssertTrue(repeater.waitForExistence(timeout: 15))
@@ -88,7 +89,10 @@ final class GulpAppUITests: XCTestCase {
         let target = app.textFields["repeater.target"]
         XCTAssertTrue(target.waitForExistence(timeout: 10))
         target.click()
-        target.typeKey("a", modifierFlags: .command)
+        // Clear with keys an input method cannot take over (⌘A is lost under, e.g., Korean 2-Set).
+        target.typeKey(.rightArrow, modifierFlags: .command)
+        let old = (target.value as? String)?.count ?? 0
+        target.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old))
         target.typeText("http://127.0.0.1:\(port)\r")
         XCTAssertEqual(target.value as? String, "http://127.0.0.1:\(port)")
         app.buttons["repeater.send"].click()
