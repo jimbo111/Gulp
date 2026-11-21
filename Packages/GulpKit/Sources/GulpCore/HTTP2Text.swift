@@ -217,36 +217,18 @@ public enum HTTP2Text {
         return start < all.count ? Array(all[start...]) : []
     }
 
-    /// Walk a chunked body: the concatenated data and the trailer fields. Nil if malformed.
+    /// A complete chunked body's data and trailer fields (via `HTTP1.walkChunked`); nil when the
+    /// body is malformed or truncated.
     static func walkChunked(_ a: [UInt8], from start: Int) -> (body: [UInt8], trailers: [H2Header])? {
         var body: [UInt8] = []
-        var i = start
-        while true {
-            guard let lf = HTTP1.firstLF(a, from: i) else { return nil }
-            var sizeEnd = (lf > i && a[lf - 1] == 0x0D) ? lf - 1 : lf
-            sizeEnd = a[i..<sizeEnd].firstIndex(of: 0x3B) ?? sizeEnd  // ';' chunk extension
-            guard let size = HTTP1.hexValue(a, i..<sizeEnd) else { return nil }
-            i = lf + 1
-            if size == 0 { break }
-            guard i + size <= a.count else { return nil }
-            body += a[i..<(i + size)]
-            i += size
-            if i < a.count, a[i] == 0x0D { i += 1 }
-            guard i < a.count, a[i] == 0x0A else { return nil }
-            i += 1
-        }
         var trailers: [H2Header] = []
-        while let lf = HTTP1.firstLF(a, from: i) {
-            let lineEnd = (lf > i && a[lf - 1] == 0x0D) ? lf - 1 : lf
-            if lineEnd == i { break }
-            let line = String(decoding: a[i..<lineEnd], as: UTF8.self)
-            if let colon = line.firstIndex(of: ":") {
-                let name = line[..<colon].lowercased()
-                let value = line[line.index(after: colon)...].trimmingASCIIWhitespace
-                trailers.append(H2Header(name, value))
-            }
-            i = lf + 1
+        let scan = HTTP1.walkChunked(a, from: start, data: { body += a[$0] }) { line in
+            let text = String(decoding: a[line], as: UTF8.self)
+            guard let colon = text.firstIndex(of: ":") else { return }
+            let value = text[text.index(after: colon)...].trimmingASCIIWhitespace
+            trailers.append(H2Header(text[..<colon].lowercased(), value))
         }
+        guard case .complete = scan else { return nil }
         return (body, trailers)
     }
 

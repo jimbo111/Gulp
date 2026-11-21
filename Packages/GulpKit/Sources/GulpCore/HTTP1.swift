@@ -425,11 +425,16 @@ public enum HTTP1 {
         if framing == .contentLength, let cl = contentLength {
             incomplete = (a.count - end) < cl
         }
+        // De-chunked view (HTTP-002): only when the chunked body is complete.
+        var dechunked: Bytes?
         if framing == .chunked {
-            incomplete = chunkedBodyEnd(a, from: end) == nil
+            var payload: [UInt8] = []
+            if case .complete = walkChunked(a, from: end, data: { payload += a[$0] }) {
+                dechunked = Bytes(payload)
+            } else {
+                incomplete = true
+            }
         }
-        // De-chunked view (HTTP-002): only when framed as chunked and the terminal chunk is present.
-        let dechunked: Bytes? = (framing == .chunked && !incomplete) ? dechunk(a, from: end) : nil
 
         return ParsedResponse(
             version: version, statusCode: status, reasonPhrase: reason, headers: fields,
@@ -518,25 +523,45 @@ public enum HTTP1 {
     /// body line that happens to read `0` is never mistaken for the last chunk. Resumable: pass a
     /// previous `.needMore(resumeAt:)` as `start` so repeated scans of a growing buffer stay linear.
     public static func scanChunked(_ a: [UInt8], from start: Int) -> ChunkScan {
+        walkChunked(a, from: start)
+    }
+
+    /// Index just past the end of a complete chunked body starting at `start`, or nil when more bytes
+    /// are needed or the framing is malformed (see `scanChunked`).
+    public static func chunkedBodyEnd(_ a: [UInt8], from start: Int) -> Int? {
+        if case .complete(let end) = scanChunked(a, from: start) { return end }
+        return nil
+    }
+
+    /// The one chunked-body walker (RFC 9112 §7.1): `scanChunked`, the de-chunked views and the SSE
+    /// timeline all read chunked framing through it, so they never disagree about where a body ends.
+    /// `data` receives each chunk's payload range in `a` — including what has arrived of a truncated
+    /// last chunk — and `trailer` each trailer field line (line ending excluded), in order.
+    public static func walkChunked(
+        _ a: [UInt8], from start: Int, data: (Range<Int>) -> Void = { _ in },
+        trailer: (Range<Int>) -> Void = { _ in }
+    ) -> ChunkScan {
         var i = start
         while true {
             let chunkStart = i
             guard let lf = firstLF(a, from: i) else { return .needMore(resumeAt: chunkStart) }
-            var sizeEnd = (lf > i && a[lf - 1] == CR) ? lf - 1 : lf
-            sizeEnd = a[i..<sizeEnd].firstIndex(of: SEMI) ?? sizeEnd  // ';' starts a chunk extension
-            while sizeEnd > i, a[sizeEnd - 1] == SP || a[sizeEnd - 1] == HT { sizeEnd -= 1 }
-            guard let size = hexValue(a, i..<sizeEnd) else { return .malformed }
+            guard let size = chunkSize(a, line: i..<lf) else { return .malformed }
             i = lf + 1
             if size == 0 {
                 // Trailer section: field lines until an empty line (CRLF or bare LF).
                 while true {
                     guard let tlf = firstLF(a, from: i) else { return .needMore(resumeAt: chunkStart) }
-                    let isEmptyLine = tlf == i || (tlf == i + 1 && a[i] == CR)
+                    let lineEnd = (tlf > i && a[tlf - 1] == CR) ? tlf - 1 : tlf
+                    if lineEnd == i { return .complete(end: tlf + 1) }
+                    trailer(i..<lineEnd)
                     i = tlf + 1
-                    if isEmptyLine { return .complete(end: i) }
                 }
             }
-            guard i + size <= a.count else { return .needMore(resumeAt: chunkStart) }
+            guard i + size <= a.count else {
+                if i < a.count { data(i..<a.count) }
+                return .needMore(resumeAt: chunkStart)
+            }
+            data(i..<i + size)
             i += size
             if i < a.count, a[i] == CR { i += 1 }
             guard i < a.count else { return .needMore(resumeAt: chunkStart) }
@@ -545,11 +570,15 @@ public enum HTTP1 {
         }
     }
 
-    /// Index just past the end of a complete chunked body starting at `start`, or nil when more bytes
-    /// are needed or the framing is malformed (see `scanChunked`).
-    public static func chunkedBodyEnd(_ a: [UInt8], from start: Int) -> Int? {
-        if case .complete(let end) = scanChunked(a, from: start) { return end }
-        return nil
+    /// The size on the chunk-size line `a[line]` (its LF excluded): hex digits, optional whitespace
+    /// (BWS, RFC 9112 §7.1.1), an optional `;chunk-extension`, an optional CR. Nil when malformed —
+    /// a sign, a `0x` prefix or leading whitespace is not a chunk size.
+    static func chunkSize(_ a: [UInt8], line: Range<Int>) -> Int? {
+        var end = line.upperBound
+        if end > line.lowerBound, a[end - 1] == CR { end -= 1 }
+        end = a[line.lowerBound..<end].firstIndex(of: SEMI) ?? end
+        while end > line.lowerBound, a[end - 1] == SP || a[end - 1] == HT { end -= 1 }
+        return hexValue(a, line.lowerBound..<end)
     }
 
     /// Index of the first LF at or after `from`, if any.
@@ -562,39 +591,10 @@ public enum HTTP1 {
         return nil
     }
 
-    /// Decode a complete chunked body `[start, a.count)` into its payload bytes. Returns nil if the
-    /// framing is malformed or truncated. Chunk extensions (`;name=value`) and the trailer are ignored.
-    static func dechunk(_ a: [UInt8], from start: Int) -> Bytes? {
-        var out: [UInt8] = []
-        var i = start
-        while i < a.count {
-            // chunk-size line: hex digits up to ';' or CRLF
-            let lineStart = i
-            while i < a.count, a[i] != LF { i += 1 }
-            guard i < a.count else { return nil }  // no LF terminating the size line
-            let lineEnd = (i > lineStart && a[i - 1] == CR) ? i - 1 : i
-            let hexEnd = a[lineStart..<lineEnd].firstIndex(of: SEMI) ?? lineEnd  // ';' = chunk-ext
-            guard let size = hexValue(a, lineStart..<hexEnd) else { return nil }
-            i += 1  // step past LF
-            if size == 0 { return Bytes(out) }  // terminal chunk; ignore trailer
-            guard i + size <= a.count else { return nil }  // truncated chunk data
-            out.append(contentsOf: a[i..<i + size])
-            i += size
-            // chunk data is followed by CRLF
-            if i < a.count, a[i] == CR { i += 1 }
-            if i < a.count, a[i] == LF {
-                i += 1
-            } else {
-                return nil
-            }
-        }
-        return nil  // ran out before the terminal chunk
-    }
-
     /// Parse an ASCII hex integer over `a[range]` (no "0x"); nil if empty or a non-hex byte appears.
     static func hexValue(_ a: [UInt8], _ range: Range<Int>) -> Int? {
         // At most 15 hex digits (< 2^60), so the value can neither overflow nor wrap negative —
-        // a negative size would otherwise make `dechunk` slice backwards and trap.
+        // a negative size would otherwise make a chunk walker slice backwards and trap.
         if range.isEmpty || range.count > 15 { return nil }
         var v = 0
         for idx in range {
