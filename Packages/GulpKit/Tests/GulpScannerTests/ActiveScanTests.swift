@@ -130,8 +130,8 @@ struct FakeApp: Sendable {
             let alg = (headerJSON?["alg"] as? String ?? "").lowercased()
             let valid =
                 safe
-                ? (alg == "hs256" && !segments.last!.isEmpty)
-                : (alg == "none" || (alg == "hs256" && !segments.last!.isEmpty))
+                ? (alg == "hs256" && segments.last == "c2ln")
+                : (alg == "none" || (alg == "hs256" && segments.last == "c2ln"))
             return (
                 valid
                     ? Self.text("{\"user\":\"alice\"}")

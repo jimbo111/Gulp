@@ -208,9 +208,11 @@ struct HostHeaderCheck: ActiveCheck {
     }
 }
 
-/// JWT verification: when a request carries a Bearer JWT that authenticates it, re-send it with the
-/// signature removed (`alg: none`) or re-signed with a guessable HMAC secret; if the server still
-/// treats the request as authenticated, it isn't verifying the signature. Reuses the JWT workbench.
+/// JWT verification: when a request carries a Bearer JWT that authenticates it, and the endpoint
+/// rejects the request without a token, re-send it with the signature corrupted and then removed
+/// (`alg: none`); if the server still treats the request as authenticated, it isn't verifying the
+/// signature. An HMAC token is also cracked offline against a few guessable secrets. Reuses the JWT
+/// workbench.
 struct JWTScanCheck: ActiveCheck {
     let id = "active.jwt"
     let family = "jwt"
@@ -225,19 +227,8 @@ struct JWTScanCheck: ActiveCheck {
         // The original request must currently succeed, so a forged one "still works" means something.
         let original = await context.send(context.base)
         guard let status = original.status, (200..<400).contains(status) else { return [] }
-
-        // alg:none — the signature is removed entirely.
-        for forgery in (try? JWTAttacks.algNone(jwt)) ?? [] {
-            let probe = await context.send(Self.replacingBearer(context.base, with: forgery.token))
-            if accepted(probe, like: original) {
-                return [
-                    context.finding(
-                        id, point: nil, variant: "alg:none",
-                        detail:
-                            "The server accepted a token with its signature removed (\(forgery.label)) and still treated the request as authenticated, so JWT signatures are not verified.",
-                        evidence: probe, confidence: .certain)
-                ]
-            }
+        if let forged = await forgedTokenFinding(jwt, token, original: original, context: context) {
+            return [forged]
         }
         // Weak HMAC secret — if a guessable secret verifies the token, it is forgeable.
         if jwt.algorithm.uppercased().hasPrefix("HS"),
@@ -252,6 +243,47 @@ struct JWTScanCheck: ActiveCheck {
             ]
         }
         return []
+    }
+
+    /// A forged token the server accepts, after two negative controls: the request without a token
+    /// must be rejected (else the endpoint ignores the token and no forgery proves anything), and so
+    /// must the token with its signature corrupted (else the signature isn't checked at all, reported
+    /// as such rather than as alg:none). Only then is an accepted `alg: none` token a finding.
+    func forgedTokenFinding(_ jwt: JWT, _ token: String, original: Probe, context: AuditContext) async
+        -> IssueFinding?
+    {
+        let missing = await context.send(Self.replacingBearer(context.base, with: ""))
+        guard !accepted(missing, like: original) else { return nil }
+        if let corruptedToken = Self.corruptingSignature(token) {
+            let corrupted = await context.send(Self.replacingBearer(context.base, with: corruptedToken))
+            if accepted(corrupted, like: original) {
+                return context.finding(
+                    id, point: nil, variant: "unverified signature",
+                    detail:
+                        "The server rejected the request without a token but accepted the token with its signature corrupted, so JWT signatures are not verified.",
+                    evidence: corrupted, confidence: .certain)
+            }
+        }
+        // alg:none — the signature is removed entirely.
+        for forgery in (try? JWTAttacks.algNone(jwt)) ?? [] {
+            let probe = await context.send(Self.replacingBearer(context.base, with: forgery.token))
+            if accepted(probe, like: original) {
+                return context.finding(
+                    id, point: nil, variant: "alg:none",
+                    detail:
+                        "The server rejected the request without a token and with a corrupted signature, but accepted a token with its signature removed (\(forgery.label)), so it honours `alg: none`.",
+                    evidence: probe, confidence: .certain)
+            }
+        }
+        return nil
+    }
+
+    /// `token` with the first character of its signature changed; nil for an unsigned token.
+    static func corruptingSignature(_ token: String) -> String? {
+        guard let dot = token.lastIndex(of: "."), let first = token[token.index(after: dot)...].first else {
+            return nil
+        }
+        return String(token[...dot]) + (first == "A" ? "B" : "A") + token[token.index(dot, offsetBy: 2)...]
     }
 
     /// Whether `probe` looks as authenticated as the original (same success, similar body).

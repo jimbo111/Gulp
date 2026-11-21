@@ -98,6 +98,23 @@ struct AccuracyApp: Sendable {
                 body = await state.cached(key) ?? page("app.test")
             }
             return (FakeApp.response(200, headers: ["Cache-Control: public, max-age=60"], body: body), 0.01)
+        case "/me", "/me-unverified":
+            // `/me` verifies the HS256 signature (the vulnerable twin also takes alg:none);
+            // `/me-unverified` takes any non-empty signature. Both reject a missing token.
+            let token = (request.headerValue("authorization")?.string() ?? "").replacingOccurrences(
+                of: "Bearer ", with: "")
+            let parts = token.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+            let header = parts.first.flatMap { Data(base64Encoded: FakeApp.pad($0)) }
+                .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let alg = (header?["alg"] as? String ?? "").lowercased()
+            let signed = derived.path == "/me" ? parts.last == "c2ln" : parts.last?.isEmpty == false
+            let valid = parts.count == 3 && (alg == "hs256" ? signed : alg == "none" && !safe)
+            return (
+                valid ? FakeApp.text(#"{"user":"alice"}"#) : FakeApp.response(401, headers: [], body: "no"),
+                0.01
+            )
+        case "/public":
+            return (FakeApp.text(#"{"news":[]}"#), 0.01)  // never looks at the token
         case let path where path.hasPrefix("/account"):
             // Private for the signed-in user; the vulnerable app lets a CDN cache it at a static-looking path.
             guard request.headerValue("cookie")?.string() == "s=1" else {
@@ -207,6 +224,34 @@ struct ScannerAccuracyTests {
             let quiet = await scanApp([get(path)], app: AccuracyApp())
             #expect(!quiet.contains { $0.typeID == "active.xss.reflected" }, "\(path): \(pairs(quiet))")
         }
+    }
+}
+
+@Suite("JWT check accuracy (F08 SCN-074)")
+struct JWTAccuracyTests {
+    /// `Bearer` header with an HS256 token for alice whose signature the fake app accepts (`c2ln`).
+    static let bearer: String = {
+        func b64(_ s: String) -> String {
+            Data(s.utf8).base64EncodedString().replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        }
+        return
+            "Authorization: Bearer \(b64(#"{"alg":"HS256","typ":"JWT"}"#)).\(b64(#"{"user":"alice"}"#)).c2ln"
+    }()
+
+    @Test("SCN-074: an endpoint that ignores the token is not an alg:none finding; real ones still are")
+    func test_SCN074_jwtNegativeControls() async {
+        let ignored = await scanApp([get("/public", extra: [Self.bearer])], app: AccuracyApp())
+        #expect(!ignored.contains { $0.typeID == "active.jwt" }, "\(pairs(ignored))")
+        let algNone = await scanApp([get("/me", extra: [Self.bearer])], app: AccuracyApp())
+        #expect(
+            algNone.contains { $0.typeID == "active.jwt" && $0.variant == "alg:none" }, "\(pairs(algNone))")
+        let safe = await scanApp([get("/me", extra: [Self.bearer])], app: AccuracyApp(safe: true))
+        #expect(!safe.contains { $0.typeID == "active.jwt" }, "\(pairs(safe))")
+        let unverified = await scanApp([get("/me-unverified", extra: [Self.bearer])], app: AccuracyApp())
+        #expect(
+            unverified.contains { $0.typeID == "active.jwt" && $0.variant == "unverified signature" },
+            "\(pairs(unverified))")
     }
 }
 
