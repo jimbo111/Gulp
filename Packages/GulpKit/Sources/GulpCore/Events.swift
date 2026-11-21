@@ -91,6 +91,9 @@ public enum GulpEvent: Sendable, Hashable {
     case exchangeRecorded(ExchangeID, source: ToolSource)
     case exchangeUpdated(ExchangeID)
     case interceptQueued(InterceptItemID)
+    /// A held item left the intercept queue: forwarded, dropped, or dropped because its client went
+    /// away (PRX-011).
+    case interceptDecided(InterceptItemID)
     case wsMessage(WSMessageID)
     /// A WebSocket connection opened or closed (its row id).
     case wsConnectionChanged(Int64)

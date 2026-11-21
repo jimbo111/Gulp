@@ -133,7 +133,8 @@ public actor InterceptQueue {
     private var nextID: InterceptItemID = 1
     private let events: EventBus?
 
-    /// A queue that announces held items on `events` (`interceptQueued`).
+    /// A queue that announces held and decided items on `events` (`interceptQueued`,
+    /// `interceptDecided`).
     public init(events: EventBus? = nil) {
         self.events = events
     }
@@ -200,11 +201,12 @@ public actor InterceptQueue {
         return (await hold(item), true)
     }
 
-    /// Decide a held item (Forward / Drop, PRX-011).
+    /// Decide a held item (Forward / Drop, PRX-011); announces `interceptDecided`.
     public func decide(_ id: InterceptItemID, _ decision: InterceptDecision) {
         guard let entry = held.removeValue(forKey: id) else { return }
         order.removeAll { $0 == id }
         entry.decide.resume(returning: decision)
+        if let events { Task { await events.publish(.interceptDecided(id)) } }
     }
 
     /// Forward all (or drop all) held items.

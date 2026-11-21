@@ -36,7 +36,11 @@ final class InterceptModel {
         listener = Task { [weak self] in
             for await delivery in await events.subscribe() {
                 guard let self else { return }
-                if case .interceptQueued = delivery.event { await self.refresh() }
+                switch delivery.event {
+                case .interceptQueued: await self.refresh()
+                case .interceptDecided(let id): self.removed(id)
+                default: break
+                }
             }
         }
         Task { await refresh() }
@@ -46,6 +50,12 @@ final class InterceptModel {
     func stop() { listener?.cancel() }
 
     var selected: InterceptItem? { items.first { $0.id == selectedID } }
+
+    /// A held item left the queue (decided here, or dropped when its client went away).
+    private func removed(_ id: InterceptItemID) {
+        items.removeAll { $0.id == id }
+        if selectedID == id { selectedID = items.first?.id }
+    }
 
     func refresh() async {
         items = await session.intercept.items
