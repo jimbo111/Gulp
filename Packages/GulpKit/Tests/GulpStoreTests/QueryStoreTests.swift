@@ -216,6 +216,27 @@ struct QueryStoreTests {
         try await store.close()
     }
 
+    @Test("HIS-050: an index rebuild covers the rows present when it started; newer rows are the writer's")
+    func test_HIS050_rebuildWhileRecording() async throws {
+        let store = try ProjectStore.open(at: temporaryProject())
+        let request = { (n: Int) in "GET /p\(n) HTTP/1.1\r\nHost: www.lab.test\r\n\r\n" }
+        for n in 0..<300 { _ = await store.writer.record(make("www.lab.test", request(n), ok("fine"))) }
+        await store.writer.flush()
+        let rebuild = Task { try await store.rebuildSearchIndex(batch: 1) }
+        // Record once the rebuild has emptied the index and is part-way through it.
+        var indexed = 300
+        for _ in 0..<10_000 where indexed == 0 || indexed == 300 {
+            indexed = try await store.pool.read { db in
+                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM fts_exchanges_docsize") ?? 0
+            }
+        }
+        let late = await store.writer.record(make("www.lab.test", request(1), ok("latecomer")))
+        await store.writer.flush()
+        #expect(try await rebuild.value == 300)
+        #expect(try await store.search(SearchQuery("latecomer")).hits.map(\.id) == [late])
+        try await store.close()
+    }
+
     @Test("HIS-052: the regex prefilter only uses literals every match must contain")
     func test_HIS052_longestLiteral() {
         #expect(SearchMatcher.longestLiteral(#"token=[a-f0-9]{32}"#) == "token=")
