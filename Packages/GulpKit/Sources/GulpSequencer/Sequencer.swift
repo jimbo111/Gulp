@@ -65,7 +65,8 @@ public enum Sequencer {
     public static let recommendedSamples = 100
 
     /// Analyze `tokens` and return the verdict, entropy estimate and the per-test results.
-    /// `alpha` is the significance level each test is judged at (default 0.01).
+    /// `alpha` is the family-wise significance level (default 0.01): each of the k tests is judged at
+    /// `alpha / k`, so a truly random source fails any test with probability at most `alpha`.
     public static func analyze(tokens rawTokens: [String], alpha: Double = 0.01) -> SequencerReport {
         let tokens = rawTokens.filter { !$0.isEmpty }
         let unique = Set(tokens).count

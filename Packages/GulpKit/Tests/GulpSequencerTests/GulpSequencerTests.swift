@@ -49,6 +49,25 @@ struct BatteryTests {
         }
     }
 
+    /// SEQ-005/009: alpha is family-wise, so each of the 8 tests is judged at alpha / 8. A test with
+    /// p = 0.009 (which a random source produces about 1% of the time per test) still passes.
+    @Test("SEQ-009: significance is family-wise (Bonferroni across the battery)")
+    func test_SEQ009_familywiseAlpha() {
+        var rng = SplitMix64(seed: 32)  // a stream with ApEn p ≈ 0.005: between alpha / 8 and alpha
+        var bits: [Bool] = []
+        while bits.count < 20_000 {
+            let v = rng.next()
+            for i in 0..<64 { bits.append((v >> i) & 1 == 1) }
+        }
+        let tests = Battery.all(bits: bits, symbols: [[0, 1]], alphabetSize: 2, alpha: 0.01, bitLevel: true)
+        #expect(tests.count == 8)
+        #expect(tests.contains { ($0.pValue ?? 1) < 0.01 && $0.passed }, "the borderline test must pass")
+        for test in tests {
+            guard let p = test.pValue else { continue }
+            #expect(test.passed == (p >= 0.01 / 8), "\(test.name): p=\(p)")
+        }
+    }
+
     /// SEQ acceptance 3: biased and structured streams fail the right tests.
     @Test("a biased (70% ones) stream fails the frequency tests")
     func biasedFails() {
