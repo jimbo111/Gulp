@@ -15,7 +15,9 @@ public struct Probe: Sendable {
     public var response: RawResponse?
     /// The recorded exchange (0 when not recorded).
     public var exchangeID: ExchangeID
-    /// Wall-clock seconds.
+    /// Seconds on the wire: from the end of the request write to the last response byte (HTTP-010's
+    /// `ttfbMs + downloadMs`). Limiter and throttle waits, backoff and connection setup are excluded,
+    /// so time-based checks measure the server; 0 when no response arrived.
     public var seconds: Double
     /// The network error, if any.
     public var error: String?

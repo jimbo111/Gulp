@@ -45,13 +45,14 @@ extension ProjectSession {
             var options = SendOptions(recordAs: .scanner)
             options.timeouts.total = .seconds(30)
             options.updateContentLength = false
-            let started = ContinuousClock.now
             let result = await engine.send(request, to: target, options: options)
-            let elapsed = ContinuousClock.now - started
+            // Wire time only (SCN-032): limiter/throttle waits, backoff and connection setup are
+            // not the server's response time, so time-based checks must not see them.
+            let timing = result.exchange.timing
             return Probe(
                 request: result.exchange.request, response: result.exchange.response,
                 exchangeID: result.exchange.id,
-                seconds: Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18,
+                seconds: ((timing.ttfbMs ?? 0) + (timing.downloadMs ?? 0)) / 1_000,
                 error: result.error?.code)
         }
     }

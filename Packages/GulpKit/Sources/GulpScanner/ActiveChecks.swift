@@ -247,16 +247,16 @@ struct SQLInjectionCheck: ActiveCheck {
             }
         }
         // Time based (dose-response).
-        // Numeric contexts first when the value looks numeric, then quoted ones; a template that
+        // Numeric contexts first when the value looks numeric, then quoted ones; a suffix that
         // doesn't delay costs one probe.
-        var templates = [
-            "\(v)' AND SLEEP(%d)-- -", "\(v)'||pg_sleep(%d)--", "\(v)'; WAITFOR DELAY '0:0:%d'--",
+        var suffixes: [(Int) -> String] = [
+            { "' AND SLEEP(\($0))-- -" }, { "'||pg_sleep(\($0))--" }, { "'; WAITFOR DELAY '0:0:\($0)'--" },
         ]
         if Int(v) != nil {
-            templates.insert(contentsOf: ["\(v) AND SLEEP(%d)", "\(v);SELECT pg_sleep(%d)--"], at: 0)
+            suffixes.insert(contentsOf: [{ " AND SLEEP(\($0))" }, { ";SELECT pg_sleep(\($0))--" }], at: 0)
         }
         if let proof = await DoseResponse.confirm(
-            templates: templates, point: point, baseline: baseline, context: context)
+            suffixes: suffixes, point: point, baseline: baseline, context: context)
         {
             findings.append(
                 context.finding(
@@ -282,25 +282,36 @@ struct SQLInjectionCheck: ActiveCheck {
     }
 }
 
-/// Dose-response timing (SCN-032, §3.4): the delay must scale with the injected value.
+/// Dose-response timing (SCN-032, §3.4): the delay must scale with the injected value. Each payload is
+/// the point's base value followed by `suffix(seconds)`, so user data never becomes a format string.
+/// Times are the probes' wire times (`Probe.seconds`), measured against the median of several baseline
+/// samples so one cold or jittery baseline request can neither hide nor fake a delay.
 enum DoseResponse {
     struct Proof {
         var probe: Probe
         var summary: String
     }
 
-    static func confirm(templates: [String], point: InsertionPoint, baseline: Baseline, context: AuditContext)
-        async -> Proof?
-    {
-        let base = baseline.original.seconds
-        for template in templates {
-            let two = await context.time(point.build(context.base, payload: String(format: template, 2)))
-            guard two.seconds - base >= 1.6 else { continue }
-            let one = await context.time(point.build(context.base, payload: String(format: template, 1)))
-            let four = await context.time(point.build(context.base, payload: String(format: template, 4)))
-            let d1 = one.seconds - base
-            let d2 = two.seconds - base
-            let d4 = four.seconds - base
+    static func confirm(
+        suffixes: [(Int) -> String], point: InsertionPoint, baseline: Baseline, context: AuditContext
+    ) async -> Proof? {
+        // Baseline samples: the original and canary probes, plus fresh sends of the unmodified request.
+        var samples = [baseline.original.seconds, baseline.canary.seconds]
+        for _ in 0..<max(1, context.timingSamples) {
+            samples.append(await context.send(context.base).seconds)
+        }
+        let base = samples.sorted()[samples.count / 2]
+        for suffix in suffixes {
+            func measure(_ seconds: Int) async -> (delay: Double, probe: Probe) {
+                let timed = await context.time(
+                    point.build(context.base, payload: point.baseValue + suffix(seconds)))
+                return (timed.seconds - base, timed.probe)
+            }
+            let two = await measure(2)
+            guard two.delay >= 1.6 else { continue }
+            let one = await measure(1)
+            let four = await measure(4)
+            let (d1, d2, d4) = (one.delay, two.delay, four.delay)
             // Each delay within 40 % of the requested one, and increasing with it.
             if abs(d1 - 1) <= 0.6, abs(d2 - 2) <= 0.8, abs(d4 - 4) <= 1.6, d1 < d2, d2 < d4 {
                 return Proof(
@@ -327,11 +338,12 @@ struct CommandInjectionCheck: ActiveCheck {
         guard let point, let baseline else { return [] }
         var findings: [IssueFinding] = []
         let v = point.baseValue
-        let templates = [
-            "\(v);sleep %d;", "\(v)|sleep %d", "\(v)$(sleep %d)", "\(v)`sleep %d`", "\(v)&&sleep %d",
+        let suffixes: [(Int) -> String] = [
+            { ";sleep \($0);" }, { "|sleep \($0)" }, { "$(sleep \($0))" }, { "`sleep \($0)`" },
+            { "&&sleep \($0)" },
         ]
         if let proof = await DoseResponse.confirm(
-            templates: templates, point: point, baseline: baseline, context: context)
+            suffixes: suffixes, point: point, baseline: baseline, context: context)
         {
             findings.append(
                 context.finding(
@@ -341,10 +353,12 @@ struct CommandInjectionCheck: ActiveCheck {
                     evidence: proof.probe))
         }
         if let oast = context.oast {
-            for template in ["\(v);nslookup %@;", "\(v)$(nslookup %@)", "\(v)|curl http://%@/"] {
+            let commands: [(String) -> String] = [
+                { ";nslookup \($0);" }, { "$(nslookup \($0))" }, { "|curl http://\($0)/" },
+            ]
+            for command in commands {
                 guard let host = await oast.mint(note: "cmd \(point.label)") else { break }
-                let probe = await context.send(
-                    point.build(context.base, payload: String(format: template, host)))
+                let probe = await context.send(point.build(context.base, payload: v + command(host)))
                 await context.expectOAST(
                     host,
                     context.finding(
