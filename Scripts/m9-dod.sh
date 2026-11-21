@@ -9,6 +9,7 @@
 # `gulp-cli repeater` and `gulp-cli fuzz` against VulnLab.
 # Usage: Scripts/m9-dod.sh   (SWIFTPM_FLAGS may carry extra swift-build flags, e.g. on Linux CI)
 set -euo pipefail
+TAB=$'\t'  # portable: BSD grep has no -P
 cd "$(dirname "$0")/.."
 PKG=Packages/GulpKit
 # shellcheck disable=SC2086
@@ -73,9 +74,9 @@ printf 'GET /account HTTP/1.1\r\nHost: 127.0.0.1:8088\r\n\r\n' > "$WORK/account.
 printf 'GET /echo?token=%sx%s HTTP/1.1\r\nHost: 127.0.0.1:8088\r\n\r\n' '§' '§' > "$WORK/echo.txt"
 "$GULP" fuzz --project "$PROJECT" --raw "$WORK/echo.txt" --target "$LAB" --set list:a,b,c > /dev/null
 "$GULP" coverage --project "$PROJECT" | tee "$WORK/coverage.txt"
-grep -qP '^observed\tin\tGET\thttp://127\.0\.0\.1:8088/xss/html\tproxy×1$' "$WORK/coverage.txt"
-grep -qP '^tested\tin\tGET\thttp://127\.0\.0\.1:8088/echo\tfuzzer×3 proxy×1$' "$WORK/coverage.txt"
-grep -qP '^tested\tin\tGET\thttp://127\.0\.0\.1:8088/account\trepeater×1$' "$WORK/coverage.txt"
+grep -qE "^observed${TAB}in${TAB}GET${TAB}http://127\.0\.0\.1:8088/xss/html${TAB}proxy×1$" "$WORK/coverage.txt"
+grep -qE "^tested${TAB}in${TAB}GET${TAB}http://127\.0\.0\.1:8088/echo${TAB}fuzzer×3 proxy×1$" "$WORK/coverage.txt"
+grep -qE "^tested${TAB}in${TAB}GET${TAB}http://127\.0\.0\.1:8088/account${TAB}repeater×1$" "$WORK/coverage.txt"
 "$GULP" coverage --project "$PROJECT" --untested > "$WORK/untested.txt"
 grep -q "/xss/html" "$WORK/untested.txt"
 if grep -q "/echo\|/account" "$WORK/untested.txt"; then echo "tested endpoints listed as untested" >&2; exit 1; fi
@@ -87,10 +88,10 @@ echo "PASS 3: coverage shows /xss/html observed (proxy), /echo tested (fuzzer×3
 ITEM=$(sed -n 's/^item \([0-9]*\):.*/\1/p' "$WORK/nb.txt")
 "$GULP" notebook note --project "$PROJECT" --title "Rate limits" --note "None on /login" > /dev/null
 "$GULP" notebook list --project "$PROJECT" --filter "status:confirmed tag:xss" > "$WORK/nblist.txt"
-grep -qP "^$ITEM\tconfirmed\texchange\t127\.0\.0\.1/xss/html\?q=gulpprobe42\tGET 127\.0\.0\.1/xss/html\t\[xss,p1\]$" \
+grep -qE "^$ITEM${TAB}confirmed${TAB}exchange${TAB}127\.0\.0\.1/xss/html\?q=gulpprobe42${TAB}GET 127\.0\.0\.1/xss/html${TAB}\[xss,p1\]$" \
   "$WORK/nblist.txt"
 [ "$(wc -l < "$WORK/nblist.txt")" -eq 1 ]
-"$GULP" coverage --project "$PROJECT" | grep -qP '^tested\tin\tGET\thttp://127\.0\.0\.1:8088/xss/html\tproxy×1 notebook×1$'
+"$GULP" coverage --project "$PROJECT" | grep -qE "^tested${TAB}in${TAB}GET${TAB}http://127\.0\.0\.1:8088/xss/html${TAB}proxy×1 notebook×1$"
 echo "PASS 4: Notebook item #$ITEM saved (confirmed, xss,p1), found by its filter, and counted in coverage"
 
 # 5. Search: a planted token in a request and its response, on a 100k-row project, in < 200 ms.
@@ -99,7 +100,7 @@ echo "PASS 4: Notebook item #$ITEM saved (confirmed, xss,p1), found by its filte
 grep -qE '^hits 1 \(index, examined 1\) in [0-9]+ ms$' "$WORK/search.txt"
 SMS=$(sed -n 's/^hits 1 (index, examined 1) in \([0-9]*\) ms$/\1/p' "$WORK/search.txt")
 [ "$SMS" -lt 200 ]
-grep -qP '\tproxy\t200\tQS\t127\.0\.0\.1/echo\?token=plantedneedle77\t' "$WORK/search.txt"
+grep -qE "${TAB}proxy${TAB}200${TAB}QS${TAB}127\.0\.0\.1/echo\?token=plantedneedle77${TAB}" "$WORK/search.txt"
 echo "PASS 5: search found the planted token in the request and the response among 100k rows in ${SMS} ms"
 
 echo "M9 DoD: PASS"

@@ -8,6 +8,7 @@
 # nothing else (so none on /safe/*); a second browse must add no issue.
 # Usage: Scripts/m10a-dod.sh   (SWIFTPM_FLAGS may carry extra swift-build flags, e.g. on Linux CI)
 set -euo pipefail
+TAB=$'\t'  # portable: BSD grep has no -P
 cd "$(dirname "$0")/.."
 PKG=Packages/GulpKit
 # shellcheck disable=SC2086
@@ -82,7 +83,7 @@ browse
 SECOND=$(sed -n 's/^issues: \([0-9]*\)$/\1/p' "$WORK/issues2.txt")
 [ "$FIRST" = "$SECOND" ]
 "$GULP" issues verify --project "$PROJECT" --manifest "$MANIFEST" > /dev/null
-grep -qP "\tpassive\.csp\.missing\thttp://127\.0\.0\.1:8088/headers/no-csp\t×2$" "$WORK/issues2.txt"
+grep -qE "${TAB}passive\.csp\.missing${TAB}http://127\.0\.0\.1:8088/headers/no-csp${TAB}×2$" "$WORK/issues2.txt"
 echo "PASS 2: a second browse added no issue ($SECOND), only evidence (×2)"
 
 # 3. Evidence markers point at the proof; SARIF export carries every issue.

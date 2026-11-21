@@ -16,6 +16,8 @@ swift build --package-path "$PKG" ${SWIFTPM_FLAGS:-} --product gulp-cli
 # shellcheck disable=SC2086
 BIN=$(swift build --package-path "$PKG" ${SWIFTPM_FLAGS:-} --show-bin-path)
 WORK=$(mktemp -d)
+# Isolated CA and secrets: never the user's Keychain (on macOS that blocks on an access prompt).
+export GULP_SUPPORT_DIR="$WORK/support"
 PROJECT="$WORK/m3a-dod.gulp"
 
 wait_port() {

@@ -67,7 +67,8 @@ kill -TERM "$PROXY"
 wait "$PROXY" || true
 PROXY=""
 "$GULP" history --project "$PROJECT" --last 10 > "$WORK/history.log"
-mapfile -t IDS < <(grep -E $'\thttps://localhost:8443/vulnlab.Echo/Say$' "$WORK/history.log" | cut -f1 | sort -n)
+IDS=()  # bash 3.2 (macOS) has no mapfile
+while read -r id; do IDS+=("$id"); done < <(grep -E $'\thttps://localhost:8443/vulnlab.Echo/Say$' "$WORK/history.log" | cut -f1 | sort -n)
 [ "${#IDS[@]}" -eq 3 ] || { cat "$WORK/history.log"; echo "expected 3 recorded calls" >&2; exit 1; }
 GRPC_ID=${IDS[0]}
 WEB_ID=${IDS[1]}
