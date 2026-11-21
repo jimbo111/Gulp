@@ -39,6 +39,7 @@ VULNLAB=$!
 trap 'kill $VULNLAB 2>/dev/null || true; rm -rf "$WORK"' EXIT
 wait_port 8088
 "$GULP" scope --project "$WORK/gql.gulp" --add "$LAB/" > /dev/null
+"$GULP" scope --project "$WORK/gql-safe.gulp" --add "$LAB/" > /dev/null  # the scan is an active tool
 
 # 1. Introspect and render the schema.
 "$GULP" graphql introspect --project "$WORK/gql.gulp" --url "$LAB/graphql" | tee "$WORK/schema.txt"

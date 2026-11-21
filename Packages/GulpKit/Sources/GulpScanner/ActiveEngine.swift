@@ -17,8 +17,12 @@ public struct Probe: Sendable {
     public var exchangeID: ExchangeID
     /// Wall-clock seconds.
     public var seconds: Double
-    /// The network error, if any.
+    /// The network error, if any (`Probe.outOfScope` when scope refused it, `budget` when the
+    /// request budget was spent).
     public var error: String?
+
+    /// The `error` of a probe that scope refused (never sent).
+    public static let outOfScope = "out_of_scope"
 
     /// A probe result.
     public init(
@@ -82,7 +86,8 @@ public struct AuditContext: Sendable {
     public let base: RawRequest
     /// Where it goes.
     public let target: HTTPTarget
-    /// Send a request (scope-checked, recorded, governed).
+    /// Send a request (scope-checked against its own target and path just before it goes out,
+    /// recorded, governed). A refused probe comes back with no response and `Probe.outOfScope`.
     public let send: @Sendable (RawRequest) async -> Probe
     /// OAST, when configured.
     public let oast: (any OASTProvider)?
@@ -292,7 +297,7 @@ public struct ScanSummary: Sendable, Hashable {
     public var findings: Int
     /// Probes sent.
     public var probes: Int
-    /// Requests skipped as out of scope.
+    /// Probes refused as out of scope (never sent).
     public var outOfScope: Int
     /// Seconds.
     public var seconds: Double
@@ -324,6 +329,8 @@ public actor ActiveScan {
     private var consolidatedOrder: [String] = []
     private var globalUsed = 0
     private var exhausted = false
+    private var refused = 0
+    private var refusedPaths: Set<String> = []
     private var task: Task<Void, Never>?
 
     /// A scan of `requests` with `checks` (default: every built-in check enabled by `config`). With
@@ -431,17 +438,19 @@ public actor ActiveScan {
 
     func addPending(_ host: String, _ finding: IssueFinding) { pendingOAST.append((host, finding)) }
 
+    /// Count a probe scope refused; log each refused location once.
+    func refuse(_ target: HTTPTarget, _ path: String, _ continuation: AsyncStream<ScanEvent>.Continuation) {
+        refused += 1
+        if refusedPaths.insert(target.host + path).inserted {
+            continuation.yield(.log("out of scope, not sent: \(target.host)\(path)"))
+        }
+    }
+
     func run(_ continuation: AsyncStream<ScanEvent>.Continuation, started: ContinuousClock.Instant) async {
-        var outOfScope = 0
+        // Scope is checked per probe, when it is sent (`audit`), so a probe that changes the path
+        // and a scope narrowed mid-scan are both enforced.
         var units: [(request: RawRequest, target: HTTPTarget, point: InsertionPoint?)] = []
         for (request, target) in requests {
-            let derived = DerivedFields(target: target, request: request, response: nil)
-            let path = (derived.path ?? "/") + (derived.query.map { "?" + $0 } ?? "")
-            guard await inScope(target, path) else {
-                outOfScope += 1
-                continuation.yield(.log("out of scope, not scanned: \(target.host)\(path)"))
-                continue
-            }
             if pointFilter == nil { units.append((request, target, nil)) }  // request-level checks
             for point in InsertionPoints.derive(request, policy: config.insertion)
             where pointFilter?(point) ?? true {
@@ -490,7 +499,7 @@ public actor ActiveScan {
         }
         let elapsed = ContinuousClock.now - started
         let summary = ScanSummary(
-            findings: perCheck.values.reduce(0, +), probes: probes, outOfScope: outOfScope,
+            findings: perCheck.values.reduce(0, +), probes: probes, outOfScope: refused,
             seconds: Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18,
             perCheck: perCheck,
             stopReason: cancelled ? "cancelled" : exhausted ? "budget" : "done")
@@ -504,10 +513,17 @@ public actor ActiveScan {
     ) async {
         let budget = Budget(limit: config.maxRequestsPerPoint)
         let sender = self.sender
+        let inScope = self.inScope
         let context = AuditContext(
             base: request, target: target,
             send: { probe in
                 await self.gate()
+                let path = ScopeService.requestPath(of: probe, target: target)
+                guard await inScope(target, path) else {
+                    await self.refuse(target, path, continuation)
+                    return Probe(
+                        request: probe, response: nil, exchangeID: 0, seconds: 0, error: Probe.outOfScope)
+                }
                 guard await self.takeGlobal(), await budget.take() else {
                     return Probe(request: probe, response: nil, exchangeID: 0, seconds: 0, error: "budget")
                 }
@@ -523,6 +539,7 @@ public actor ActiveScan {
         var baseline: Baseline?
         if let point {
             let original = await context.send(request)
+            guard original.error != Probe.outOfScope else { return }  // nothing to compare against
             let again = await context.send(request)
             let canaryValue = context.token(8)
             let canary = await context.send(point.build(request, payload: canaryValue))

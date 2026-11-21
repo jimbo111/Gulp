@@ -118,6 +118,29 @@ struct CrawlerTests {
         #expect(report.stopReason == "done")
     }
 
+    @Test("CRL-001: scope is checked when a URL is fetched, so a scope narrowed mid-crawl holds")
+    func test_CRL001_scopeCheckedAtFetch() async {
+        let site = FakeSite([
+            "/": .init(body: "<a href='/a'>a</a> <a href='/b'>b</a>"), "/a": .init(), "/b": .init(),
+        ])
+        // Both links are queued while in scope; fetching /a narrows the scope (e.g. the user adds an
+        // exclude rule), so the already-queued /b must not go out. One lane keeps the order fixed.
+        let narrowed = NIOLockedValueBox(false)
+        let crawler = Crawler(
+            config: CrawlConfig(seeds: ["http://lab/"], concurrency: 1, useRobotsAndSitemap: false),
+            send: { request, target in
+                if request.bytes[request.parsed.target].string() == "/a" {
+                    narrowed.withLockedValue { $0 = true }
+                }
+                return await site.sender(request, target)
+            }, inScope: { _, _ in !narrowed.withLockedValue { $0 } })
+        var report = CrawlReport()
+        for await event in await crawler.start() { if case .finished(let done) = event { report = done } }
+        #expect(site.requested == ["GET lab/", "GET lab/a"])
+        #expect(report.outOfScope == ["http://lab/b"])
+        #expect(report.pages.map(\.url) == ["http://lab/", "http://lab/a"])
+    }
+
     @Test(
         "CRL-004: \"submit forms\" posts the guestbook with filled values; obeying robots skips disallowed paths"
     )

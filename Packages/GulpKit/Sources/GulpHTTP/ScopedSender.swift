@@ -47,7 +47,7 @@ public struct ScopedSender: Sendable {
         async throws(OutOfScope)
         -> ExchangeResult
     {
-        let path = Self.path(of: request)
+        let path = ScopeService.requestPath(of: request, target: target)
         guard await permits(target, path: path) else { throw OutOfScope(target: target, path: path) }
         return await engine.send(request, to: target, options: options)
     }
@@ -56,7 +56,7 @@ public struct ScopedSender: Sendable {
     public func openWebSocket(_ upgrade: RawRequest, to target: HTTPTarget, options: SendOptions) async throws
         -> WebSocketSession
     {
-        let path = Self.path(of: upgrade)
+        let path = ScopeService.requestPath(of: upgrade, target: target)
         guard await permits(target, path: path) else { throw OutOfScope(target: target, path: path) }
         return try await engine.openWebSocket(upgrade, to: target, options: options)
     }
@@ -73,11 +73,4 @@ public struct ScopedSender: Sendable {
 
     /// Release the engine's connections.
     public func shutdown() async { await engine.shutdown() }
-
-    /// The request-target's path (without the query) — what scope rules match on.
-    static func path(of request: RawRequest) -> String {
-        let target = request.bytes[request.parsed.target].string()
-        let path = target.split(separator: "?", maxSplits: 1).first.map(String.init) ?? "/"
-        return path.isEmpty ? "/" : path
-    }
 }

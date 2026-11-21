@@ -35,7 +35,7 @@ struct ScopedSenderTests {
                 request("/admin?x=1"), to: elsewhere, options: SendOptions(recordAs: .automation))
             Issue.record("an out-of-scope send went through")
         } catch {
-            #expect(error == OutOfScope(target: elsewhere, path: "/admin"))
+            #expect(error == OutOfScope(target: elsewhere, path: "/admin?x=1"))
         }
         do {
             _ = try await sender.engine(checkedFor: elsewhere)
@@ -60,9 +60,23 @@ struct ScopedSenderTests {
             await sender.permits(HTTPTarget(scheme: .https, host: "anywhere.example", port: 443), path: "/"))
     }
 
-    @Test func pathIgnoresTheQuery() {
-        #expect(ScopedSender.path(of: request("/a/b?c=d")) == "/a/b")
-        #expect(ScopedSender.path(of: request("/")) == "/")
+    // Scope rules match the path and query, as the engines check them, so a query exclude holds.
+    @Test func guardedMatchesThePathAndQuery() async {
+        let scopeGuard = ScopeGuard(
+            ScopeService(rules: [
+                ScopeRule(host: "192.0.2.1"),
+                ScopeRule(kind: .exclude, host: "192.0.2.1", path: "[?&]debug="),
+            ]))
+        let sender = ScopedSender(scope: .guarded(scopeGuard))
+        defer { Task { await sender.shutdown() } }
+        let lab = HTTPTarget(scheme: .http, host: "192.0.2.1", port: 1)
+        do {
+            _ = try await sender.send(
+                request("/api?debug=1"), to: lab, options: SendOptions(recordAs: .automation))
+            Issue.record("a send excluded by its query went through")
+        } catch {
+            #expect(error == OutOfScope(target: lab, path: "/api?debug=1"))
+        }
     }
 
     @Test func hostHeaderOmitsDefaultPorts() {

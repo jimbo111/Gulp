@@ -1,6 +1,6 @@
 // GulpProxy — the HTTP/1 forward proxy (F01 PRX-001…PRX-007): absolute-form plain HTTP, and CONNECT
 // tunnels that are intercepted (TLS MITM), spliced (pass-through) or carry plain HTTP (Tunnel.swift).
-// HTTP/2 to the client arrives in M3b; invisible mode and the landing page later.
+// HTTP/2 to the client is in ProxyHTTP2.swift, WebSockets in ProxyWebSocket.swift.
 
 import Foundation
 import GulpCore
@@ -42,8 +42,9 @@ public actor ProxyServer {
     private var listeners: [UUID: (server: any Channel, clients: ClientConnections)] = [:]
 
     /// Create a proxy that forwards (and, through the engine's recorder, records) via `engine`.
-    /// Without `tls`, CONNECT is refused (no CA to intercept with). WebSocket traffic is recorded
-    /// to `webSockets` (PRX-031).
+    /// Without `tls`, CONNECT is refused (no CA to intercept with). `matchReplace` rewrites requests
+    /// here, before Intercept (F01 §4.2); register the same hook with the engine for responses.
+    /// WebSocket traffic is recorded to `webSockets` (PRX-031).
     public init(
         engine: any HTTPEngine, tls: ProxyTLSOptions? = nil, intercept: InterceptQueue? = nil,
         matchReplace: MatchReplaceHook? = nil, webSockets: (any WebSocketRecorder)? = nil
@@ -83,11 +84,14 @@ public actor ProxyServer {
                     let upstream = ProxyUpstream(
                         engine: engine, client: client, forceHTTP1: tls?.forceHTTP1ToServer ?? false,
                         intercept: intercept, matchReplace: matchReplace, webSockets: webSockets)
-                    Task {
+                    let serving = Task {
                         await ProxyConnection.serve(
                             items, channel: channel, upstream: upstream, pressure: pressure,
                             intercepts: tls != nil)
                     }
+                    // The client left: stop its work (a held request is dropped, an upstream send
+                    // or WebSocket relay ends).
+                    channel.closeFuture.whenComplete { _ in serving.cancel() }
                     return channel.eventLoop.makeCompletedFuture(withResultOf: {
                         let handler = ProxyConnectionHandler(
                             items: continuation, pressure: pressure, tls: tls, upstream: upstream)
