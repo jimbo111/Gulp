@@ -47,7 +47,7 @@ echo "==> 3/7 Signing helpers inside-out (Hardened Runtime + timestamp)"
 # Sign embedded helpers/frameworks first, then the app bundle, so the outer signature is valid.
 while IFS= read -r -d '' helper; do
   codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID" "$helper"
-done < <(find "$APP/Contents" \( -name 'gulp-cli' -o -name '*.dylib' -o -name '*.framework' \) -print0)
+done < <(find "$APP/Contents" \( -path '*/Helpers/gulp' -o -name '*.dylib' -o -name '*.framework' \) -print0)
 codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 
