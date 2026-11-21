@@ -18,6 +18,8 @@ import SwiftUI
 final class ActiveScanModel {
     var preset = ScanConfig.Preset.balanced
     var unsafe = false
+    /// Run the opt-in cache-poisoning family (F08 §3.5): off unless chosen for this scan.
+    var cachePoisoning = false
     var allowOutOfScope = false
     private(set) var queued: [ExchangeID] = []
     private(set) var running = false
@@ -44,10 +46,17 @@ final class ActiveScanModel {
         }
     }
 
-    func start() {
-        guard !queued.isEmpty, !running else { return }
+    /// The scan as configured.
+    var scanConfig: ScanConfig {
         var config = ScanConfig.preset(preset)
         config.unsafe = unsafe
+        if cachePoisoning { config.disabledFamilies.subtract(ActiveChecks.optInFamilies) }
+        return config
+    }
+
+    func start() {
+        guard !queued.isEmpty, !running else { return }
+        let config = scanConfig
         running = true
         paused = false
         summary = nil
@@ -178,6 +187,13 @@ struct ActiveScanView: View {
                         .help(
                             "Off by default (SCN-038): stored-XSS markers still run on requests that already submit data."
                         )
+                    Toggle(
+                        "Cache poisoning checks (send cache-busted poisoning probes)",
+                        isOn: $model.cachePoisoning
+                    )
+                    .help(
+                        "Off by default: these probes try to get a poisoned response cached. Each uses a cache buster, but a cache that ignores it could serve the probe to other users."
+                    )
                     Toggle("Scan out-of-scope requests", isOn: outOfScopeBinding)
                         .help("Only in-scope requests are sent unless you override it for this scan.")
                 }
