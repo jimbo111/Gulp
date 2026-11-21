@@ -71,9 +71,18 @@ struct RedactionTests {
             (armor("BEGIN") + "\n", 1 << 15),  // BEGIN lines, no END
         ])
     func test_AI003_linearTime(unit: String, count: Int) {
-        let input = String(repeating: unit, count: count)
-        let elapsed = ContinuousClock().measure { _ = Redactor().redact(input) }
-        #expect(elapsed < .seconds(1))
+        // Scaling, not wall time (a slower machine must not fail it): doubling the input about
+        // doubles a linear redaction and quadruples a backtracking one. Best of three per size.
+        func seconds(_ n: Int) -> Double {
+            let input = String(repeating: unit, count: n)
+            return (0..<3).map { _ in
+                let d = ContinuousClock().measure { _ = Redactor().redact(input) }
+                return Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18
+            }.min()!
+        }
+        let small = seconds(count / 4)
+        let large = seconds(count / 2)
+        #expect(large < small * 3, "doubling the input took \(large / small)x as long")
     }
 
     @Test("AI-003: a bare JWT anywhere in the text is masked")
