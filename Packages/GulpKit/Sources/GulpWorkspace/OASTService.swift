@@ -74,6 +74,9 @@ public struct OASTHealth: Sendable, Hashable {
     public var payloads = 0
     /// Interactions received this session.
     public var interactions = 0
+
+    /// Not registered, nothing received yet.
+    public init() {}
 }
 
 /// BCN-006 "Test Beacon": the self-injected request's outcome.
@@ -133,7 +136,10 @@ public actor OASTService {
         self.settings = settings
         let correlation = await client.correlationID
         let domain = await client.domain
-        health = OASTHealth(registered: true, server: settings.serverURL, domain: domain)
+        health = OASTHealth()
+        health.registered = true
+        health.server = settings.serverURL
+        health.domain = domain
         tagState.setOASTMinter {
             correlation + Interactsh.random(Interactsh.nonceLength, from: Interactsh.zbase32Alphabet) + "."
                 + domain
