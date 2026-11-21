@@ -57,7 +57,7 @@ put the reference tool's product names in Gulp's UI.
 | Scanner, BChecks | **Scanner**, **Check Recipes** (YAML) | F08 |
 | Crawler | **Crawler** | F09 |
 | Collaborator | **Beacon** (interactsh compatibility in v1; the self-hostable OAST server is post-1.0) | F10 |
-| Sequencer | **Sequencer** (post-1.0, out of v1 since 2026-11-08) | F11 |
+| Sequencer | **Sequencer** (moved out of v1 on 2026-11-08, built anyway on 2026-11-13) | F11 |
 | Decoder, Hackvertor-style tags | **Decoder**, **Transform Tags** | F12 |
 | Comparer | **Comparer** | F13 |
 | Organizer | **Notebook** | F14 |
