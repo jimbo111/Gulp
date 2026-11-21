@@ -40,7 +40,7 @@ extension ProjectSession {
     public func scopeDecision(for target: HTTPTarget, path: String) async -> ScopeDecision {
         let scopeGuard = self.scopeGuard
         guard await scopeGuard.current.rules.contains(where: \.enabled) else { return .send }
-        return await scopeGuard.permits(target, path: path) ? .send : .confirm
+        return await scopeGuard.permitsManualSend(target, path: path) ? .send : .confirm
     }
 
     /// What sending the raw `request` to `target` should do (TGT-023).

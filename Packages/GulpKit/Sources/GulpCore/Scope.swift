@@ -332,9 +332,16 @@ public actor ScopeGuard {
     /// The current scope.
     public var current: ScopeService { service }
 
-    /// Whether `target`/`path` is in scope (or its host was allowed with "don't ask again").
+    /// Whether `target`/`path` is in scope by the rules. This is what active tools check; the
+    /// "don't ask again" hosts don't widen it.
     public func permits(_ target: HTTPTarget, path: String) -> Bool {
-        service.isInScope(target, path: path) || allowedHosts.contains(target.host.lowercased())
+        service.isInScope(target, path: path)
+    }
+
+    /// Whether a manual send (e.g. Repeater) to `target`/`path` goes without asking: in scope, or
+    /// its host was allowed with "don't ask again".
+    public func permitsManualSend(_ target: HTTPTarget, path: String) -> Bool {
+        permits(target, path: path) || allowedHosts.contains(target.host.lowercased())
     }
 
     /// Throw `OutOfScope` for an out-of-scope target unless `override` (an explicit per-action
@@ -343,7 +350,8 @@ public actor ScopeGuard {
         guard override || permits(target, path: path) else { throw OutOfScope(target: target, path: path) }
     }
 
-    /// "Don't ask again for this host" (TGT-023): manual sends to it stop prompting.
+    /// "Don't ask again for this host" (TGT-023): manual sends to it stop prompting
+    /// (`permitsManualSend`). Active tools still check the rules only (`permits`, `require`).
     public func allowWithoutAsking(host: String) {
         allowedHosts.insert(host.lowercased())
     }

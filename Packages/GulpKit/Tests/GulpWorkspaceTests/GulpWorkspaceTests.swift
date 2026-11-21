@@ -592,6 +592,15 @@ struct SiteMapServiceTests {
         config.disabledFamilies = Set(ActiveChecks.families).subtracting(["ssti"])
         let refused = await drain(await session.startActiveScan([(request, target)], config: config))
         #expect(refused?.outOfScope == 1 && refused?.probes == 0)
+        // TGT-023: "don't ask again for this host" is for manual sends; it doesn't widen the scanner.
+        try await session.setScope([
+            ScopeRule(host: "127.0.0.1"), ScopeRule(kind: .exclude, host: "127.0.0.1", path: "^/a"),
+        ])
+        await session.allowOutOfScopeSends(to: "127.0.0.1")
+        #expect(await session.scopeDecision(for: target, path: "/a?x=1") == .send)
+        let allowedHost = await drain(await session.startActiveScan([(request, target)], config: config))
+        #expect(allowedHost?.probes == 0)
+        try await session.setScope([])
         // The override sends (port 1 refuses; nothing is found, the probes are recorded as Scanner traffic).
         let sent = await drain(
             await session.startActiveScan([(request, target)], config: config, allowOutOfScope: true))
