@@ -2,6 +2,7 @@ import Foundation
 import GulpCore
 import GulpFuzzer
 import GulpHTTP
+import GulpProxy
 import GulpStore
 import Testing
 
@@ -69,5 +70,18 @@ struct SessionLifecycleTests {
         var summary: FuzzSummary?
         for await event in run.events { if case .finished(let done) = event { summary = done } }
         #expect(summary?.stopReason == "cancelled")
+    }
+
+    @Test("PRX-001: a headless run's listener starts without replacing the project's proxy settings")
+    func test_PRX001_runtimeListenerKeepsSettings() async throws {
+        let session = try await open(isolatedEnvironment(), "listener")
+        var stored = ProxySettings(
+            listeners: [ProxyListenerConfig(port: 18_080)], passThroughHosts: ["*.example"])
+        stored.useScope = true
+        try await session.settings.set(stored, scope: .project)
+        let result = await session.startProxyListener(ProxyListenerConfig(bindAddress: "127.0.0.1", port: 0))
+        #expect(try result.get() > 0)
+        #expect(session.settings.get(ProxySettings.self) == stored)
+        try await session.close()
     }
 }

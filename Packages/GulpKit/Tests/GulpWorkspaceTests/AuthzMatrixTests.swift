@@ -1,5 +1,6 @@
 import Foundation
 import GulpCore
+import GulpSession
 import Testing
 
 @testable import GulpWorkspace
@@ -56,5 +57,18 @@ struct AuthzMatrixTests {
         let almost = response(200, String(repeating: "a", count: 98))
         #expect(AuthzAnalysis.similar(almost, authorized, threshold: 0.95))
         #expect(!AuthzAnalysis.similar(different, authorized, threshold: 0.95))
+    }
+}
+
+@Suite("Authz Matrix run (ADV-001)")
+struct AuthzMatrixRunTests {
+    @Test("ADV-001: a run with its own identities leaves the project's session config alone")
+    func test_ADV001_runIdentitiesArentStored() async throws {
+        let session = try await open(isolatedEnvironment(), "authz-run")
+        let tester = Identity(name: "tester")
+        let result = try await session.runAuthzMatrix([], identities: [tester])
+        #expect(result.columns == [tester.id, nil])
+        #expect(await session.sessionSettings().identities.isEmpty)
+        try await session.close()
     }
 }

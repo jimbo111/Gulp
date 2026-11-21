@@ -158,15 +158,17 @@ struct Proxy: AsyncParsableCommand {
         help: "Intercept every request and forward it with FROM replaced by TO (\"FROM=>TO\").")
     var interceptReplacements: [String] = []
 
-    @Flag(help: "Use the project's scope for the proxy: out-of-scope traffic is not recorded (TGT-024).")
+    @Flag(
+        help:
+            "Turn on \"Use scope for the proxy\" in the project: out-of-scope traffic is not recorded (TGT-024)."
+    )
     var useScope = false
 
     func run() async throws {
         let session = try await ProjectSession.open(at: URL(fileURLWithPath: project))
+        // This run's listener only; the project's stored listeners and proxy settings are kept.
         let listener = ProxyListenerConfig(bindAddress: bind, port: port)
-        var proxySettings = ProxySettings(listeners: [listener])
-        proxySettings.useScope = useScope
-        try await session.settings.set(proxySettings, scope: .project)
+        if useScope { try await session.setUseScopeForProxy(true) }
         if !addHeaders.isEmpty {
             let added = addHeaders.map { MatchReplaceRule(kind: .requestHeader, match: "", replace: $0) }
             let existing = session.settings.get(MatchReplaceSettings.self).rules
@@ -178,20 +180,18 @@ struct Proxy: AsyncParsableCommand {
             return (parts[0], parts[1])
         }
         if !replacements.isEmpty {
-            var intercept = InterceptSettings()
-            intercept.interceptRequests = true
-            intercept.requestRules = []
-            try await session.setInterceptSettings(intercept)
+            // Hold every request for this run only; the project's intercept settings are kept.
+            await session.intercept.setRules(requests: [])
+            await session.intercept.setQueries(request: nil, response: nil)
+            await session.intercept.setIntercepting(requests: true, responses: false)
+            await session.intercept.setInterceptingWebSockets(false)
             Task { await Self.autoForward(session, replacements) }
         }
-        let results = await session.startProxyListeners()
-        switch results[listener.id] {
+        switch await session.startProxyListener(listener) {
         case .success(let bound):
             print("gulp-cli proxy: listening on \(bind):\(bound), recording into \(project)")
         case .failure(let error):
             FileHandle.standardError.write(Data("gulp-cli: \(error.message)\n".utf8))
-            throw ExitCode(1)
-        case nil:
             throw ExitCode(1)
         }
         await Signals.wait(for: [SIGINT, SIGTERM])

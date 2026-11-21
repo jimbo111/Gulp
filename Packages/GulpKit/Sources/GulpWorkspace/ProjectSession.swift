@@ -518,22 +518,28 @@ public actor ProjectSession {
     /// Start every enabled proxy listener from the settings (PRX-001). Returns the bound port per
     /// listener, or the user-facing bind error.
     public func startProxyListeners() async -> [UUID: Result<Int, GulpError>] {
-        await applyProxyScope()
-        var results: [UUID: Result<Int, GulpError>] = [:]
-        if let minter { await proxy.setTLS(settings.get(ProxySettings.self).tlsOptions(minter: minter)) }
         listenerPorts = []
+        var results: [UUID: Result<Int, GulpError>] = [:]
         for listener in settings.get(ProxySettings.self).listeners where listener.enabled {
-            do {
-                let port = try await proxy.start(listener)
-                listenerPorts.append(port)
-                results[listener.id] = .success(port)
-            } catch let error as GulpError {
-                results[listener.id] = .failure(error)
-            } catch {
-                results[listener.id] = .failure(GulpError(message: "\(error)"))
-            }
+            results[listener.id] = await startProxyListener(listener)
         }
         return results
+    }
+
+    /// Start `listener` with the project's TLS and scope settings, without storing it (a headless
+    /// run's own port). Returns the bound port or the user-facing bind error.
+    public func startProxyListener(_ listener: ProxyListenerConfig) async -> Result<Int, GulpError> {
+        await applyProxyScope()
+        if let minter { await proxy.setTLS(settings.get(ProxySettings.self).tlsOptions(minter: minter)) }
+        do {
+            let port = try await proxy.start(listener)
+            listenerPorts.append(port)
+            return .success(port)
+        } catch let error as GulpError {
+            return .failure(error)
+        } catch {
+            return .failure(GulpError(message: "\(error)"))
+        }
     }
 
     /// Project name and notes (PRJ-006), stored in `meta`.
