@@ -15,6 +15,7 @@ import SwiftUI
 
 /// One editable step of the stacked editor.
 public struct DecoderStepRow: Identifiable, Hashable {
+    /// Row identity.
     public var id = UUID()
     /// Operation name.
     public var name: String
@@ -166,6 +167,7 @@ public struct DecoderView: View {
         model = models.decoder
     }
 
+    /// The screen.
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -392,6 +394,7 @@ public struct ComparerView: View {
         model = models.comparer
     }
 
+    /// The screen.
     public var body: some View {
         HSplitView {
             VStack(alignment: .leading) {
@@ -643,6 +646,7 @@ public struct JWTWorkbenchView: View {
     /// A workbench.
     public init() {}
 
+    /// The screen.
     public var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: 6) {
@@ -656,64 +660,75 @@ public struct JWTWorkbenchView: View {
             }
             .padding(6)
             .frame(minWidth: 360)
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Picker("Algorithm", selection: $model.algorithm) {
-                        ForEach(
-                            [
-                                "HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "PS256", "PS512",
-                                "ES256", "ES384", "ES512",
-                            ], id: \.self
-                        ) {
-                            Text($0)
-                        }
-                    }
-                    .frame(maxWidth: 200)
-                    Button("Generate Key") { model.generateKey() }
-                }
-                Text("Secret, or PEM / JWK key").font(.caption)
-                TextEditor(text: $model.keyText).font(.system(.caption, design: .monospaced)).frame(
-                    minHeight: 70)
-                HStack {
-                    Button("Sign") { model.sign() }
-                    Button("Verify") { model.verify() }
-                }
-                Divider()
-                Text("Attacks (clearly labelled; sends are scope-gated)").font(.headline)
-                HStack {
-                    Button("alg:none") { model.forge("none") }
-                    Button("kid → /dev/null") { model.forge("kid") }
-                    Button("exp / nbf") { model.forge("times") }
-                }
-                Text("Server public key PEM (RS→HS confusion)").font(.caption)
-                TextEditor(text: $model.publicKeyPEM).font(.system(.caption, design: .monospaced)).frame(
-                    minHeight: 50)
-                Button("RS→HS Confusion") { model.forge("confusion") }
-                Text("Wordlist (weak HMAC secret)").font(.caption)
-                TextEditor(text: $model.wordlist).font(.system(.caption, design: .monospaced)).frame(
-                    minHeight: 50)
-                Button("Crack Secret") { model.crack() }
-                if let status = model.status { Text(status).font(.callout) }
-                List(model.forgeries, id: \.token) { forgery in
-                    VStack(alignment: .leading) {
-                        Text(forgery.label).bold()
-                        Text(forgery.token).font(.system(.caption, design: .monospaced)).textSelection(
-                            .enabled
-                        ).lineLimit(2)
-                    }
-                    .contextMenu {
-                        Button("Copy Token") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(forgery.token, forType: .string)
-                        }
-                    }
-                }
-                .frame(minHeight: 120)
+            // The controls scroll: their combined minimum height is taller than a 640 pt window, and
+            // a stack that cannot fit makes AppKit's constraint pass loop until it raises.
+            VSplitView {
+                ScrollView { controls.padding(6) }
+                    .frame(minHeight: 200)
+                forgeries.frame(minHeight: 120)
             }
-            .padding(6)
             .frame(minWidth: 360)
         }
         .navigationTitle("JWT Workbench")
+    }
+
+    private var controls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Picker("Algorithm", selection: $model.algorithm) {
+                    ForEach(
+                        [
+                            "HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "PS256", "PS512",
+                            "ES256", "ES384", "ES512",
+                        ], id: \.self
+                    ) {
+                        Text($0)
+                    }
+                }
+                .frame(maxWidth: 200)
+                Button("Generate Key") { model.generateKey() }
+            }
+            Text("Secret, or PEM / JWK key").font(.caption)
+            TextEditor(text: $model.keyText).font(.system(.caption, design: .monospaced)).frame(
+                minHeight: 70)
+            HStack {
+                Button("Sign") { model.sign() }
+                Button("Verify") { model.verify() }
+            }
+            Divider()
+            Text("Attacks (clearly labelled; sends are scope-gated)").font(.headline)
+            HStack {
+                Button("alg:none") { model.forge("none") }
+                Button("kid → /dev/null") { model.forge("kid") }
+                Button("exp / nbf") { model.forge("times") }
+            }
+            Text("Server public key PEM (RS→HS confusion)").font(.caption)
+            TextEditor(text: $model.publicKeyPEM).font(.system(.caption, design: .monospaced)).frame(
+                minHeight: 50)
+            Button("RS→HS Confusion") { model.forge("confusion") }
+            Text("Wordlist (weak HMAC secret)").font(.caption)
+            TextEditor(text: $model.wordlist).font(.system(.caption, design: .monospaced)).frame(
+                minHeight: 50)
+            Button("Crack Secret") { model.crack() }
+            if let status = model.status { Text(status).font(.callout) }
+        }
+    }
+
+    private var forgeries: some View {
+        List(model.forgeries, id: \.token) { forgery in
+            VStack(alignment: .leading) {
+                Text(forgery.label).bold()
+                Text(forgery.token).font(.system(.caption, design: .monospaced)).textSelection(
+                    .enabled
+                ).lineLimit(2)
+            }
+            .contextMenu {
+                Button("Copy Token") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(forgery.token, forType: .string)
+                }
+            }
+        }
     }
 }
 
