@@ -202,7 +202,8 @@ public struct CrawlerView: View {
 final class BeaconModel {
     var settings: OASTSettings
     var token = ""
-    private(set) var health = OASTHealth()
+    /// Nil until the first poll.
+    private(set) var health: OASTHealth?
     private(set) var interactions: [StoredOASTInteraction] = []
     private(set) var message: String?
     private(set) var testing = false
@@ -221,6 +222,9 @@ final class BeaconModel {
             }
         }
     }
+
+    /// OAST is configured and registered.
+    var registered: Bool { health?.registered == true }
 
     func reload() async {
         health = await session.oast.currentHealth
@@ -307,18 +311,20 @@ public struct BeaconView: View {
                                     || (!model.settings.isLocal && !model.settings.thirdPartyAcknowledged))
                         Button("Turn Off") { model.apply(enabled: false) }
                         Button(model.testing ? "Testing…" : "Test Beacon") { model.test() }.disabled(
-                            !model.health.registered || model.testing)
+                            !model.registered || model.testing)
                     }
                     HStack {
-                        Circle().fill(model.health.registered ? Color.green : Color.secondary).frame(
+                        Circle().fill(model.registered ? Color.green : Color.secondary).frame(
                             width: 8, height: 8)
-                        Text(
-                            model.health.registered
-                                ? "\(model.health.domain) · \(model.health.payloads) payloads · \(model.health.interactions) interactions"
-                                    + (model.health.lastError.map { " · \($0)" } ?? "")
-                                : "Not registered"
-                        )
-                        .font(.caption)
+                        if let health = model.health, health.registered {
+                            Text(
+                                "\(health.domain) · \(health.payloads) payloads · \(health.interactions) interactions"
+                                    + (health.lastError.map { " · \($0)" } ?? "")
+                            )
+                            .font(.caption)
+                        } else {
+                            Text("Not registered").font(.caption)
+                        }
                     }
                     if let message = model.message {
                         Text(message).font(.caption).foregroundStyle(.secondary)
