@@ -360,7 +360,9 @@ public actor RepeaterService {
         cancel(id)
         var options = tab.options.sendOptions
         options.onResponseBytes = onBytes
-        if options.followRedirects.mode == .inScope { options.scope = await scope?() }
+        if options.followRedirects.mode == .inScope, let service = await scope?() {
+            options.scope = { service.isInScope($0, path: $1) }
+        }
         let engine = self.engine
         let request = RawRequest(Bytes(tab.draft))
         let task = Task {

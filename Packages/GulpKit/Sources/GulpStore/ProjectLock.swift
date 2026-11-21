@@ -4,7 +4,9 @@
 //
 // Concept: `flock` locks belong to the open file description and the kernel drops them when the
 // process exits or crashes, so a stale lock can never outlive its owner (unlike a "lock file exists"
-// check).
+// check). The lock file is never deleted while the project is in use: a session that opened it just
+// before a delete would lock the orphaned inode while the next one created and locked a new file at
+// the same path, and both would think they own the project.
 
 import Foundation
 

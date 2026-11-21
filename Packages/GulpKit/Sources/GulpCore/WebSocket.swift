@@ -151,12 +151,20 @@ public struct WSFrameParser: Sendable {
 
 /// Reassembles messages from frames (control frames pass through between fragments).
 public struct WSMessageAssembler: Sendable {
+    /// The largest reassembled data message (the per-frame cap of `WSFrameParser` by default).
+    public let maxMessage: Int
     private var opcode: UInt8?
     private var payload: [UInt8] = []
     private var frames: [WSFrameInfo] = []
+    /// Set once a data message outgrew `maxMessage` (a peer streaming endless continuation
+    /// frames): no more data messages are produced, though control frames still are. As with
+    /// `WSFrameParser.failed`, this only stops recording; the bytes are still forwarded.
+    public private(set) var failed = false
 
     /// An assembler with no partial message.
-    public init() {}
+    public init(maxMessage: Int = WSFrameParser.maxPayload) {
+        self.maxMessage = maxMessage
+    }
 
     /// Add a frame; returns the message it completed, if any.
     public mutating func add(_ frame: WSFrame) -> WSMessage? {
@@ -165,6 +173,14 @@ public struct WSMessageAssembler: Sendable {
             masked: frame.maskKey != nil)
         if frame.opcode >= 8 {
             return WSMessage(opcode: frame.opcode, payload: frame.payload, frames: [info])
+        }
+        guard !failed else { return nil }
+        guard payload.count + frame.payload.count <= maxMessage else {
+            failed = true
+            opcode = nil
+            payload = []
+            frames = []
+            return nil
         }
         if frame.opcode != WSOpcode.continuation.rawValue {
             opcode = frame.opcode

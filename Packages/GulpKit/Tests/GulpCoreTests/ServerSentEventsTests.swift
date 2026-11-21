@@ -22,13 +22,31 @@ struct ServerSentEventsTests {
         #expect(pieces == all)
     }
 
-    @Test("Chunked bodies decode the same whatever the pieces; extensions and trailers are skipped")
-    func test_HIS007_chunkedDecoder() {
-        let wire = Array("4;ext=1\r\nWiki\r\n6\r\npedia \r\n0\r\nX-Trailer: y\r\n\r\nignored".utf8)
-        var whole = ChunkedBodyDecoder()
-        #expect(whole.feed(wire) == Array("Wikipedia ".utf8))
-        var split = ChunkedBodyDecoder()
-        #expect(wire.flatMap { split.feed([$0]) } == Array("Wikipedia ".utf8))
+    @Test("A chunked stream reads the same at any arrival split; BWS, extensions and trailers are skipped")
+    func test_HIS007_chunkedAnySplit() {
+        let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n"
+        let body = "5 ;ext=1\r\ndata:\r\n4\r\n a\n\n\r\n9\r\ndata: b\n\n\r\n0\r\nX-Trailer: y\r\n\r\n"
+        let response = RawResponse(Bytes(head + body))
+        #expect(SSETimeline.events(in: response, marks: nil).map(\.data) == ["a", "b"])
+        let total = response.bytes.count
+        let marks = (head.utf8.count + 1...total).map { StreamMark(offset: $0, ms: Double($0)) }
+        let timed = SSETimeline.events(in: response, marks: marks)
+        #expect(timed.map(\.data) == ["a", "b"])
+        // Each event is stamped with the mark at which its blank line arrived.
+        let firstBlank = head.utf8.count + "5 ;ext=1\r\ndata:\r\n4\r\n a\n\n".utf8.count
+        #expect(timed.first?.receivedMs == Double(firstBlank))
+    }
+
+    @Test("A hostile chunk size (signed, prefixed, not hex) ends the payload where framing breaks; no trap")
+    func test_HIS007_hostileChunkSize() {
+        let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n"
+        for size in ["-5", "+9", "0x9", "zz"] {
+            let wire = head + "9\r\ndata: a\n\n\r\n" + size + "\r\ndata: b\n\n\r\n0\r\n\r\n"
+            let response = RawResponse(Bytes(wire))
+            #expect(SSETimeline.events(in: response, marks: nil).map(\.data) == ["a"])
+            let marks = [StreamMark(offset: wire.utf8.count, ms: 5)]
+            #expect(SSETimeline.events(in: response, marks: marks).map(\.data) == ["a"])
+        }
     }
 
     @Test("Event times come from the stream marks; without marks the events still parse")

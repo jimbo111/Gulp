@@ -50,4 +50,20 @@ struct WebSocketTests {
         #expect(decoded.map(\.payload.count) == [300, 70_000])
         #expect(decoded[1].payload == large)
     }
+
+    @Test("PRX-031: continuation frames can't grow a message past the cap; control frames still pass")
+    func test_PRX031_assembledMessageCap() {
+        var assembler = WSMessageAssembler(maxMessage: 10)
+        let piece = [UInt8](repeating: 0x61, count: 4)
+        var frames = [WSFrame(fin: false, rsv: 0, opcode: 1, maskKey: nil, payload: piece, wireLength: 6)]
+        frames += (0..<5).map { _ in
+            WSFrame(fin: false, rsv: 0, opcode: 0, maskKey: nil, payload: piece, wireLength: 6)
+        }
+        #expect(frames.compactMap { assembler.add($0) }.isEmpty)
+        #expect(assembler.failed)
+        let ping = WSFrame(fin: true, rsv: 0, opcode: 9, maskKey: nil, payload: [], wireLength: 2)
+        #expect(assembler.add(ping)?.opcode == 9)
+        let text = WSFrame(fin: true, rsv: 0, opcode: 1, maskKey: nil, payload: piece, wireLength: 6)
+        #expect(assembler.add(text) == nil)
+    }
 }

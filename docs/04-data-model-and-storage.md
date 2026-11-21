@@ -139,11 +139,11 @@ public enum ExchangeState: Sendable, Equatable {  // Exchange.state
 public enum Highlight: String, Sendable, Codable, CaseIterable {  // Annotation.highlight / `exchanges.highlight`
     case red, orange, yellow, green, cyan, blue, purple, pink, gray
 }
-// The full warning set, defined once. The single-message parser emits the framing/line warnings;
-// `oversizedHeaders` is emitted by the engine's header-size guard (not the pure parser).
+// The full warning set, defined once; the single-message parser emits them. A header block over
+// `HTTP1.maxHeaderBytes` is not a warning: the proxy answers 431 and the engine fails with `.tooLarge`.
 public enum ParseWarning: Sendable, Equatable, Hashable {
     case bareLF, obsoleteLineFolding, missingFinalCRLF, invalidCharInName, duplicateContentLength,
-         conflictingFraming, malformedStartLine, oversizedHeaders, nonUTF8Header
+         conflictingFraming, malformedStartLine, nonUTF8Header
 }
 
 public struct Timing: Sendable, Codable {         // milliseconds per phase; all of HTTP-010

@@ -456,7 +456,8 @@ public actor MCPServer {
         options.timeouts.total = .seconds((arguments["timeout_seconds"] as? NSNumber)?.intValue ?? 30)
         if arguments["follow_redirects"] as? Bool == true {
             options.followRedirects = RedirectPolicy(mode: .inScope)
-            options.scope = await scopeGuard.current
+            let service = await scopeGuard.current
+            options.scope = { service.isInScope($0, path: $1) }
         }
         let maxBytes = (arguments["max_bytes"] as? NSNumber)?.intValue ?? Self.defaultMaxBytes
         let started = ContinuousClock.now

@@ -7,9 +7,10 @@ extension RawRequest {
     /// The body length as framed: every byte after the header block.
     var bodyCount: Int { bytes.count - parsed.headerBlockEnd }
 
-    /// HTTP-008: set every `Content-Length` value to the actual body length; if there is none and
-    /// the method normally carries a body (POST, PUT, PATCH), add one before the blank line using
-    /// the message's own line ending. Everything else is left byte-for-byte untouched.
+    /// HTTP-008: set every `Content-Length` value to the actual body length; if there is none, the
+    /// method normally carries a body (POST, PUT, PATCH) and no `Transfer-Encoding` frames it (a
+    /// message must not carry both, RFC 9112 §6.2), add one before the blank line using the
+    /// message's own line ending. Everything else is left byte-for-byte untouched.
     public func updatingContentLength() -> RawRequest {
         let length = Bytes(String(bodyCount))
         let fields = parsed.headers.filter { bytes[$0.name].string().lowercased() == "content-length" }
@@ -20,7 +21,9 @@ extension RawRequest {
             }
             return result
         }
-        guard ["POST", "PUT", "PATCH"].contains(bytes[parsed.method].string()) else { return self }
+        guard ["POST", "PUT", "PATCH"].contains(bytes[parsed.method].string()),
+            headerValue("transfer-encoding") == nil
+        else { return self }
         let (end, terminator) = HTTP1.headerBlockEnd(bytes.rawBytes)
         guard terminator != 0 else { return self }  // no header block end to insert before
         let lineEnding = terminator == 4 ? "\r\n" : "\n"

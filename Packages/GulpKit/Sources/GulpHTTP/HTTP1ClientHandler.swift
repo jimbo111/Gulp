@@ -8,10 +8,9 @@ import NIOCore
 /// What the engine asks a connection to do: write `bytes`, then deliver the response to `promise`.
 struct RequestCommand: Sendable {
     let bytes: ByteBuffer
-    /// The request was HEAD: the response has no body whatever its framing headers say.
-    let isHead: Bool
-    /// The request was CONNECT: a 2xx response has no body and the connection becomes a tunnel.
-    let isConnect: Bool
+    /// The request's method token, which decides framing: a response to HEAD has no body whatever
+    /// its framing headers say; a 2xx to CONNECT has none and turns the connection into a tunnel.
+    let method: String
     let maxResponseBytes: Int
     let firstByteTimeout: TimeAmount
     let idleTimeout: TimeAmount
@@ -62,7 +61,8 @@ private struct ResponseHead {
         let close = r.hasHeaderToken("connection", "close")
         let keep = r.hasHeaderToken("connection", "keep-alive")
         let tunnel = isConnect && status >= 200 && status < 300
-        keepAlive = tunnel || (status != 101 && (version == "HTTP/1.1" ? !close : (keep && !close)))
+        // A tunnel or a switched protocol no longer carries HTTP requests: never reuse it for one.
+        keepAlive = !tunnel && status != 101 && (version == "HTTP/1.1" ? !close : (keep && !close))
         // RFC 9112 §6.3: HEAD, 1xx, 204, 304 and a 2xx to CONNECT end at the header block.
         if tunnel || isHead || status == 204 || status == 304 || (status >= 100 && status < 200) {
             framing = .none
@@ -95,6 +95,8 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
         /// Where the current (non-interim) message starts in `buffer`.
         var start = 0
         var head: ResponseHead?
+        /// Where the next header-block scan resumes, so a slow header block is scanned once.
+        var headerResume = 0
         var chunkResume = 0
         var firstByteAt: NIODeadline?
         var phaseTimer: Scheduled<Void>?
@@ -134,7 +136,8 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
             return
         }
         let request = Pending(
-            promise: command.promise, isHead: command.isHead, isConnect: command.isConnect,
+            promise: command.promise, isHead: command.method == "HEAD",
+            isConnect: command.method == "CONNECT",
             maxBytes: command.maxResponseBytes, idleTimeout: command.idleTimeout, onBytes: command.onBytes)
         if pending != nil {
             guard command.pipelined else {
@@ -213,15 +216,22 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
     private func evaluate() {
         while let p = pending {
             if p.head == nil {
-                let rest = p.start == 0 ? p.buffer : Array(p.buffer[p.start...])
-                let (end, terminator) = HTTP1.headerBlockEnd(rest)
-                guard terminator != 0 else { return }  // header block not complete yet
+                let (end, terminator) = HTTP1.headerBlockEnd(p.buffer, from: max(p.start, p.headerResume))
+                guard end - p.start <= HTTP1.maxHeaderBytes else {
+                    fail(.tooLarge(limit: HTTP1.maxHeaderBytes))
+                    context?.close(promise: nil)
+                    return
+                }
+                guard terminator != 0 else {  // header block not complete yet
+                    pending?.headerResume = HTTP1.headerScanResume(p.buffer.count)
+                    return
+                }
+                let headerBytes = Array(p.buffer[p.start..<end])
                 let head = ResponseHead(
-                    headerBytes: Array(rest[..<end]), blockEnd: p.start + end, isHead: p.isHead,
-                    isConnect: p.isConnect)
+                    headerBytes: headerBytes, blockEnd: end, isHead: p.isHead, isConnect: p.isConnect)
                 if head.isInterim {
-                    pending?.interim.append(Array(rest[..<end]))
-                    pending?.start += end
+                    pending?.interim.append(headerBytes)
+                    pending?.start = end
                     continue
                 }
                 pending?.head = head
