@@ -253,6 +253,7 @@ extension ScanCommand {
                     Bytes(
                         "GET \(path) HTTP/1.1\r\nHost: \(url.host ?? target.host)\(url.port.map { ":\($0)" } ?? "")\r\nAccept: application/json\r\n\r\n"
                     ))
+                // rules-check: manual send — fetches the spec document at the URL the operator passed.
                 let result = await session.http.send(
                     request, to: target, options: SendOptions(recordAs: .scanner))
                 guard let body = try? result.exchange.response?.decodedBody() else {

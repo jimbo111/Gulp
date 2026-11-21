@@ -25,6 +25,7 @@ struct SessionCommand: AsyncParsableCommand {
         var options = SendOptions(recordAs: .repeater)
         options.updateContentLength = true
         options.timeouts.total = .seconds(30)
+        // rules-check: manual send — the operator's own request and target, as in Repeater.
         let result = await session.http.send(RawRequest(Bytes(raw)), to: target, options: options)
         let response = result.exchange.response
         let body =
