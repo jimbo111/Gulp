@@ -308,6 +308,34 @@ struct WebSocketProxyTests {
         await origin.stop()
     }
 
+    @Test("PRX-020/034: request Match & Replace applies to the upgrade (the compression preset works)")
+    func test_PRX034_upgradeMatchReplace() async throws {
+        let origin = try await WSEchoOrigin.start()
+        let recorded = Recorded()
+        var preset = try #require(
+            MatchReplaceRule.presets.first { $0.match.contains("Sec-WebSocket-Extensions") })
+        preset.enabled = true
+        let proxy = ProxyServer(
+            engine: NIOHTTPEngine(recorder: recorded), matchReplace: MatchReplaceHook(rules: [preset]),
+            webSockets: WSRecorded())
+        let port = try await proxy.start(ProxyListenerConfig(port: 0))
+        let sink = ByteSink()
+        let client = try await connect(to: port, sink: sink)
+        let upgrade =
+            "GET http://127.0.0.1:\(origin.port)/chat HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\n"
+            + "Connection: Upgrade\r\nSec-WebSocket-Extensions: permessage-deflate\r\n"
+            + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
+        try await client.writeAndFlush(client.allocator.buffer(string: upgrade))
+        try await sink.wait(for: "welcome")
+        let exchange = await recorded.exchanges.first
+        #expect(exchange?.response?.parsed.statusCode == 101)
+        #expect(exchange?.request.bytes.string().contains("Sec-WebSocket-Extensions") == false)
+        #expect(exchange?.edited?.originalRequest?.bytes.string().contains("permessage-deflate") == true)
+        try? await client.close()
+        await proxy.stopAll()
+        await origin.stop()
+    }
+
     @Test("ws URLs: origin-form, absolute-form and non-default ports")
     func webSocketURLs() {
         func request(_ target: String) -> RawRequest {

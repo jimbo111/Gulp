@@ -138,6 +138,46 @@ struct InterceptProxyTests {
         await origin.stop()
     }
 
+    @Test("PRX-012/020: request Match & Replace runs before Intercept; the user's edit is sent as is")
+    func test_PRX020_matchReplaceBeforeIntercept() async throws {
+        let origin = try await Origin.start(reply: okReply)
+        let queue = InterceptQueue()
+        await queue.setIntercepting(requests: true)
+        let hook = MatchReplaceHook(rules: [
+            MatchReplaceRule(kind: .requestBody, match: "role=user", replace: "role=guest"),
+            MatchReplaceRule(kind: .requestHeader, match: "", replace: "X-Gulp: 1"),
+        ])
+        let recorded = Recorded()
+        let engine = NIOHTTPEngine(requestHooks: [hook], responseHooks: [hook], recorder: recorded)
+        let proxy = ProxyServer(engine: engine, intercept: queue, matchReplace: hook)
+        let port = try await proxy.start(ProxyListenerConfig(port: 0))
+        let proxyTarget = HTTPTarget(scheme: .http, host: "127.0.0.1", port: port)
+        let client = NIOHTTPEngine()
+        let text =
+            "POST http://127.0.0.1:\(origin.port)/p HTTP/1.1\r\nHost: x\r\n"
+            + "Content-Length: 9\r\n\r\nrole=user"
+        let sending = Task {
+            await client.send(RawRequest(Bytes(text)), to: proxyTarget, options: clientOptions())
+        }
+        let item = try await Self.nextItem(queue)
+        // The held request is what goes on the wire: already rewritten.
+        let held = item.request.bytes.string()
+        #expect(held.contains("X-Gulp: 1\r\n") && held.hasSuffix("role=guest"))
+        // The user puts the value back; Match & Replace must not rewrite the edit again.
+        await queue.decide(
+            item.id, .forward(Bytes(held.replacingOccurrences(of: "role=guest", with: "role=user"))))
+        #expect(await sending.value.exchange.response?.parsed.statusCode == 200)
+        let received = String(decoding: origin.received(), as: UTF8.self)
+        #expect(received.hasSuffix("\r\n\r\nrole=user"))
+        #expect(received.components(separatedBy: "X-Gulp: 1\r\n").count == 2)  // added once
+        let proxied = await recorded.settled(1)
+        let original = proxied.first?.edited?.originalRequest?.bytes.string() ?? ""
+        #expect(original.hasSuffix("role=user") && !original.contains("X-Gulp"))  // what the client sent
+        await client.shutdown()
+        await proxy.stopAll()
+        await origin.stop()
+    }
+
     @Test("PRX-011: Drop answers the client with a clear page and sends nothing upstream")
     func test_PRX011_drop() async throws {
         let origin = try await Origin.start(reply: okReply)

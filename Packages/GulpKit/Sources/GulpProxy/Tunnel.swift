@@ -72,9 +72,17 @@ struct ProxyUpstream: Sendable {
         case dropped
     }
 
-    /// Forward `request` to `target` through the engine, with intercept (PRX-010…PRX-014) on both
-    /// legs: a held request may come back edited (sent with an updated Content-Length, PRX-018, and
-    /// recorded with its original, PRX-012) or dropped; a held response may be edited or dropped.
+    /// `request` after the request Match & Replace rules (proxy traffic, F01 §4.2 step 2). The
+    /// engine's Match & Replace hook leaves proxy requests alone, so this is the only rewrite.
+    func rewritten(_ request: RawRequest, to target: HTTPTarget) -> RawRequest {
+        matchReplace?.rewrite(request, target: target, source: .proxy) ?? request
+    }
+
+    /// Forward `request` to `target` through the engine, in the F01 §4.2 order: request Match &
+    /// Replace, then Intercept (PRX-010…PRX-014), so the user edits exactly the bytes that go on the
+    /// wire. A held request may come back edited (sent with an updated Content-Length — always, the
+    /// PRX-018 toggle is not built yet) or dropped; a held response may be edited or dropped. A
+    /// changed request is recorded with the client's original (PRX-012).
     func send(
         _ request: RawRequest, to target: HTTPTarget, streamTo client: (any Channel)? = nil
     ) async -> Reply {
@@ -86,21 +94,21 @@ struct ProxyUpstream: Sendable {
                 client.writeAndFlush(client.allocator.buffer(bytes: bytes), promise: nil)
             }
         }
-        var outgoing = request
+        var outgoing = rewritten(request, to: target)
         var requestWasHeld = false
         if let intercept {
-            let (decision, held) = await intercept.holdRequest(request, target: target)
+            let (decision, held) = await intercept.holdRequest(outgoing, target: target)
             requestWasHeld = held
             switch decision {
             case .drop:
                 return .dropped
             case .forward(let edited?):
                 outgoing = RawRequest(edited).updatingContentLength()
-                if outgoing != request { options.originalRequest = request }
             case .forward(nil):
                 break
             }
         }
+        if outgoing != request { options.originalRequest = request }
         let result = await engine.send(outgoing, to: target, options: options)
         if streamed.isSet { return .streamed(result.exchange.response, complete: result.error == nil) }
         guard let response = result.exchange.response, result.error == nil else {

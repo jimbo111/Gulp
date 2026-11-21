@@ -42,8 +42,9 @@ public actor ProxyServer {
     private var listeners: [UUID: (server: any Channel, clients: ClientConnections)] = [:]
 
     /// Create a proxy that forwards (and, through the engine's recorder, records) via `engine`.
-    /// Without `tls`, CONNECT is refused (no CA to intercept with). WebSocket traffic is recorded
-    /// to `webSockets` (PRX-031).
+    /// Without `tls`, CONNECT is refused (no CA to intercept with). `matchReplace` rewrites requests
+    /// here, before Intercept (F01 §4.2); register the same hook with the engine for responses.
+    /// WebSocket traffic is recorded to `webSockets` (PRX-031).
     public init(
         engine: any HTTPEngine, tls: ProxyTLSOptions? = nil, intercept: InterceptQueue? = nil,
         matchReplace: MatchReplaceHook? = nil, webSockets: (any WebSocketRecorder)? = nil
