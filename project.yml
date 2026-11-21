@@ -9,9 +9,6 @@ options:
 packages:
   GulpKit:
     path: Packages/GulpKit
-  Sparkle:
-    url: https://github.com/sparkle-project/Sparkle
-    from: "2.6.0"
 
 settings:
   base:
@@ -42,15 +39,22 @@ targets:
         product: GulpFeatures
       - package: GulpKit
         product: GulpWorkspace
-      - package: Sparkle
+      # Built (not linked) so the phase below can embed it.
+      - package: GulpKit
+        product: gulp-cli
+        link: false
     # Embed the CLI so users can symlink it into their PATH (docs/02 §4).
     postCompileScripts:
       - script: |
-          # gulp-cli is built from the SwiftPM package; copy it in when available.
-          BIN="$BUILT_PRODUCTS_DIR/gulp-cli"
+          set -euo pipefail
           DEST="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
-          if [ -f "$BIN" ]; then mkdir -p "$DEST" && cp "$BIN" "$DEST/gulp"; fi
+          mkdir -p "$DEST"
+          cp "$BUILT_PRODUCTS_DIR/gulp-cli" "$DEST/gulp"
         name: Embed gulp-cli
+        inputFiles:
+          - $(BUILT_PRODUCTS_DIR)/gulp-cli
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/gulp
 
   GulpAppUITests:
     type: bundle.ui-testing

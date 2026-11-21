@@ -54,16 +54,18 @@ The Makefile is the single entry point. Every target must work from a clean chec
 - Target `Gulp` (application, macOS 14.0) with:
   - Sources in `App/`, and a dependency on the local package `Packages/GulpKit` (products
     `GulpFeatures`, `GulpWorkspace`).
-  - Sparkle as a package dependency.
+  - Sparkle as a package dependency — **not yet**: it is added together with its updater UI (F24
+    MAC-026, M20); until then `project.yml` does not link it.
   - `Info.plist` keys: `CFBundleIdentifier = com.gulp.app` (change it if the user picks a different
     reverse-DNS ID), `LSMinimumSystemVersion`, `NSHumanReadableCopyright`, a document type for
-    `*.gulp` (UTI `com.gulp.project`, conforms to `public.database` / `public.data`), and
-    `SUFeedURL` for Sparkle.
+    `*.gulp` (UTI `com.gulp.project`, conforms to `public.database` / `public.data`), and (with
+    Sparkle, M20) `SUFeedURL`.
   - Entitlements (`App/Gulp.entitlements`): **no App Sandbox**; Hardened Runtime on;
     `com.apple.security.cs.allow-jit` only if JavaScriptCore JIT is needed (measure first; without
     it, JSC falls back to its interpreter).
   - A post-build phase that embeds `gulp-cli` in `Gulp.app/Contents/Helpers/gulp` (so users can
-    symlink it into `/usr/local/bin`).
+    symlink it into `/usr/local/bin`). The app target depends on the `gulp-cli` product without
+    linking it, so it is always built first; the phase fails the build if the binary is missing.
 - Target `GulpAppUITests` (XCUITest bundle for the app). Named with the `App` prefix to avoid
   colliding with the `GulpUI` module's own SwiftPM test target (`GulpUITests`).
 - Scheme `Gulp`: test action runs `GulpAppUITests`. The SwiftPM tests run through `make test-core`.
