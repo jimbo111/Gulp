@@ -8,10 +8,9 @@ import NIOCore
 /// What the engine asks a connection to do: write `bytes`, then deliver the response to `promise`.
 struct RequestCommand: Sendable {
     let bytes: ByteBuffer
-    /// The request was HEAD: the response has no body whatever its framing headers say.
-    let isHead: Bool
-    /// The request was CONNECT: a 2xx response has no body and the connection becomes a tunnel.
-    let isConnect: Bool
+    /// The request's method token, which decides framing: a response to HEAD has no body whatever
+    /// its framing headers say; a 2xx to CONNECT has none and turns the connection into a tunnel.
+    let method: String
     let maxResponseBytes: Int
     let firstByteTimeout: TimeAmount
     let idleTimeout: TimeAmount
@@ -62,7 +61,8 @@ private struct ResponseHead {
         let close = r.hasHeaderToken("connection", "close")
         let keep = r.hasHeaderToken("connection", "keep-alive")
         let tunnel = isConnect && status >= 200 && status < 300
-        keepAlive = tunnel || (status != 101 && (version == "HTTP/1.1" ? !close : (keep && !close)))
+        // A tunnel or a switched protocol no longer carries HTTP requests: never reuse it for one.
+        keepAlive = !tunnel && status != 101 && (version == "HTTP/1.1" ? !close : (keep && !close))
         // RFC 9112 §6.3: HEAD, 1xx, 204, 304 and a 2xx to CONNECT end at the header block.
         if tunnel || isHead || status == 204 || status == 304 || (status >= 100 && status < 200) {
             framing = .none
@@ -136,7 +136,8 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
             return
         }
         let request = Pending(
-            promise: command.promise, isHead: command.isHead, isConnect: command.isConnect,
+            promise: command.promise, isHead: command.method == "HEAD",
+            isConnect: command.method == "CONNECT",
             maxBytes: command.maxResponseBytes, idleTimeout: command.idleTimeout, onBytes: command.onBytes)
         if pending != nil {
             guard command.pipelined else {

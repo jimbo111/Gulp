@@ -773,8 +773,7 @@ public final class NIOHTTPEngine: HTTPEngine {
         }
         text += "\r\n"
         let result = await exchange(
-            on: channel, request: RawRequest(Bytes(text)), options: options, totalDeadline: deadline,
-            isConnect: true)
+            on: channel, request: RawRequest(Bytes(text)), options: options, totalDeadline: deadline)
         let status = RawResponse(Bytes(result.wire.bytes)).parsed.statusCode
         guard result.wire.error == nil, (200..<300).contains(status) else {
             channel.close(promise: nil)
@@ -792,15 +791,14 @@ public final class NIOHTTPEngine: HTTPEngine {
 
     /// Write the exact request bytes and wait for the framed response.
     func exchange(
-        on channel: any Channel, request: RawRequest, options: SendOptions, totalDeadline: NIODeadline,
-        isConnect: Bool = false
+        on channel: any Channel, request: RawRequest, options: SendOptions, totalDeadline: NIODeadline
     ) async -> WireResult {
         var buffer = channel.allocator.buffer(capacity: request.bytes.count)
         buffer.writeBytes(request.bytes.rawBytes)
         let promise = channel.eventLoop.makePromise(of: WireResponse.self)
         let command = RequestCommand(
-            bytes: buffer, isHead: request.bytes[request.parsed.method].string() == "HEAD",
-            isConnect: isConnect, maxResponseBytes: options.maxResponseBytes,
+            bytes: buffer, method: request.bytes[request.parsed.method].string(),
+            maxResponseBytes: options.maxResponseBytes,
             firstByteTimeout: timeAmount(options.timeouts.firstByte),
             idleTimeout: timeAmount(options.timeouts.idleBetweenBytes), totalDeadline: totalDeadline,
             promise: promise, onBytes: options.onResponseBytes)

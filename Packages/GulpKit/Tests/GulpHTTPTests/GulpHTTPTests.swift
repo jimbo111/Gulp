@@ -321,6 +321,24 @@ struct EngineTests {
         #expect(both.updatingContentLength().headerValue("content-length")?.string() == "5")
     }
 
+    @Test("HTTP-002: a CONNECT sent as a request ends at a 2xx's header block; the tunnel is not pooled")
+    func test_HTTP002_userConnect() async throws {
+        let server = try await TestServer.start { b, _ in
+            guard headersComplete(b) else { return nil }
+            return String(decoding: b, as: UTF8.self).hasPrefix("CONNECT ")
+                ? ServerReply("HTTP/1.1 200 Connection Established\r\n\r\n") : ok("plain")
+        }
+        let engine = NIOHTTPEngine()
+        let connect = RawRequest(Bytes("CONNECT inner.test:443 HTTP/1.1\r\nHost: inner.test:443\r\n\r\n"))
+        let quick = options { $0.timeouts.idleBetweenBytes = .seconds(2) }
+        let tunnel = await engine.send(connect, to: server.target, options: quick)
+        #expect(tunnel.error == nil && tunnel.exchange.response?.parsed.statusCode == 200)
+        let next = await engine.send(get(), to: server.target, options: quick)
+        #expect(next.exchange.response?.bytes.string().hasSuffix("plain") == true && server.connections == 2)
+        await engine.shutdown()
+        await server.stop()
+    }
+
     // MARK: HTTP-009
 
     @Test("HTTP-009: cancelling the task closes the connection and records .cancelled")
