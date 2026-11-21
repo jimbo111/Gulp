@@ -41,6 +41,39 @@ struct InterceptRuleTests {
         #expect(InterceptRules.matches([header], request: withCookie, target: target))
     }
 
+    @Test("PRX-013: the in-scope field follows the project scope; the default in-scope rule ships off")
+    func test_PRX013_inScope() async {
+        let scope = ScopeService(rules: [ScopeRule(host: "app.test", path: "^/api")])
+        let inScope = [InterceptCondition(field: .inScope, pattern: "^true$")]
+        let api = request("POST /api/login")
+        #expect(InterceptRules.matches(inScope, request: api, target: target, scope: scope))
+        #expect(
+            !InterceptRules.matches(inScope, request: request("POST /login"), target: target, scope: scope))
+        let elsewhere = HTTPTarget(scheme: .http, host: "other.test", port: 80)
+        #expect(!InterceptRules.matches(inScope, request: api, target: elsewhere, scope: scope))
+        #expect(!InterceptRules.matches(inScope, request: api, target: target))  // no scope: nothing is in
+        // The default "only in-scope" rule is there but off, so a project without a scope still intercepts.
+        let defaults = InterceptCondition.defaultRequestRules
+        #expect(defaults.contains { $0.field == .inScope && !$0.enabled })
+        #expect(InterceptRules.matches(defaults, request: request("POST /login"), target: target))
+        let scoped = defaults.map { rule -> InterceptCondition in
+            var on = rule
+            on.enabled = true
+            return on
+        }
+        #expect(InterceptRules.matches(scoped, request: api, target: target, scope: scope))
+        #expect(
+            !InterceptRules.matches(scoped, request: request("GET /api/app.js"), target: target, scope: scope)
+        )
+        // The queue evaluates its rules against the scope it was given.
+        let queue = InterceptQueue()
+        await queue.setIntercepting(requests: true)
+        await queue.setRules(requests: scoped)
+        await queue.setScope(scope)
+        let (_, held) = await queue.holdRequest(request("POST /login"), target: target)
+        #expect(!held)
+    }
+
     @Test("PRX-014: response conditions see status, MIME and whether the request was held")
     func test_PRX014_responseFields() {
         let response = RawResponse(Bytes("HTTP/1.1 302 Found\r\nContent-Type: text/html\r\n\r\n"))

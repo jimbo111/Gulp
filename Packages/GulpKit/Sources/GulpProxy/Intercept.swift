@@ -49,11 +49,13 @@ public struct InterceptCondition: Sendable, Codable, Hashable, Identifiable {
         self.negate = negate
     }
 
-    /// PRX-013 default: don't intercept static assets. (In-scope only arrives with scope, M6a.)
+    /// PRX-013 defaults: don't intercept static assets, and "only in scope" — present but off, so a
+    /// project without a scope yet still intercepts (an empty scope has nothing in it).
     public static let defaultRequestRules = [
         InterceptCondition(
             field: .fileExtension, pattern: "^(gif|jpe?g|png|css|js|ico|svg|woff2?|ttf|webp|map)$",
-            negate: true)
+            negate: true),
+        InterceptCondition(enabled: false, field: .inScope, pattern: "^true$"),
     ]
 }
 
@@ -117,7 +119,8 @@ public actor InterceptQueue {
     public private(set) var requestQuery: GulpQLPredicate?
     /// A GulpQL response rule (PRX-015); when set it replaces `responseRules`.
     public private(set) var responseQuery: GulpQLPredicate?
-    /// The scope GulpQL rules see (`in_scope`, `matches_scope`).
+    /// The project scope: the `inScope` rule field and GulpQL rules (`in_scope`, `matches_scope`)
+    /// evaluate against it; without one, nothing is in scope.
     public private(set) var scope: ScopeService?
 
     private struct Waiter {
@@ -174,12 +177,13 @@ public actor InterceptQueue {
         responseQuery = response
     }
 
-    /// The scope GulpQL rules evaluate `in_scope` against.
+    /// The scope rules evaluate `inScope` / `in_scope` against.
     public func setScope(_ scope: ScopeService?) { self.scope = scope }
 
     /// Whether messages of the connection opened by `upgrade` are currently held.
     public func interceptsWebSockets(upgrade: RawRequest, target: HTTPTarget) -> Bool {
-        interceptWebSockets && InterceptRules.matches(webSocketRules, request: upgrade, target: target)
+        interceptWebSockets
+            && InterceptRules.matches(webSocketRules, request: upgrade, target: target, scope: scope)
     }
 
     /// Hold a WebSocket data message if WebSocket interception is on and the connection matches;
@@ -220,7 +224,7 @@ public actor InterceptQueue {
         guard interceptRequests else { return (.forward(nil), false) }
         let matches =
             requestQuery.map { ProxyQuery.holds($0, request: request, target: target, scope: scope) }
-            ?? InterceptRules.matches(requestRules, request: request, target: target)
+            ?? InterceptRules.matches(requestRules, request: request, target: target, scope: scope)
         guard matches else { return (.forward(nil), false) }
         return (await hold(.request, request: request, response: nil, target: target), true)
     }
@@ -236,7 +240,7 @@ public actor InterceptQueue {
             }
             ?? InterceptRules.matches(
                 responseRules, request: request, target: target, response: response,
-                requestWasHeld: requestWasHeld)
+                requestWasHeld: requestWasHeld, scope: scope)
         guard matches else { return (.forward(nil), false) }
         return (await hold(.response, request: request, response: response, target: target), true)
     }
@@ -263,16 +267,16 @@ public actor InterceptQueue {
 /// Rule evaluation (PRX-013/PRX-014).
 public enum InterceptRules {
     /// Whether the message satisfies `conditions` (left to right, AND/OR; no enabled conditions
-    /// matches everything).
+    /// matches everything). `inScope` is decided by `scope` (without one, nothing is in scope).
     public static func matches(
         _ conditions: [InterceptCondition], request: RawRequest, target: HTTPTarget,
-        response: RawResponse? = nil, requestWasHeld: Bool = false
+        response: RawResponse? = nil, requestWasHeld: Bool = false, scope: ScopeService? = nil
     ) -> Bool {
         var result: Bool?
         for condition in conditions where condition.enabled {
             let value = subject(
                 condition.field, request: request, target: target, response: response,
-                requestWasHeld: requestWasHeld)
+                requestWasHeld: requestWasHeld, scope: scope)
             var hit = matchesPattern(condition.pattern, value)
             if condition.negate { hit.toggle() }
             switch (result, condition.join) {
@@ -286,7 +290,7 @@ public enum InterceptRules {
 
     static func subject(
         _ field: InterceptField, request: RawRequest, target: HTTPTarget, response: RawResponse?,
-        requestWasHeld: Bool
+        requestWasHeld: Bool, scope: ScopeService?
     ) -> String {
         let bytes = request.bytes
         let requestTarget = bytes[request.parsed.target].string()
@@ -309,7 +313,10 @@ public enum InterceptRules {
         case .body:
             if let response { return Latin1.string(response.bytes[response.parsed.body].rawBytes) }
             return Latin1.string(bytes[request.parsed.body].rawBytes)
-        case .inScope: return "true"  // scope arrives in M6a; until then everything is in scope
+        case .inScope:
+            let pathAndQuery =
+                requestTarget.contains("://") ? ScopeService.requestPath(ofURL: requestTarget) : requestTarget
+            return scope?.isInScope(target, path: pathAndQuery) == true ? "true" : "false"
         case .status: return response.map { String($0.parsed.statusCode) } ?? ""
         case .mime: return response?.headerValue("content-type")?.string() ?? ""
         case .requestWasIntercepted: return requestWasHeld ? "true" : "false"
