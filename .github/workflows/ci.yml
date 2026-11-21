@@ -14,7 +14,7 @@ jobs:
   core-linux:
     name: Core (Linux, Swift 6)
     runs-on: ubuntu-latest
-    container: swift:6.0-noble
+    container: swift:6.1-noble
     steps:
       - uses: actions/checkout@v4
       - name: Install SQLite with GRDB-required features (snapshot, FTS5)
