@@ -371,15 +371,16 @@ public final class ComparerModel {
         computing = true
         let granularity = self.granularity
         let options = self.options
-        // Off the main thread (CMP-004): large diffs must not freeze the UI.
-        job = Task.detached(priority: .userInitiated) { [weak self] in
-            let diff = Differ.diff(a, b, granularity: granularity, options: options)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                self?.result = diff
-                self?.computing = false
-                self?.currentChange = 0
-            }
+        // The diff runs off the main thread (CMP-004: large diffs must not freeze the UI); only its
+        // value comes back, and this main-actor task applies it unless a newer recompute cancelled it.
+        job = Task { [weak self] in
+            let diff = await Task.detached(priority: .userInitiated) {
+                Differ.diff(a, b, granularity: granularity, options: options)
+            }.value
+            guard !Task.isCancelled, let self else { return }
+            result = diff
+            computing = false
+            currentChange = 0
         }
     }
 }
