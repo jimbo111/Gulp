@@ -26,7 +26,7 @@ public struct ExchangeSummary: Sendable, Hashable, Identifiable {
     public var query: String?
     /// Response status.
     public var status: Int?
-    /// Response body length.
+    /// Response body length in bytes as framed on the wire (a chunked body counts its chunk framing).
     public var responseLength: Int?
     /// Response MIME type.
     public var mime: String?

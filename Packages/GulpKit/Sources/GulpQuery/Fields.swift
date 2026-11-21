@@ -59,7 +59,7 @@ public enum GulpQLFields {
         info("req.params", .list, "Parameter names"),
         info("req.has_param", .bool, "Has any parameter, or the named one", arity: 0...1),
         info("resp.status", .number, "Status code", column: "status"),
-        info("resp.length", .number, "Response body length", column: "response_length"),
+        info("resp.length", .number, "Body bytes as framed (with chunk framing)", column: "response_length"),
         info("resp.mime", .text, "Content-Type without parameters", column: "mime"),
         info("resp.title", .text, "HTML title", column: "title"),
         info("resp.body", .text, "Response body (decoded, first 2 MB)"),
