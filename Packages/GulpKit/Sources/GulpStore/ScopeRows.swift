@@ -70,27 +70,31 @@ extension ProjectStore {
         var after: Int64 = 0
         while true {
             let start = after
-            let rows: [Row] = try await pool.read { db in
+            // GRDB's `Row` isn't Sendable: read the columns into plain values inside the closure.
+            let rows = try await pool.read { db in
                 try Row.fetchAll(
                     db,
                     sql: """
                         SELECT id, scheme, host, port, path, query, in_scope FROM exchanges WHERE id > ? \
                         ORDER BY id LIMIT ?
                         """,
-                    arguments: [start, batch])
+                    arguments: [start, batch]
+                ).map { row -> (id: Int64, target: HTTPTarget, path: String, inScope: Bool) in
+                    let scheme: String = row["scheme"] ?? "http"
+                    let target = HTTPTarget(
+                        scheme: scheme == "https" ? .https : .http, host: row["host"] ?? "",
+                        port: row["port"] ?? 0)
+                    let query: String? = row["query"]
+                    let path = (row["path"] ?? "/") + (query.map { "?\($0)" } ?? "")
+                    return (row["id"], target, path, (row["in_scope"] as Int?) == 1)
+                }
             }
             guard let last = rows.last else { return }
-            after = last["id"]
+            after = last.id
             var changes: [(Int64, Bool)] = []
             for row in rows {
-                let scheme: String = row["scheme"] ?? "http"
-                let target = HTTPTarget(
-                    scheme: scheme == "https" ? .https : .http, host: row["host"] ?? "",
-                    port: row["port"] ?? 0)
-                let query: String? = row["query"]
-                let path = (row["path"] ?? "/") + (query.map { "?\($0)" } ?? "")
-                let inScope = service.isInScope(target, path: path)
-                if inScope != ((row["in_scope"] as Int?) == 1) { changes.append((row["id"], inScope)) }
+                let inScope = service.isInScope(row.target, path: row.path)
+                if inScope != row.inScope { changes.append((row.id, inScope)) }
             }
             if !changes.isEmpty {
                 let updates = changes
