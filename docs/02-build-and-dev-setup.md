@@ -5,15 +5,16 @@
 | Tool | Version | Install |
 |---|---|---|
 | macOS | 14 Sonoma or later (Apple Silicon recommended) | — |
-| Xcode | Latest stable (Swift 6.x toolchain) | App Store or developer.apple.com |
+| Xcode | Latest stable; Swift 6.1 or later (swift-crypto ≥ 4.5.1 needs tools 6.1). Verified: Xcode 27.2 / Swift 6.4 | App Store or developer.apple.com |
 | Command Line Tools | Matching Xcode | `xcode-select --install` |
 | Homebrew | latest | https://brew.sh |
 | XcodeGen | latest | `brew install xcodegen` |
-| swift-format | matches the toolchain | ships with Xcode 16+ (`swift format`), or `brew install swift-format` |
+| swift-format | ships with the toolchain | `swift format` (Xcode 16+ and Swift 6 toolchains); nothing to install |
 | Google Chrome or Chromium | any recent | Optional; Gulp can download Chrome for Testing (F16) |
 | Docker | optional | For Beacon packaging and optional third-party vulnerable apps |
 
-`make bootstrap` checks for these and installs the Homebrew tools that are missing.
+`make bootstrap` runs `brew bundle` (installs XcodeGen) and resolves both SwiftPM packages; it does
+not check the other tools.
 
 ## 2. First-time setup
 
@@ -33,19 +34,20 @@ The Makefile is the single entry point. Every target must work from a clean chec
 
 | Target | Command(s) it runs |
 |---|---|
-| `bootstrap` | `brew bundle` (Brewfile: xcodegen, swift-format), `swift package --package-path Packages/GulpKit resolve` |
+| `bootstrap` | `brew bundle` (Brewfile: xcodegen), `swift package resolve` for `Packages/GulpKit` and `Beacon` |
 | `generate` | `xcodegen generate` |
 | `build` | `xcodebuild -project Gulp.xcodeproj -scheme Gulp -configuration Debug -destination 'platform=macOS' build` |
 | `run` | `build`, then `open` the built `.app` from DerivedData (use `-derivedDataPath .build/xcode` so the path is predictable) |
-| `test-core` | `swift test --package-path Packages/GulpKit --parallel` |
+| `test-core` | `swift test --package-path Packages/GulpKit --parallel $(SWIFTPM_FLAGS)` |
 | `test` | `test-core`, then `xcodebuild test -scheme Gulp` (app and UI tests) |
-| `perf` | `swift test --package-path Packages/GulpKit --filter PerformanceTests` (the performance budgets in doc 06 §5; kept out of `test` because it is slow) |
-| `lint` | `swift format lint --strict --recursive App Packages Beacon` |
-| `format` | `swift format --in-place --recursive App Packages Beacon` |
+| `perf` | `swift test --package-path Packages/GulpKit --filter PerformanceTests` (the performance budgets in doc 06 §5; kept out of `test` because it is slow). **No `PerformanceTests` exist yet**, so it currently runs nothing; the M9 and M8 DoD scripts measure the GulpQL and Fuzzer budgets instead |
+| `lint` | `make rules`, then `swift format lint --strict --recursive App Packages Beacon UITests` |
+| `rules` | `Scripts/arch-check.sh` + `Scripts/rules-check.sh` (grep-only; works on Linux) |
+| `format` | `swift format --in-place --recursive App Packages Beacon UITests` |
 | `vulnlab` | `swift run --package-path Packages/GulpKit gulp-vulnlab --port 8088` |
 | `beacon` | `swift run --package-path Beacon gulp-beacon --dev` |
 | `release` | `Scripts/release.sh` (archive → sign → notarize → staple → DMG → Sparkle appcast) |
-| `clean` | remove `.build`, `Gulp.xcodeproj` |
+| `clean` | remove `.build`, `Gulp.xcodeproj`, `Packages/GulpKit/.build`, `Beacon/.build` |
 
 ## 4. `project.yml` (XcodeGen) — required contents
 
@@ -77,7 +79,8 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "GulpWorkspace", targets: ["GulpWorkspace"]),
-        .library(name: "GulpFeatures", targets: ["GulpFeatures"]),   // macOS only
+        .library(name: "GulpAutomation", targets: ["GulpAutomation"]),
+        .library(name: "GulpFeatures", targets: ["GulpFeatures"]),   // real content only on macOS
         .executable(name: "gulp-cli", targets: ["gulp-cli"]),
         .executable(name: "gulp-vulnlab", targets: ["gulp-vulnlab"]),
     ],
@@ -87,7 +90,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-http2.git", from: "1.33.0"),
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.22.0"),
         .package(url: "https://github.com/apple/swift-certificates.git", from: "1.5.0"),
-        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.7.0"),
+        .package(url: "https://github.com/apple/swift-asn1.git", from: "1.1.0"),
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.1"),   // < 4.5.1: RSA double-free
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
@@ -98,12 +102,10 @@ let package = Package(
 )
 ```
 
-The version numbers are minimums. Use the latest compatible releases when you create the file, and
-commit `Package.resolved`.
-
-Platform-only targets: put macOS-only targets in a conditional block
-(`#if os(macOS) targets += [...] #endif`). This works because `Package.swift` is ordinary Swift
-evaluated on the host.
+The version numbers are minimums; `Package.swift` is the authority. Commit `Package.resolved`.
+`swift-crypto` must stay ≥ 4.5.1: older versions double-free an `EVP_PKEY` when RSA public-key DER
+parsing fails. 4.5.x needs Swift tools 6.1, so building needs a Swift 6.1+ toolchain even though the
+manifest declares tools 6.0.
 
 **Platform modules are empty shells on Linux (not conditional targets).** A module breaks the Linux
 build only if its *sources* fail to compile there (e.g. `import AppKit`). Rather than conditionalize
@@ -127,22 +129,30 @@ compiling to an empty shell on Linux. Consequences:
 Use this for CI or for Claude cloud sessions that run on Linux.
 
 ```bash
-# Install a Swift 6 toolchain (e.g. via swiftly: https://swift.org/install/linux/)
-sudo apt-get install -y libsqlite3-dev
+# Install a Swift 6.1+ toolchain (e.g. via swiftly: https://swift.org/install/linux/), or use the
+# swift:6.1-noble Docker image that CI uses.
 swift build --package-path Packages/GulpKit
 swift test  --package-path Packages/GulpKit
 swift build --package-path Beacon
 ```
 
-The macOS-only targets are excluded automatically (see §5).
+SQLite: GRDB 7 needs `sqlite3_snapshot_*`, which Ubuntu's `libsqlite3` lacks, so install a SQLite
+built with `SQLITE_ENABLE_SNAPSHOT` and FTS5 into `/usr/local` (the `core-linux` job in
+`.github/workflows/ci.yml` shows the exact steps) and pass
+`SWIFTPM_FLAGS="-Xcc -I/usr/local/include -Xlinker -L/usr/local/lib"`.
+
+The macOS-capability targets are not excluded: they build on Linux as empty shells (see §5).
 
 ## 7. Continuous integration (`.github/workflows/ci.yml`)
 
+**CI cannot run at the moment** (GitHub Actions minutes are exhausted). The workflow is kept current
+for when it can; until then the local `make test` + `make lint` is the only gate.
+
 | Job | Runner | Steps |
 |---|---|---|
-| `core-linux` | `ubuntu-latest` + Swift 6 container | `swift build` + `swift test` for GulpKit and Beacon |
-| `macos` | `macos-15` (or newer) | `make bootstrap`, then `make lint generate test-core build test` (matches `.github/workflows/ci.yml`: lint → generate → core tests → build app → app/UI tests) |
-| `release` (on tag `v*`) | `macos-15` | `make release` using signing secrets in GitHub encrypted secrets |
+| `core-linux` | `ubuntu-latest` + `swift:6.1-noble` container | builds SQLite with snapshot + FTS5, `swift build` + `swift test` for GulpKit, `arch-check.sh`, `rules-check.sh`, every `Scripts/*-dod.sh`, `jsc-host-typecheck.sh`, then build + test Beacon |
+| `macos` | `macos-15` | `brew install xcodegen`, then `make lint`, `make generate`, `make test-core`, `Scripts/m4b-browser.sh`, `make build`, `make test`. It still selects `Xcode_16`, which ships Swift 6.0; it needs Xcode 16.3+ (Swift 6.1) before it can pass |
+| `release` (on tag `v*`) | `macos-15` | placeholder step; `make release` with signing secrets is not wired yet |
 
 Cache `.build` and SwiftPM checkouts keyed on `Package.resolved`.
 
@@ -175,7 +185,6 @@ Release script steps (`Scripts/release.sh`):
 
 - `make vulnlab`, then in Gulp set the browser to proxy through 127.0.0.1:8080 and browse
   `http://localhost:8088`. VulnLab is the reference target for every feature (doc 06).
-- Use `GULP_LOG_LEVEL=trace` to get verbose logs from the app or the CLI.
 - `defaults delete com.gulp.app` resets user settings during development.
 - To test the TLS path without touching the system trust store, use the Gulp Browser (F16). It
   trusts the Gulp CA through the `--ignore-certificate-errors-spki-list` flag.
