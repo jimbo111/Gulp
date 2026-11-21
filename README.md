@@ -38,8 +38,8 @@ twin under `/safe/` with the same shape and the bug fixed: `/sqli/error` and `/s
 Each check has to find the bug on one and stay quiet on the other. Catching the bug proves the check
 works. Staying quiet on the fixed twin proves it isn't just flagging every response.
 
-That runs on every push: 558 unit tests and 41 end-to-end scripts that start VulnLab, drive the real
-CLI against it, and fail if a finding lands on a `/safe/` route.
+The test suite is built around it: 563 unit tests and 41 end-to-end scripts that start VulnLab,
+drive the real CLI against it, and fail if a finding lands on a `/safe/` route.
 
 ## What's in it
 

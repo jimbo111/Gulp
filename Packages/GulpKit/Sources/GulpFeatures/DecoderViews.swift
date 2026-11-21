@@ -543,8 +543,8 @@ public final class JWTModel {
             guard (try? JSONSerialization.jsonObject(with: Data(text.utf8))) != nil else {
                 throw CodecError("not valid JSON")
             }
-            let minified = try Transforms.named("json-minify")!.apply(Array(text.utf8))
-            return String(decoding: try Transforms.named("base64url")!.apply(minified), as: UTF8.self)
+            let minified = try Transforms.require("json-minify").apply(Array(text.utf8))
+            return String(decoding: try Transforms.require("base64url").apply(minified), as: UTF8.self)
         }
         return JWT(
             headerSegment: try segment(header), payloadSegment: try segment(claims), signatureSegment: "")

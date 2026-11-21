@@ -38,12 +38,13 @@ while IFS= read -r hit; do
 done < <(grep -rnE "try\? await [A-Za-z_.]*store\.(record|append|set|add|attach|save|insert|update|delete|write|put|upsert)" \
   "$SRC/GulpWorkspace" --include='*.swift' || true)
 
-# 4. Issue ids resolve through the checked lookup (IssueDefinitions.require), which names the missing
-#    id, never a force-unwrapped named(…)! (IssueIDCoverageTests checks the ids themselves).
+# 4. Registry lookups go through the checked `require`, which names what is missing, never a
+#    force-unwrapped named(…)! — issue definitions (IssueIDCoverageTests checks the ids themselves) and
+#    Decoder transforms (names can come from user config, e.g. a Fuzzer processor).
 while IFS= read -r hit; do
   [ -z "$hit" ] && continue
-  problem "$hit — use IssueDefinitions.require(id) instead of force-unwrapping named(id)"
-done < <(grep -rnE "IssueDefinitions\.named\([^)]*\)!" "$SRC" --include='*.swift' || true)
+  problem "$hit — use require(name) instead of force-unwrapping named(name)"
+done < <(grep -rnE "(IssueDefinitions|Transforms)\.named\([^)]*\)!" "$SRC" --include='*.swift' || true)
 
 # 5. CLAUDE.md §4: no `@unchecked Sendable` without a comment that justifies it (on the line or within
 #    the three lines above).
@@ -67,4 +68,4 @@ if [ "$fail" -ne 0 ]; then
   echo "rules-check: FAILED (see CLAUDE.md §4 and the comment above each rule in Scripts/rules-check.sh)" >&2
   exit 1
 fi
-echo "rules-check: OK (scope-safe CLI sends, seeded test randomness, no silent store writes, checked issue ids, justified @unchecked Sendable, no committed private keys)"
+echo "rules-check: OK (scope-safe CLI sends, seeded test randomness, no silent store writes, checked registry lookups, justified @unchecked Sendable, no committed private keys)"

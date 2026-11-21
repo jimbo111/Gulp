@@ -47,9 +47,7 @@ struct AuthzCommand: AsyncParsableCommand {
 
         func run() async throws {
             guard let destination = HTTPTarget(url: base) else { throw ValidationError("Invalid --base") }
-            let host =
-                destination.port == (destination.scheme == .https ? 443 : 80)
-                ? destination.host : "\(destination.host):\(destination.port)"
+            let host = destination.hostHeader
             let session = try await ProjectSession.open(at: URL(fileURLWithPath: project))
 
             // Log in bob (owns order 2) and alice (owns order 1).

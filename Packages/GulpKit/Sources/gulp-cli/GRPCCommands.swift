@@ -236,8 +236,7 @@ struct GRPCCommand: AsyncParsableCommand {
         }
 
         static func authority(_ target: HTTPTarget) -> String {
-            let defaultPort = target.scheme == .https ? 443 : 80
-            return target.port == defaultPort ? target.host : "\(target.host):\(target.port)"
+            target.hostHeader
         }
     }
 

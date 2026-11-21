@@ -67,6 +67,13 @@ public enum Transforms {
     /// The operation named `name`.
     public static func named(_ name: String) -> Transform? { all[name.lowercased()] }
 
+    /// The operation named `name`, or a `CodecError` naming the unknown operation (use this rather
+    /// than force-unwrapping `named(_:)`; Scripts/rules-check.sh bans `named(…)!`).
+    public static func require(_ name: String) throws -> Transform {
+        guard let transform = named(name) else { throw CodecError("Unknown operation \"\(name)\".") }
+        return transform
+    }
+
     /// Apply `steps` in order; returns every intermediate value (the input first), so a stacked
     /// editor can show each level (DEC-001).
     public static func run(_ input: [UInt8], _ steps: [TransformStep]) throws -> [[UInt8]] {

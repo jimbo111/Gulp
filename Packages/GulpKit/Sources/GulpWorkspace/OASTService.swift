@@ -305,7 +305,7 @@ public actor OASTService {
 
 /// Secrets that must not sit in project or settings files (the OAST server token): the Keychain on
 /// macOS, process memory elsewhere (headless runs pass it on the command line or environment).
-enum SecretStore {
+enum OASTTokenStore {
     static let service = "com.gulp.oast"
     // nonisolated(unsafe): `memory` is only read or written while holding `lock`.
     nonisolated(unsafe) static var memory: [String: String] = [:]
@@ -329,7 +329,7 @@ enum SecretStore {
 #if canImport(Security)
 import Security
 
-extension SecretStore {
+extension OASTTokenStore {
     static func keychainGet(_ account: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
@@ -364,7 +364,7 @@ extension ProjectSession {
     /// register and start polling when enabled.
     public func configureOAST(_ value: OASTSettings, token: String? = nil) async throws {
         try await settings.set(value, scope: .project)
-        if let token { SecretStore.set(value.serverURL, token.isEmpty ? nil : token) }
+        if let token { OASTTokenStore.set(value.serverURL, token.isEmpty ? nil : token) }
         if value.enabled { try await startOAST() } else { await stopOAST() }
     }
 
@@ -372,7 +372,7 @@ extension ProjectSession {
     public func startOAST(token: String? = nil) async throws {
         let value = settings.get(OASTSettings.self)
         let secret =
-            token ?? SecretStore.get(value.serverURL)
+            token ?? OASTTokenStore.get(value.serverURL)
             ?? ProcessInfo.processInfo.environment["GULP_OAST_TOKEN"]
         try await oast.start(value, token: secret)
         let oast = self.oast

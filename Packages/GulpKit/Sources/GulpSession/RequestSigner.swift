@@ -10,8 +10,9 @@
 //   AWS SigV4                  — canonical request → string to sign → derived key; adds Authorization,
 //                                X-Amz-Date and X-Amz-Content-Sha256 (session token when present).
 //
-// Signing never caches a signature (it re-signs on every send and retry) and reads the key material
-// the workspace loads from the Keychain. The JOSE/crypto primitives are GulpCodec's (shared with the
+// Signing never caches a signature (it re-signs on every send and retry). Key material is never
+// persisted with the project: the workspace stores it in a SecretStore (the Keychain on macOS, a 0600
+// file elsewhere), saves only a `.stored(ref:)` placeholder, and resolves it back before signing. The JOSE/crypto primitives are GulpCodec's (shared with the
 // JWT Workbench). Nothing here weakens verification; it produces valid signatures so a tester can
 // exercise APIs that require them.
 
@@ -21,7 +22,8 @@ import GulpCodec
 import GulpCore
 import GulpHTTP
 
-/// Private key material for a signing scheme (serialized; the real secrets live in the Keychain).
+/// Private key material for a signing scheme. Projects persist only `.stored(ref:)`; the material
+/// itself lives in the workspace's SecretStore (CLAUDE.md "No secrets in the repo").
 public enum SigningSecret: Sendable, Hashable, Codable {
     /// An EC private key (raw bytes) on a curve — DPoP and RFC 9421 (ES256/384/512).
     case ec(curve: ECCurve, privateRaw: [UInt8])
@@ -31,13 +33,22 @@ public enum SigningSecret: Sendable, Hashable, Codable {
     case hmac([UInt8])
     /// AWS credentials — SigV4.
     case aws(accessKey: String, secretKey: String, sessionToken: String?)
+    /// A reference to material held in the workspace's secret store. It never signs: the workspace
+    /// resolves it to the real secret first, and an unresolved one fails with `SigningError.wrongKey`.
+    case stored(ref: String)
+
+    /// Whether this is real key material (as opposed to a `.stored` reference).
+    public var isInline: Bool {
+        if case .stored = self { return false }
+        return true
+    }
 
     func jwtKey() -> JWTKey? {
         switch self {
         case .ec(let curve, let raw): return .ecPrivate(curve, raw)
         case .rsaPEM(let pem): return JWTKey.pem(pem)
         case .hmac(let bytes): return .secret(bytes)
-        case .aws: return nil
+        case .aws, .stored: return nil
         }
     }
 }
@@ -52,6 +63,27 @@ public enum SigningScheme: Sendable, Hashable, Codable {
         components: [String] = ["@method", "@target-uri", "content-digest"])
     /// AWS SigV4 for `service` in `region`.
     case sigV4(secret: SigningSecret, region: String, service: String)
+
+    /// The scheme's key material.
+    public var secret: SigningSecret {
+        switch self {
+        case .dpop(let secret, _), .httpMessageSignature(let secret, _, _, _), .sigV4(let secret, _, _):
+            return secret
+        }
+    }
+
+    /// The same scheme with `secret` as its key material.
+    public func replacingSecret(_ secret: SigningSecret) -> SigningScheme {
+        switch self {
+        case .dpop(_, let algorithm):
+            return .dpop(secret: secret, algorithm: algorithm)
+        case .httpMessageSignature(_, let algorithm, let keyID, let components):
+            return .httpMessageSignature(
+                secret: secret, algorithm: algorithm, keyID: keyID, components: components)
+        case .sigV4(_, let region, let service):
+            return .sigV4(secret: secret, region: region, service: service)
+        }
+    }
 }
 
 /// Extra per-request inputs the signer may need (the access token for DPoP `ath`, the latest
@@ -79,6 +111,9 @@ public enum RequestSigner {
         _ request: RawRequest, to target: HTTPTarget, scheme: SigningScheme,
         context: SigningContext = SigningContext()
     ) throws -> RawRequest {
+        if case .stored(let ref) = scheme.secret {
+            throw SigningError.wrongKey("the signing key \(ref) is not in this machine's secret store")
+        }
         switch scheme {
         case .dpop(let secret, let algorithm):
             return try signDPoP(

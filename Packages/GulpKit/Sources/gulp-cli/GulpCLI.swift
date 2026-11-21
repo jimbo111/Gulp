@@ -429,8 +429,7 @@ struct WS: AsyncParsableCommand {
             guard let proxy = HTTPTarget(url: via) else { throw ValidationError("Invalid --via \(via)") }
             options.upstreamProxy = .proxy(UpstreamProxy(kind: .http, host: proxy.host, port: proxy.port))
         }
-        let standard = target.port == (target.scheme == .https ? 443 : 80)
-        let host = standard ? target.host : "\(target.host):\(target.port)"
+        let host = target.hostHeader
         let key = Data((0..<16).map { _ in UInt8.random(in: 0...255) }).base64EncodedString()
         let request = RawRequest(
             Bytes(

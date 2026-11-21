@@ -225,7 +225,7 @@ public struct PayloadPipeline: Sendable {
                 case .capitalize: value = Array((text.prefix(1).uppercased() + text.dropFirst()).utf8)
                 }
             case .transform(let name, let arguments):
-                value = try Transforms.named(name)!.apply(value, arguments)
+                value = try Transforms.require(name).apply(value, arguments)
             case .skipIf:
                 let text = String(decoding: value, as: UTF8.self)
                 if regexes[index]!.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil {

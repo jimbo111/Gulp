@@ -108,9 +108,7 @@ struct SessionCommand: AsyncParsableCommand {
 
         func run() async throws {
             guard let destination = HTTPTarget(url: base) else { throw ValidationError("Invalid --base") }
-            let host =
-                destination.port == (destination.scheme == .https ? 443 : 80)
-                ? destination.host : "\(destination.host):\(destination.port)"
+            let host = destination.hostHeader
             let session = try await ProjectSession.open(at: URL(fileURLWithPath: project))
 
             // Macro: GET /login (capture csrf), POST /login with the carried cookie and csrf.

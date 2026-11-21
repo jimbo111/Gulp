@@ -78,9 +78,7 @@ extension ScanCommand {
                     throw ValidationError("Cannot read \(manifest)")
                 }
                 let entries = try JSONDecoder().decode([ActiveExpectation].self, from: data)
-                let host =
-                    destination.port == (destination.scheme == .https ? 443 : 80)
-                    ? destination.host : "\(destination.host):\(destination.port)"
+                let host = destination.hostHeader
                 requests += entries.map { ($0.request(host: host), destination) }
             }
             if let exchanges {

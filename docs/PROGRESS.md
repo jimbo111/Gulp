@@ -6,6 +6,44 @@ order; within a milestone, do P0 first.
 
 ## Current status
 
+### Start here (handoff, 2026-11-21)
+
+**Branch state.** Everything is merged into `main` (fast-forward of `claude/ecstatic-cray-yzrb4d`;
+no other branches carry unmerged work). To continue on a local machine: `git checkout main && git pull`.
+
+**CI is not running** (the hosted runners can't start), so the local gate is the only gate. Before
+every commit run `make test` (or `make test-core` on Linux) and `make lint` (which also runs
+`make rules` = `Scripts/arch-check.sh` + `Scripts/rules-check.sh`).
+
+**What is verified (Linux, swift 6.0, 2026-11-21):** all 563 GulpKit tests, `swift-format --strict`,
+both check scripts, and the 41 `Scripts/*-dod.sh` end-to-end scripts against VulnLab.
+
+**What has never been compiled — do this first on the Mac:** `make bootstrap generate build test`.
+The macOS-only code (`#if canImport(...)` and the app targets) has only been written, never built:
+`GulpUI`, `GulpFeatures` (incl. the 2026-11-21 edit in `DecoderViews.swift`), `GulpBrowser`'s
+JavaScriptCore host, `App/`, `UITests/`, and the Keychain stores `GulpTLS/KeychainCAStore` and
+`GulpWorkspace/KeychainSecretStore` (new). Expect some compile fixes; the engines they call are
+tested. After it builds, check that a signing rule's key lands in the Keychain (service
+`com.gulp.app.secrets`) and not in the `.gulp` file (`SessionSecretsTests` proves this on Linux
+with the file store).
+
+**Open items, in suggested order:**
+1. macOS build + UI smoke test (above), then tick the macOS parts of the DoDs.
+2. Identity credentials: `Identity.headers` / `variables` (e.g. a bearer token or a login
+   macro's password) are still stored in the project file. Signing keys moved out on 2026-11-21
+   (`SessionSecrets.swift`); identities could reuse the same `SecretStore` pattern.
+3. Carry-overs listed below (brotli/zstd decoding, SOCKS5 auth, PRJ-001 close prompt, …).
+4. Small: `gulp-cli/QueryCommands.swift:333` computes an authority by hand on a coverage-endpoint
+   type (string scheme), so it can't use `HTTPTarget.hostHeader`; fine as is.
+
+**Conventions that are now enforced** (CLAUDE.md §4 and `Scripts/rules-check.sh`): active CLI
+probes send through `ScopedSender`; GulpWorkspace store writes go through `persisting(…)`; registry
+lookups use `require` (`IssueDefinitions`, `Transforms`), never `named(…)!`; test randomness uses
+`SplitMix64(seed:)`; VulnLab twins use `SafeTwin`; secrets go to `environment.secretStore`.
+
+### Earlier status notes (historical)
+
+
 - **Phase**: **M4b DONE** — CI green on both platforms (run 42504816428, commit `0b0c6f7`); the M4b
   DoD: `Scripts/m4b-dod.sh` (Linux CI) PASS — `curl -N` through `gulp-cli proxy` to VulnLab `/sse`
   receives each event as it is sent (≈800 ms between first and last of 5), the row completes, and a
@@ -1009,6 +1047,7 @@ for behavior.
   clean twin with its endpoint-laden JSRecon bundle. Fixed: `ScanLab` returns nil for `/safe/recon/*`;
   `recon-dod.sh` now PASS. Deviation: none — fixture-routing bug only.
 - 2026-11-20 — **Agent-readiness guardrails**: prose rules turned into checks. `Scripts/rules-check.sh` (six rules; `make rules`, run by `make lint` and CI; each rule mutation-tested to fire) + typed helpers: `ScopedSender` for the 14 active CLI probes (incl. ws-fuzz), `persisting` for 8 silent store writes, `IssueDefinitions.require` + `IssueIDCoverageTests`, seeded `SplitMix64` (fixed the flaky 1 MB byte-diff test), VulnLab `SafeTwin` + `VulnLabOwnershipTests` (new `GulpVulnLabTests` target), `HTTPTarget.hostHeader`. Deviation: none; ReconLab's dead `/recon/app.js` handler removed (ScanLab always answered it).
+- 2026-11-21 — **Leftovers from the agent-readiness review**: (1) session signing keys (DPoP/RFC 9421 private keys, HMAC secrets, AWS secret keys) no longer persist in the `.gulp` file — `SigningSecret.stored(ref:)` in the project, material in `WorkspaceEnvironment.secretStore` (Keychain on macOS, 0600 files elsewhere), resolved on open, inline keys from older projects migrated on open, removed rules delete their keys (`SessionSecretsTests`, mutation-checked); the old internal OAST `SecretStore` enum renamed `OASTTokenStore`. (2) `Transforms.require(_:)` replaces `named(…)!`, now banned by rules-check. (3) `HTTPTarget.hostHeader` replaces the remaining hand-rolled Host computations. 563 tests; m1, m4b, m7, m8, m10b, m11b, m12a, m12b DoDs pass. Deviation: none.
 
 ## How to pick up work (reminder)
 

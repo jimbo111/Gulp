@@ -22,6 +22,9 @@ public struct WorkspaceEnvironment: Sendable {
     public var caStore: any CAStore
     /// Key type for a CA generated on first use (TLS-001: RSA-2048 by default).
     public var caKeyType: CAKeyType = .rsa2048
+    /// Where signing keys and other secrets live instead of the project file: the Keychain for the
+    /// macOS app, 0600 files under `supportDirectory/secrets` elsewhere.
+    public var secretStore: any SecretStore
 
     /// The platform's standard locations. `GULP_SUPPORT_DIR` overrides them with one folder and a
     /// file CA store (automation and CI: no Keychain, nothing shared with the user's install).
@@ -38,22 +41,34 @@ public struct WorkspaceEnvironment: Sendable {
         #if canImport(Security)
         let caStore: any CAStore = KeychainCAStore(
             directory: supportDirectory.appendingPathComponent("CA", isDirectory: true))
+        let secretStore: any SecretStore = KeychainSecretStore()
         #else
         let caStore: any CAStore = FileCAStore(
             directory: supportDirectory.appendingPathComponent("ca", isDirectory: true))
+        let secretStore: any SecretStore = FileSecretStore(
+            directory: supportDirectory.appendingPathComponent("secrets", isDirectory: true))
         #endif
         let cachesDirectory = (caches ?? fm.temporaryDirectory).appendingPathComponent("Gulp")
         return WorkspaceEnvironment(
-            supportDirectory: supportDirectory, cachesDirectory: cachesDirectory, caStore: caStore)
+            supportDirectory: supportDirectory, cachesDirectory: cachesDirectory, caStore: caStore,
+            secretStore: secretStore)
     }
 
     /// Create an environment rooted at the given directories. Without `caStore`, the CA is a file
-    /// store under `supportDirectory/ca`.
-    public init(supportDirectory: URL, cachesDirectory: URL, caStore: (any CAStore)? = nil) {
+    /// store under `supportDirectory/ca`; without `secretStore`, secrets are 0600 files under
+    /// `supportDirectory/secrets`.
+    public init(
+        supportDirectory: URL, cachesDirectory: URL, caStore: (any CAStore)? = nil,
+        secretStore: (any SecretStore)? = nil
+    ) {
         self.supportDirectory = supportDirectory
         self.cachesDirectory = cachesDirectory
         let directory = supportDirectory.appendingPathComponent("ca", isDirectory: true)
         self.caStore = caStore ?? FileCAStore(directory: directory)
+        self.secretStore =
+            secretStore
+            ?? FileSecretStore(
+                directory: supportDirectory.appendingPathComponent("secrets", isDirectory: true))
     }
 
     /// The user's CA, generated and saved on first use (TLS-001).
@@ -283,7 +298,19 @@ public actor ProjectSession {
                 await events.publish(.log(LogEntry(level: .info, message: message, module: "gulp.session")))
             }
         }
-        let sessionState = SessionState(settings.get(SessionSettings.self), log: sessionLog)
+        // Signing keys come from the secret store, never the project file (see SessionSecrets.swift).
+        let (sessionSettings, missingSecrets) = settings.get(SessionSettings.self)
+            .resolvingSigningSecrets(from: environment.secretStore)
+        if !missingSecrets.isEmpty {
+            let message =
+                "\(missingSecrets.count) signing key(s) of this project aren't in this machine's secret store; "
+                + "re-enter them in the session rules to sign requests."
+            Task {
+                await events.publish(
+                    .log(LogEntry(level: .warning, message: message, module: "gulp.session")))
+            }
+        }
+        let sessionState = SessionState(sessionSettings, log: sessionLog)
         self.sessionState = sessionState
         let engine = NIOHTTPEngine(
             requestHooks: [
@@ -396,6 +423,7 @@ public actor ProjectSession {
         await session.startPassiveScan()
         await session.applyNetworkSettings()
         await session.startSession()
+        await session.moveInlineSigningSecrets()
         if session.settings.get(OASTSettings.self).enabled {
             do {
                 try await session.startOAST()
