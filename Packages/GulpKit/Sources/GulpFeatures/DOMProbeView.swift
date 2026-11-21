@@ -7,6 +7,7 @@
 #if canImport(AppKit)
 import AppKit
 import GulpBrowser
+import GulpUI
 import Observation
 import SwiftUI
 
@@ -48,7 +49,7 @@ public struct DOMProbeView: View {
 
     /// The screen.
     public var body: some View {
-        HSplitView {
+        HSplit {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Captured __gulpReport payload (JSON)").font(.headline)
                 TextEditor(text: $model.reportJSON).font(.system(.caption, design: .monospaced))

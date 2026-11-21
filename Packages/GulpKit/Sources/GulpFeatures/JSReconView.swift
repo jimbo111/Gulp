@@ -6,6 +6,7 @@
 #if canImport(AppKit)
 import AppKit
 import GulpScanner
+import GulpUI
 import Observation
 import SwiftUI
 
@@ -70,7 +71,7 @@ public struct JSReconView: View {
 
     /// The screen.
     public var body: some View {
-        HSplitView {
+        HSplit {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Asset JavaScript").font(.headline)
                 TextEditor(text: $model.js).font(.system(.caption, design: .monospaced)).frame(minHeight: 140)

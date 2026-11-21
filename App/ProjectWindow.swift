@@ -1,5 +1,6 @@
 import AppKit
 import GulpFeatures
+import GulpUI
 import GulpWorkspace
 import SwiftUI
 import UniformTypeIdentifiers
@@ -49,6 +50,9 @@ struct ProjectWindow: View {
                     .listStyle(.sidebar)
                 } detail: {
                     detail(session: session, models: models)
+                        // Every tool is titled by its sidebar name; a view may refine it
+                        // ("HTTP History", "Intercept") with its own navigationTitle.
+                        .navigationTitle(selection?.title ?? "Gulp")
                         .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("tool.\(selection?.rawValue ?? "none")")
                         .safeAreaInset(edge: .top) { bindErrorBanner }
@@ -107,7 +111,7 @@ struct ProjectWindow: View {
                         } label: {
                             Label(
                                 panicked ? "Resume All" : "Panic Stop",
-                                systemImage: panicked ? "play.fill" : "stop.octagon.fill")
+                                systemImage: panicked ? "play.fill" : "xmark.octagon.fill")
                         }
                         .keyboardShortcut(".", modifiers: [.control])
                         .help(
@@ -181,6 +185,7 @@ struct ProjectWindow: View {
         }
         .focusedSceneValue(\.projectActions, actions)
         .navigationSubtitle(projectName)
+        .writingToolsDisabled()
     }
 
     @ViewBuilder

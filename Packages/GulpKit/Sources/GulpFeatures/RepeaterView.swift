@@ -599,7 +599,7 @@ public struct RepeaterView: View {
             if let tab = model.selected, tab.options.isWebSocket {
                 webSocketControls
                 Divider()
-                HSplitView {
+                HSplit {
                     MessageEditor(title: "Upgrade request", bytes: $model.draft, editable: true)
                         .frame(minWidth: 280)
                     webSocketSide.frame(minWidth: 320)
@@ -607,7 +607,7 @@ public struct RepeaterView: View {
             } else if model.selected != nil {
                 controls
                 Divider()
-                HSplitView {
+                HSplit {
                     MessageEditor(title: "Request", bytes: $model.draft, editable: true)
                         .frame(minWidth: 280)
                     responseSide.frame(minWidth: 280)
@@ -966,7 +966,7 @@ public struct RepeaterView: View {
     }
 
     private var webSocketSide: some View {
-        VSplitView {
+        VSplit {
             List(model.webSocketLog) { entry in
                 HStack(alignment: .top) {
                     Text(entry.direction == .toServer ? "→" : "←").foregroundStyle(.secondary)

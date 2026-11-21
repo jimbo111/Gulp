@@ -54,7 +54,7 @@ public struct MessageEditor: View {
             .controlSize(.small)
             .padding(6)
             Divider()
-            HSplitView {
+            HSplit {
                 content
                     .frame(minWidth: 240, maxWidth: .infinity, maxHeight: .infinity)
                 if showInspector {
@@ -116,6 +116,7 @@ struct MessageTextView: NSViewRepresentable {
         view.isAutomaticDashSubstitutionEnabled = false
         view.isAutomaticTextReplacementEnabled = false
         view.isAutomaticSpellingCorrectionEnabled = false
+        view.disableWritingTools()
         view.textContainerInset = NSSize(width: 4, height: 4)
         view.layoutManager?.allowsNonContiguousLayout = true
         view.delegate = context.coordinator
@@ -156,6 +157,9 @@ struct MessageTextView: NSViewRepresentable {
 }
 
 /// Minimal syntax highlighting (UI-011): the start line and header names in the header block.
+///
+/// Every character gets an explicit, dynamic color: text without a `.foregroundColor` attribute
+/// draws black in any appearance, so plain text and header values use `NSColor.textColor`.
 enum Highlighter {
     @MainActor
     static func highlight(_ view: NSTextView) {
@@ -163,7 +167,8 @@ enum Highlighter {
         let text = storage.string as NSString
         let limit = min(text.length, 64 * 1_024)
         storage.beginEditing()
-        storage.removeAttribute(.foregroundColor, range: NSRange(location: 0, length: text.length))
+        storage.addAttribute(
+            .foregroundColor, value: NSColor.textColor, range: NSRange(location: 0, length: text.length))
         var location = 0
         var first = true
         while location < limit {

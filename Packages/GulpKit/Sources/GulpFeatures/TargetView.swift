@@ -9,6 +9,7 @@
 import AppKit
 import GulpCore
 import GulpStore
+import GulpUI
 import GulpWorkspace
 import Observation
 import SwiftUI
@@ -483,11 +484,11 @@ struct SiteMapView: View {
         VStack(spacing: 0) {
             filterBar
             Divider()
-            HSplitView {
+            HSplit {
                 tree.frame(minWidth: 240, idealWidth: 320)
-                VSplitView {
+                VSplit {
                     endpointTable.frame(minHeight: 140)
-                    HSplitView {
+                    HSplit {
                         MessageViewer(title: "Request", bytes: model.shown?.request.bytes)
                         ResponsePane(exchange: model.shown)
                     }
@@ -505,19 +506,24 @@ struct SiteMapView: View {
     }
 
     private var filterBar: some View {
-        HStack(spacing: 10) {
-            Toggle("In scope", isOn: $model.filter.inScopeOnly)
-            Toggle("Hide inferred", isOn: $model.filter.visitedOnly)
-            Toggle("Hide 404", isOn: $model.filter.hideNotFound)
-            Toggle("Group {id}", isOn: $model.grouped)
-                .help("Fold numeric and UUID path segments into {id} (TGT-006)")
-            TextField("MIME (html, json…)", text: $model.mimeText)
-                .frame(maxWidth: 140)
-            TextField("Search host/path", text: $model.filter.search)
-                .frame(maxWidth: 220)
-            Spacer()
+        HStack(alignment: .top, spacing: 10) {
+            // Wraps instead of clipping when the detail area is narrow (UI-002).
+            FlowLayout(spacing: 10) {
+                Toggle("In scope", isOn: $model.filter.inScopeOnly)
+                Toggle("Hide inferred", isOn: $model.filter.visitedOnly)
+                Toggle("Hide 404", isOn: $model.filter.hideNotFound)
+                Toggle("Group {id}", isOn: $model.grouped)
+                    .help("Fold numeric and UUID path segments into {id} (TGT-006)")
+                TextField("MIME (html, json…)", text: $model.mimeText)
+                    .frame(width: 140)
+                TextField("Search host/path", text: $model.filter.search)
+                    .frame(width: 220)
+            }
+            Spacer(minLength: 0)
             Text("\(model.counts.shown) of \(model.counts.total) nodes").foregroundStyle(.secondary).font(
-                .caption)
+                .caption
+            )
+            .fixedSize()
         }
         .toggleStyle(.checkbox)
         .textFieldStyle(.roundedBorder)

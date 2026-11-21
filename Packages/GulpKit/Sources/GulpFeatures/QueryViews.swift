@@ -8,6 +8,7 @@ import AppKit
 import GulpCore
 import GulpQuery
 import GulpStore
+import GulpUI
 import GulpWorkspace
 import Observation
 import SwiftUI
@@ -169,7 +170,7 @@ public struct LoggerView: View {
 
     @ViewBuilder private var content: some View {
         if let model {
-            VSplitView {
+            VSplit {
                 VStack(spacing: 0) {
                     HStack(spacing: 8) {
                         Toggle("Capture", isOn: captureBinding(model))
@@ -192,7 +193,7 @@ public struct LoggerView: View {
                     HistoryTableView(model: model)
                 }
                 .frame(minHeight: 180)
-                HSplitView {
+                HSplit {
                     MessageViewer(title: "Request", bytes: model.selected?.request.bytes)
                     ResponsePane(exchange: model.selected)
                 }
@@ -306,7 +307,7 @@ public struct SearchView: View {
                 Text(summary(results)).font(.caption).foregroundStyle(.secondary)
                 if let hint = results.hint { Text(hint).font(.caption).foregroundStyle(.orange) }
             }
-            HSplitView {
+            HSplit {
                 List(selection: $selected) {
                     ForEach(groups) { group in
                         Section("\(group.id) (\(group.hits.count))") {
@@ -322,7 +323,7 @@ public struct SearchView: View {
                     }
                 }
                 .frame(minWidth: 320)
-                VSplitView {
+                VSplit {
                     MessageViewer(title: "Request", bytes: shown?.request.bytes)
                     ResponsePane(exchange: shown)
                 }

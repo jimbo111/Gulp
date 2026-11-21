@@ -6,6 +6,7 @@
 #if canImport(AppKit)
 import AppKit
 import GulpSequencer
+import GulpUI
 import Observation
 import SwiftUI
 
@@ -66,7 +67,7 @@ public struct SequencerView: View {
 
     /// The screen.
     public var body: some View {
-        HSplitView {
+        HSplit {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Captured tokens (one per line)").font(.headline)
                 TextEditor(text: $model.tokenText)

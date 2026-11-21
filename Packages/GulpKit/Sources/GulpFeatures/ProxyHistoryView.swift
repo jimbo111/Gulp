@@ -7,6 +7,7 @@ import GulpCore
 import GulpProxy
 import GulpQuery
 import GulpStore
+import GulpUI
 import GulpWorkspace
 import SwiftUI
 
@@ -43,7 +44,7 @@ public struct ProxyHistoryView: View {
     /// The screen.
     public var body: some View {
         if let model {
-            VSplitView {
+            VSplit {
                 VStack(spacing: 0) {
                     HistoryFilterBar(model: model, library: library)
                     Divider()
@@ -73,12 +74,12 @@ public struct ProxyHistoryView: View {
         let request = model.selected?.request.bytes
         Group {
             if sideBySide {
-                HSplitView {
+                HSplit {
                     MessageViewer(title: "Request", bytes: request)
                     ResponsePane(exchange: model.selected)
                 }
             } else {
-                VSplitView {
+                VSplit {
                     MessageViewer(title: "Request", bytes: request)
                     ResponsePane(exchange: model.selected)
                 }
@@ -210,23 +211,29 @@ struct HistoryFilterBar: View {
     var library: GulpQLLibrary?
 
     var body: some View {
-        HStack(spacing: 8) {
-            TextField("Filter host or path", text: textBinding)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 200)
-            GulpQLFilterField(expression: $model.filter.query, library: library)
-                .frame(minWidth: 220, maxWidth: 420)
-            Toggle("Hide assets", isOn: $model.filter.hideStaticAssets)
-            Toggle("Has params", isOn: $model.filter.onlyWithParams)
-            Toggle("Annotated", isOn: $model.filter.onlyAnnotated)
-            ForEach(1...5, id: \.self) { statusClass in
-                Toggle("\(statusClass)xx", isOn: statusBinding(statusClass))
+        HStack(alignment: .top, spacing: 8) {
+            // Wraps instead of clipping when the detail area is narrow (UI-002).
+            FlowLayout {
+                TextField("Filter host or path", text: textBinding)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 180)
+                GulpQLFilterField(expression: $model.filter.query, library: library)
+                    .frame(width: 320)
+                Toggle("Hide assets", isOn: $model.filter.hideStaticAssets)
+                Toggle("Has params", isOn: $model.filter.onlyWithParams)
+                Toggle("Annotated", isOn: $model.filter.onlyAnnotated)
+                HStack(spacing: 4) {
+                    ForEach(1...5, id: \.self) { statusClass in
+                        Toggle("\(statusClass)xx", isOn: statusBinding(statusClass))
+                    }
+                }
             }
-            Spacer()
+            Spacer(minLength: 0)
             Toggle("Auto-scroll", isOn: $model.autoScroll)
             Text("\(model.rowCount) items")
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+                .fixedSize()
         }
         .toggleStyle(.button)
         .controlSize(.small)
@@ -335,6 +342,7 @@ struct RawTextView: NSViewRepresentable {
         if let view = scroll.documentView as? NSTextView {
             view.isEditable = false
             view.isSelectable = true
+            view.disableWritingTools()
             view.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
             view.textContainerInset = NSSize(width: 4, height: 4)
             view.layoutManager?.allowsNonContiguousLayout = true

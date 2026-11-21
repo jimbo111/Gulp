@@ -38,6 +38,8 @@ targets:
       - package: GulpKit
         product: GulpFeatures
       - package: GulpKit
+        product: GulpUI
+      - package: GulpKit
         product: GulpWorkspace
       # Built (not linked) so the phase below can embed it.
       - package: GulpKit

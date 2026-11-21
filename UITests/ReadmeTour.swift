@@ -37,18 +37,16 @@ final class ReadmeTour: XCTestCase {
         app.typeKey("w", modifierFlags: .command)  // the launch's temporary project
         // File > Open…, then the panel's Go to Folder with the project's path.
         app.typeKey("o", modifierFlags: .command)
-        XCTAssertTrue(app.sheets.firstMatch.waitForExistence(timeout: 10) || app.dialogs.firstMatch.exists)
+        // The open panel is not a sheet or dialog of the app (macOS 27 hosts it out of process),
+        // so there is nothing to wait for; the tool.proxy check below proves the project opened.
+        Thread.sleep(forTimeInterval: 1.5)
         app.typeKey("g", modifierFlags: [.command, .shift])
         Thread.sleep(forTimeInterval: 0.6)
         app.typeText(path + "\r")
         Thread.sleep(forTimeInterval: 0.6)
         app.typeKey("\r", modifierFlags: [])
         XCTAssertTrue(app.descendants(matching: .any)["tool.proxy"].waitForExistence(timeout: 20))
-        let window = app.windows.firstMatch
-        // Room for the whole toolbar and filter bar: drag the bottom-right corner out.
-        let corner = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1)).withOffset(
-            CGVector(dx: -2, dy: -2))
-        corner.press(forDuration: 0.3, thenDragTo: corner.withOffset(CGVector(dx: 440, dy: 200)))
+        let window = app.windows.firstMatch  // opens at the default size (ProjectWindowSize)
 
         // Proxy history with one exchange open.
         let table = app.tables.firstMatch

@@ -7,6 +7,7 @@
 import AppKit
 import GulpCore
 import GulpStore
+import GulpUI
 import GulpWorkspace
 import Observation
 import SwiftUI
@@ -208,7 +209,7 @@ struct IssuesPanel: View {
                 Text(message).font(.caption).foregroundStyle(.red).padding(.horizontal, 6)
             }
             Divider()
-            HSplitView {
+            HSplit {
                 List(selection: $model.selection) {
                     ForEach(model.tree) { group in
                         Section("\(group.id.title) (\(group.count))") {
@@ -260,20 +261,26 @@ struct IssuesPanel: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            ForEach(Array(IssueSeverity.allCases.reversed()), id: \.self) { severity in
-                Toggle(severity.title, isOn: membership(\.severities, severity))
+        HStack(alignment: .top, spacing: 8) {
+            // Wraps instead of truncating the chips when the detail area is narrow (UI-002).
+            FlowLayout(spacing: 16) {
+                HStack(spacing: 8) {
+                    ForEach(Array(IssueSeverity.allCases.reversed()), id: \.self) { severity in
+                        Toggle(severity.title, isOn: membership(\.severities, severity))
+                    }
+                }
+                HStack(spacing: 8) {
+                    ForEach(IssueStatus.allCases, id: \.self) { status in
+                        Toggle(status.title, isOn: membership(\.statuses, status))
+                    }
+                }
+                Picker("Confidence ≥", selection: $model.minimumConfidence) {
+                    ForEach(IssueConfidence.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .fixedSize()
+                TextField("Host", text: $model.hostFilter).textFieldStyle(.roundedBorder).frame(width: 140)
             }
-            Divider().frame(height: 16)
-            ForEach(IssueStatus.allCases, id: \.self) { status in
-                Toggle(status.title, isOn: membership(\.statuses, status))
-            }
-            Picker("Confidence ≥", selection: $model.minimumConfidence) {
-                ForEach(IssueConfidence.allCases, id: \.self) { Text($0.title).tag($0) }
-            }
-            .frame(width: 180)
-            TextField("Host", text: $model.hostFilter).textFieldStyle(.roundedBorder).frame(width: 140)
-            Spacer()
+            Spacer(minLength: 0)
             Menu("Passive Scanning") {
                 Toggle("Enabled", isOn: $model.config.enabled)
                 Toggle("Include out-of-scope traffic", isOn: $model.config.allTraffic)
@@ -361,7 +368,7 @@ struct IssueDetail: View {
                                 Spacer()
                                 Button("Send to Repeater") { model.sendToRepeater(exchange.id) }
                             }
-                            HSplitView {
+                            HSplit {
                                 HighlightedBytes(
                                     title: "Request", bytes: exchange.request.bytes.rawBytes,
                                     markers: evidence.requestMarkers)

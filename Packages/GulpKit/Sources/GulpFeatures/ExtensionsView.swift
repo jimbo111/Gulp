@@ -6,6 +6,7 @@
 #if canImport(AppKit)
 import AppKit
 import GulpExtensions
+import GulpUI
 import Observation
 import SwiftUI
 
@@ -63,7 +64,7 @@ public struct ExtensionsView: View {
 
     /// The screen.
     public var body: some View {
-        HSplitView {
+        HSplit {
             VStack(alignment: .leading, spacing: 6) {
                 Text("gulp-extension.json").font(.headline)
                 TextEditor(text: $model.manifestJSON).font(.system(.caption, design: .monospaced))

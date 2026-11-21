@@ -8,6 +8,7 @@
 import AppKit
 import GulpCore
 import GulpScanner
+import GulpUI
 import GulpWorkspace
 import Observation
 import SwiftUI
@@ -163,7 +164,7 @@ struct ActiveScanView: View {
     @State private var confirmUnsafe = false
 
     var body: some View {
-        HSplitView {
+        HSplit {
             Form {
                 Section("Requests") {
                     if model.queued.isEmpty {
@@ -223,7 +224,7 @@ struct ActiveScanView: View {
             }
             .formStyle(.grouped)
             .frame(minWidth: 320, idealWidth: 360)
-            VSplitView {
+            VSplit {
                 Table(model.findings.map(ScanFindingRow.init)) {
                     TableColumn("Severity") { Text($0.finding.severity.rawValue.capitalized) }.width(70)
                     TableColumn("Issue") { Text($0.finding.name) }

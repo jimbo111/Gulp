@@ -7,6 +7,7 @@
 #if canImport(AppKit)
 import AppKit
 import GulpAI
+import GulpUI
 import Observation
 import SwiftUI
 
@@ -56,7 +57,7 @@ public struct AssistantView: View {
 
     /// The screen.
     public var body: some View {
-        HSplitView {
+        HSplit {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Prompt").font(.headline)
                 TextEditor(text: $model.prompt).font(.system(.body, design: .monospaced)).frame(

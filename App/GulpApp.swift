@@ -14,11 +14,12 @@ struct GulpApp: App {
     var body: some Scene {
         WindowGroup(for: ProjectRef.self) { $ref in
             ProjectWindow(ref: ref)
-                .frame(minWidth: 1000, minHeight: 640)
+                .frame(minWidth: ProjectWindowSize.minimum.width, minHeight: ProjectWindowSize.minimum.height)
                 .defaultAppStorage(AppDefaults.store)
         } defaultValue: {
             ProjectRef()
         }
+        .defaultSize(ProjectWindowSize.default)
         // Opened `.gulp` files reach AppDelegate, which opens each in its own window; without this
         // SwiftUI would also open an extra temporary-project window per open event.
         .handlesExternalEvents(matching: ["gulp-project-window"])
@@ -37,6 +38,14 @@ struct GulpApp: App {
             .defaultAppStorage(AppDefaults.store)
         }
     }
+}
+
+/// Project window sizes (docs/07 small decisions, 2026-11-20). The default shows the whole toolbar
+/// and the window title; filter bars wrap rather than clip, and below the default, toolbar items
+/// that do not fit move to the overflow menu.
+enum ProjectWindowSize {
+    static let `default` = CGSize(width: 1280, height: 820)
+    static let minimum = CGSize(width: 1000, height: 640)
 }
 
 /// Where `@AppStorage` view preferences live: the standard defaults, or — when the UI tests set

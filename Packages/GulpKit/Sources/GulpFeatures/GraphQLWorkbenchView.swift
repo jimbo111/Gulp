@@ -6,6 +6,7 @@
 #if canImport(AppKit)
 import AppKit
 import GulpCodec
+import GulpUI
 import Observation
 import SwiftUI
 
@@ -59,7 +60,7 @@ public struct GraphQLWorkbenchView: View {
 
     /// The screen.
     public var body: some View {
-        HSplitView {
+        HSplit {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Introspection result (JSON)").font(.headline)
                 TextEditor(text: $model.introspection).font(.system(.caption, design: .monospaced))

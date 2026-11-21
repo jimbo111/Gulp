@@ -195,7 +195,7 @@ struct InterceptView: View {
             .controlSize(.small)
             .padding(6)
             Divider()
-            VSplitView {
+            VSplit {
                 queue.frame(minHeight: 100, idealHeight: 160)
                 if let item = model.selected {
                     MessageEditor(title: Self.title(item), bytes: $model.editing, editable: true)

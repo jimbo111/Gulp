@@ -129,19 +129,26 @@ public struct ProxyToolView: View {
 
     /// The screen.
     public var body: some View {
-        TabView(selection: $tab) {
-            SessionHistoryView(session: session, generation: generation)
-                .tabItem { Text("HTTP History") }
-                .tag(0)
-            InterceptView(model: models.intercept, session: session)
-                .tabItem { Text("Intercept") }
-                .tag(1)
-            MatchReplaceView(session: session)
-                .tabItem { Text("Match & Replace") }
-                .tag(2)
-            SessionWebSocketHistoryView(session: session, generation: generation)
-                .tabItem { Text("WebSockets History") }
-                .tag(3)
+        // A segmented control in the content, like Target and Scanner: a TabView puts its tabs in
+        // the window toolbar on current macOS, where they crowd out the title and global items.
+        VStack(spacing: 0) {
+            Picker("", selection: $tab) {
+                Text("HTTP History").tag(0)
+                Text("Intercept").tag(1)
+                Text("Match & Replace").tag(2)
+                Text("WebSockets History").tag(3)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .padding(6)
+            Divider()
+            switch tab {
+            case 1: InterceptView(model: models.intercept, session: session)
+            case 2: MatchReplaceView(session: session)
+            case 3: SessionWebSocketHistoryView(session: session, generation: generation)
+            default: SessionHistoryView(session: session, generation: generation)
+            }
         }
     }
 }

@@ -6,6 +6,7 @@
 import AppKit
 import GulpCore
 import GulpStore
+import GulpUI
 import GulpWorkspace
 import Observation
 import SwiftUI
@@ -114,7 +115,7 @@ public struct WebSocketHistoryView: View {
     /// The screen.
     public var body: some View {
         if let model {
-            VSplitView {
+            VSplit {
                 connections(model).frame(minHeight: 120)
                 VStack(spacing: 0) {
                     WebSocketFilterBar(model: model)

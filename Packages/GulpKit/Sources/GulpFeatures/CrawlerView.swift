@@ -9,6 +9,7 @@ import AppKit
 import GulpCore
 import GulpCrawler
 import GulpStore
+import GulpUI
 import GulpWorkspace
 import Observation
 import SwiftUI
@@ -114,7 +115,7 @@ struct CrawlerView: View {
     @State private var confirmForms = false
 
     var body: some View {
-        HSplitView {
+        HSplit {
             Form {
                 Section("Seeds (one URL per line)") {
                     TextEditor(text: $model.seedsText).font(.system(.body, design: .monospaced)).frame(
@@ -289,7 +290,7 @@ public struct BeaconView: View {
 
     /// The screen.
     public var body: some View {
-        VSplitView {
+        VSplit {
             Form {
                 Section("Server (OAST is off until configured)") {
                     TextField(
@@ -331,7 +332,7 @@ public struct BeaconView: View {
             }
             .formStyle(.grouped)
             .frame(minHeight: 200)
-            HSplitView {
+            HSplit {
                 Table(
                     model.interactions, selection: Binding(get: { model.selected }, set: { model.select($0) })
                 ) {

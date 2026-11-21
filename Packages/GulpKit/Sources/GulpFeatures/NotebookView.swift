@@ -7,6 +7,7 @@
 import AppKit
 import GulpCore
 import GulpStore
+import GulpUI
 import GulpWorkspace
 import Observation
 import SwiftUI
@@ -172,7 +173,7 @@ struct NotebookPanel: View {
     @Bindable var model: NotebookModel
 
     var body: some View {
-        HSplitView {
+        HSplit {
             VStack(spacing: 0) {
                 HStack {
                     TextField("Filter (status:confirmed tag:xss host:api …)", text: $model.filterText)
@@ -271,7 +272,7 @@ struct NotebookItemEditor: View {
     }
 
     var body: some View {
-        VSplitView {
+        VSplit {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     TextField("Title", text: $title)
@@ -327,7 +328,7 @@ struct NotebookItemEditor: View {
             .padding(8)
             .frame(minHeight: 220)
             if item.kind == .exchange {
-                HSplitView {
+                HSplit {
                     MessageViewer(title: "Saved request", bytes: item.request.map { Bytes($0) })
                     ResponsePane(exchange: snapshot)
                 }

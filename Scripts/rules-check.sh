@@ -69,8 +69,17 @@ while IFS= read -r hit; do
 done < <(grep -rlE -- "-----BEGIN ([A-Z]+ )?PRIVATE KEY-----" Packages App Beacon Scripts .github 2>/dev/null \
   | grep -vE "/\.build/" || true)
 
+# 7. Tool screens split with GulpUI's HSplit/VSplit: SwiftUI's HSplitView/VSplitView size to their
+#    panes' ideal size, so a List or empty-state pane leaves the screen a band in the middle of the
+#    window (docs/07 small decisions, 2026-11-20). Only GulpUI's Layouts.swift wraps them.
+while IFS= read -r hit; do
+  [ -z "$hit" ] && continue
+  problem "$hit — use GulpUI's HSplit/VSplit, whose panes fill the split's cross axis"
+done < <(grep -rnE "\b[HV]SplitView[[:space:]]*\{" "$SRC" App --include='*.swift' \
+  | grep -v "^$SRC/GulpUI/Layouts.swift:" | grep -vE "^[^:]+:[0-9]+:[[:space:]]*//" || true)
+
 if [ "$fail" -ne 0 ]; then
   echo "rules-check: FAILED (see AGENTS.md §4 and the comment above each rule in Scripts/rules-check.sh)" >&2
   exit 1
 fi
-echo "rules-check: OK (scope-safe CLI sends, seeded test randomness, no silent store writes, checked registry lookups, justified @unchecked Sendable, no committed private keys)"
+echo "rules-check: OK (scope-safe CLI sends, seeded test randomness, no silent store writes, checked registry lookups, justified @unchecked Sendable, no committed private keys, filling split views)"

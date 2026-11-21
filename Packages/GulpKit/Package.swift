@@ -30,6 +30,7 @@ let package = Package(
         .library(name: "GulpWorkspace", targets: ["GulpWorkspace"]),
         .library(name: "GulpAutomation", targets: ["GulpAutomation"]),
         .library(name: "GulpFeatures", targets: ["GulpFeatures"]),  // real content only on macOS
+        .library(name: "GulpUI", targets: ["GulpUI"]),  // real content only on macOS
         .executable(name: "gulp-cli", targets: ["gulp-cli"]),
         .executable(name: "gulp-vulnlab", targets: ["gulp-vulnlab"]),
     ],

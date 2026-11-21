@@ -636,7 +636,7 @@ struct FuzzerPanel: View {
     }
 
     private var resultsPane: some View {
-        VSplitView {
+        VSplit {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     if let summary = model.summary {
@@ -697,7 +697,7 @@ struct FuzzerPanel: View {
             }
             .padding(6)
             .frame(minHeight: 200)
-            HSplitView {
+            HSplit {
                 MessageViewer(title: "Request", bytes: model.shown?.request.bytes)
                 ResponsePane(exchange: model.shown)
             }

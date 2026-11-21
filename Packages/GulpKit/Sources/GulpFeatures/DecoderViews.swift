@@ -7,6 +7,7 @@ import AppKit
 import GulpCodec
 import GulpCore
 import GulpDiff
+import GulpUI
 import GulpWorkspace
 import Observation
 import SwiftUI
@@ -397,7 +398,7 @@ public struct ComparerView: View {
 
     /// The screen.
     public var body: some View {
-        HSplitView {
+        HSplit {
             VStack(alignment: .leading) {
                 List(model.items, selection: $selection) { item in
                     VStack(alignment: .leading) {
@@ -470,7 +471,7 @@ public struct ComparerView: View {
                 }
                 .disabled(result.changes.isEmpty)
             }
-            HSplitView {
+            HSplit {
                 ScrollView {
                     Text(Self.render(result, side: .a)).textSelection(.enabled).frame(
                         maxWidth: .infinity, alignment: .leading)
@@ -649,7 +650,7 @@ public struct JWTWorkbenchView: View {
 
     /// The screen.
     public var body: some View {
-        HSplitView {
+        HSplit {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Token").font(.headline)
                 TextEditor(text: $model.token).font(.system(.body, design: .monospaced)).frame(minHeight: 80)
@@ -663,7 +664,7 @@ public struct JWTWorkbenchView: View {
             .frame(minWidth: 360)
             // The controls scroll: their combined minimum height is taller than a 640 pt window, and
             // a stack that cannot fit makes AppKit's constraint pass loop until it raises.
-            VSplitView {
+            VSplit {
                 ScrollView { controls.padding(6) }
                     .frame(minHeight: 200)
                 forgeries.frame(minHeight: 120)
