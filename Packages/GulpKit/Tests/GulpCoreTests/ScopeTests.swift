@@ -114,6 +114,17 @@ struct ScopeTests {
         await #expect(throws: OutOfScope.self) { try await guardian.require(https, path: "/logout") }
     }
 
+    @Test("requestPath: path and query of a raw request, as isInScope takes it")
+    func test_TGT020_requestPathOfRequest() {
+        func path(_ line: String) -> String {
+            ScopeService.requestPath(
+                of: RawRequest(Bytes("GET \(line) HTTP/1.1\r\nHost: x\r\n\r\n")), target: http)
+        }
+        #expect(path("/a/b?c=d") == "/a/b?c=d")
+        #expect(path("/") == "/")
+        #expect(path("/a") == "/a")
+    }
+
     @Test("requestPath: path and query of a URL, as isInScope takes it")
     func test_TGT020_requestPath() {
         #expect(ScopeService.requestPath(ofURL: "https://a.test") == "/")

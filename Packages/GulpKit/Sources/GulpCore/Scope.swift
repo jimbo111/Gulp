@@ -210,6 +210,13 @@ public struct ScopeService: Sendable {
         return tail.isEmpty ? "/" : (tail.hasPrefix("?") ? "/" + tail : tail)
     }
 
+    /// The path and query of a raw request to `target`, as `isInScope` takes it (`/` if it has none).
+    /// Every scope check of a request derives its path here.
+    public static func requestPath(of request: RawRequest, target: HTTPTarget) -> String {
+        let derived = DerivedFields(target: target, request: request, response: nil)
+        return (derived.path ?? "/") + (derived.query.map { "?" + $0 } ?? "")
+    }
+
     /// A readable summary (TGT-025), e.g. "In scope: https://example.com /app. Excluded: /logout".
     public var summary: String {
         let active = rules.filter(\.enabled)

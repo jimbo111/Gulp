@@ -45,7 +45,8 @@ extension ProjectSession {
 
     /// What sending the raw `request` to `target` should do (TGT-023).
     public func scopeDecision(for target: HTTPTarget, request: [UInt8]) async -> ScopeDecision {
-        await scopeDecision(for: target, path: Self.pathAndQuery(of: request, target: target))
+        await scopeDecision(
+            for: target, path: ScopeService.requestPath(of: RawRequest(Bytes(request)), target: target))
     }
 
     /// What sending Repeater tab `id` should do (TGT-023): its target and the path in its draft.
@@ -57,9 +58,7 @@ extension ProjectSession {
     /// What "Send group" should do (TGT-023): confirm if any member is out of scope.
     public func scopeDecision(forRepeaterGroup id: Int64) async -> ScopeDecision {
         for tab in await repeater.members(of: id)
-        where await scopeDecision(for: tab.target, path: Self.pathAndQuery(of: tab.draft, target: tab.target))
-            == .confirm
-        {
+        where await scopeDecision(for: tab.target, request: tab.draft) == .confirm {
             return .confirm
         }
         return .send
@@ -81,12 +80,6 @@ extension ProjectSession {
         let rules = try ScopeFile.import(data)
         try await setScope(rules)
         return rules.count
-    }
-
-    /// The path and query of a raw request (`/` if it has none).
-    static func pathAndQuery(of request: [UInt8], target: HTTPTarget) -> String {
-        let derived = DerivedFields(target: target, request: RawRequest(Bytes(request)), response: nil)
-        return (derived.path ?? "/") + (derived.query.map { "?" + $0 } ?? "")
     }
 }
 
