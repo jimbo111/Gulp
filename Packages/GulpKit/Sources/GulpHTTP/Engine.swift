@@ -39,7 +39,7 @@ public struct RedirectPolicy: Sendable, Hashable {
     /// Apply `Set-Cookie` from each hop to the next request.
     public var processCookies: Bool
 
-    /// Never follow redirects (the default; other modes arrive with the Repeater in M5).
+    /// Never follow redirects (the default).
     public static let never = RedirectPolicy(mode: .never)
 
     /// Create a policy.
@@ -174,6 +174,10 @@ public struct HookSet: OptionSet, Sendable, Hashable {
     public static let all: HookSet = [.sessions, .transformTags, .matchReplace, .extensions]
 }
 
+/// Whether a target and request path (`/path?query`) may be sent to — the project scope as the
+/// sending tool sees it.
+public typealias ScopeCheck = @Sendable (HTTPTarget, String) async -> Bool
+
 /// Options for one send (F03 §2).
 public struct SendOptions: Sendable {
     /// Protocol preference.
@@ -205,9 +209,10 @@ public struct SendOptions: Sendable {
     /// Record the exchange (default). Content discovery probes thousands of paths and records only
     /// the ones it finds (F07 ETL-003).
     public var record = true
-    /// The project's scope, for the `in-scope` redirect mode (F04 TGT-022); without it, `in-scope`
-    /// follows nothing off the current host.
-    public var scope: ScopeService?
+    /// The scope every redirect hop must be in, whatever the redirect mode (CLAUDE.md "Scope
+    /// safety"; F04 TGT-022). Active tools pass their scope check; without one, `in-scope` follows
+    /// nothing off the current host. The first request is the caller's to check.
+    public var scope: ScopeCheck?
     /// Which hooks run.
     public var applyHooks: HookSet = .all
     /// The tool the exchange is recorded as.
@@ -221,7 +226,6 @@ public struct SendOptions: Sendable {
     /// applies), and the exchange is recorded as pending when bytes start and updated at the end.
     public var onResponseBytes: (@Sendable ([UInt8]) -> Void)?
 
-    /// Options with defaults, recorded as `recordAs`.
     /// Whether the send draws from the shared limiter (F03 §3.4): concurrency budgets, backoff and
     /// the panic stop. Nil (the default) decides by tool: active tools (Fuzzer, Scanner, Crawler,
     /// Sequencer, automation, AI, extensions) are governed; the proxy, Repeater, browser and session
@@ -242,6 +246,7 @@ public struct SendOptions: Sendable {
         }
     }
 
+    /// Options with defaults, recorded as `recordAs`.
     public init(recordAs: ToolSource) {
         self.recordAs = recordAs
     }

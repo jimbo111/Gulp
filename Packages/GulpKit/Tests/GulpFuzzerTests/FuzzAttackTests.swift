@@ -14,6 +14,7 @@ final class FakeEngine: HTTPEngine, @unchecked Sendable {
     private var calls = 0
     private var requests: [String] = []
     private var versions: [HTTPVersionPreference] = []
+    private var scopes: [ScopeCheck?] = []
     let reply: @Sendable (String, Int) -> (status: Int, body: String)?
 
     init(reply: @escaping @Sendable (String, Int) -> (status: Int, body: String)?) {
@@ -23,6 +24,7 @@ final class FakeEngine: HTTPEngine, @unchecked Sendable {
     var sendCount: Int { lock.withLock { calls } }
     var sent: [String] { lock.withLock { requests } }
     var sentVersions: [HTTPVersionPreference] { lock.withLock { versions } }
+    var sentScopes: [ScopeCheck?] { lock.withLock { scopes } }
 
     func send(_ request: RawRequest, to target: HTTPTarget, options: SendOptions) async -> ExchangeResult {
         let text = request.bytes.string()
@@ -30,6 +32,7 @@ final class FakeEngine: HTTPEngine, @unchecked Sendable {
             calls += 1
             requests.append(text)
             versions.append(options.httpVersion)
+            scopes.append(options.scope)
             return calls
         }
         var exchange = Exchange(
@@ -126,6 +129,20 @@ struct FuzzAttackTests {
         #expect(engine.sentVersions == [.http2, .http2, .http2])
         let old = try JSONDecoder().decode(FuzzSettings.self, from: Data(#"{"concurrency": 4}"#.utf8))
         #expect(old.concurrency == 4 && old.httpVersion == .auto && old.marker == "§")
+    }
+
+    @Test("TGT-023: a redirect-following attack hands the engine its scope check, so every hop is checked")
+    func test_TGT023_redirectHopsScoped() async throws {
+        let engine = FakeEngine { _, _ in (200, "ok") }
+        var settings = FuzzSettings()
+        settings.followRedirects = true
+        let attack = try FuzzAttack(
+            config: config("GET /app/§a§ HTTP/1.1\r\n\r\n", .sniper, [PayloadSet(.null(count: 1))], settings),
+            engine: engine, inScope: { _, path in path.hasPrefix("/app") })
+        _ = await collect(attack)
+        let scope = try #require(engine.sentScopes.first ?? nil)
+        #expect(await scope(lab, "/app/next"))
+        #expect(await !scope(lab, "/admin"))
     }
 
     @Test("FUZ-030: the requests-per-second cap is honoured; delays apply")

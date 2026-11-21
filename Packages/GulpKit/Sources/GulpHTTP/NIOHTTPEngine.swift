@@ -171,7 +171,7 @@ public final class NIOHTTPEngine: HTTPEngine {
         while chain.count - authHops < options.followRedirects.maxHops, result.error == nil,
             !Task.isCancelled,
             let response = result.exchange.response,
-            let next = Redirects.next(
+            let next = await Redirects.next(
                 after: response, request: current.request, target: current.target,
                 policy: options.followRedirects, scope: options.scope)
         {
