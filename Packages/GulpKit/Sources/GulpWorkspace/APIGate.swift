@@ -366,7 +366,7 @@ public struct APIGate: Sendable {
         if !text.contains("\r\n") { text = text.replacingOccurrences(of: "\n", with: "\r\n") }
         if !text.contains("\r\n\r\n") { text += text.hasSuffix("\r\n") ? "\r\n" : "\r\n\r\n" }
         let request = RawRequest(Bytes(text))
-        let path = Self.pathAndQuery(request)
+        let path = ScopeService.requestPath(of: request, target: target)
         let where_ = Self.url(target, path: path)
         guard request.parsed.warnings.isEmpty || !request.bytes[request.parsed.method].isEmpty else {
             return try await refuse(
@@ -466,11 +466,5 @@ public struct APIGate: Sendable {
     public static func url(_ target: HTTPTarget, path: String) -> String {
         let standard = target.port == (target.scheme == .https ? 443 : 80)
         return "\(target.scheme.rawValue)://\(target.host)\(standard ? "" : ":\(target.port)")\(path)"
-    }
-
-    static func pathAndQuery(_ request: RawRequest) -> String {
-        let derived = DerivedFields(
-            target: HTTPTarget(scheme: .http, host: "x"), request: request, response: nil)
-        return (derived.path ?? "/") + (derived.query.map { "?" + $0 } ?? "")
     }
 }

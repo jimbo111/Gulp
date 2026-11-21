@@ -54,6 +54,17 @@ struct APIGateTests {
         try await session.close()
     }
 
+    @Test("TGT-023: a host allowed for manual sends (\"don't ask again\") is still out of scope for agents")
+    func test_TGT023_manualAllowanceDoesNotWidenAgents() async throws {
+        let session = try await open(isolatedEnvironment(), "gate-manual")
+        await session.scopeGuard.allowWithoutAsking(host: "127.0.0.1")
+        let gate = APIGate(session: session, source: .ai, policy: .inScope)
+        let result = try await gate.call("send_request", arguments: raw, caller: "ai:m")
+        #expect(errorCode(result) == "out_of_scope" && !result.sent)
+        #expect(try await session.store.count() == 0)
+        try await session.close()
+    }
+
     @Test("AUT-023: ScopeGuard runs before the approval policy; every outcome is audited with its caller")
     func test_AUT023_order() async throws {
         let session = try await open(isolatedEnvironment(), "gate-order")
