@@ -68,10 +68,10 @@ struct ProjectWindow: View {
                 }
                 .toolbar {
                     // docs/05 §2: the global Intercept toggle (⌘⇧I) and the listener status.
-                    ToolbarItem(placement: .navigation) {
+                    ToolbarItem(placement: .primaryAction) {
                         InterceptToolbarToggle(models: models)
                     }
-                    ToolbarItem(placement: .navigation) {
+                    ToolbarItem(placement: .primaryAction) {
                         Button {
                             showListeners = true
                         } label: {

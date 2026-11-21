@@ -21,7 +21,7 @@ struct GulpApp: App {
         }
         // Opened `.gulp` files reach AppDelegate, which opens each in its own window; without this
         // SwiftUI would also open an extra temporary-project window per open event.
-        .handlesExternalEvents(matching: [])
+        .handlesExternalEvents(matching: ["gulp-project-window"])
         .commands {
             ProjectCommands()
         }

@@ -69,6 +69,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.gulp.app.uitests
     dependencies:
       - target: Gulp
+      # The end-to-end test starts VulnLab from the built products (not linked).
+      - package: GulpKit
+        product: gulp-vulnlab
+        link: false
 
 schemes:
   Gulp:
@@ -81,3 +85,21 @@ schemes:
       config: Debug
       targets:
         - GulpAppUITests
+      # test_REP002 sends from the app to a VulnLab started here (the sandboxed UI-test runner
+      # cannot listen on a port itself). The port is the test's `vulnLabPort`.
+      preActions:
+        - name: Start VulnLab
+          settingsTarget: GulpAppUITests
+          script: |
+            pkill -f "gulp-vulnlab --port 28188" || true
+            "$BUILT_PRODUCTS_DIR/gulp-vulnlab" --port 28188 --raw-port 28189 --tls-port 28190 \
+              > "$TARGET_TEMP_DIR/vulnlab.log" 2>&1 &
+            for _ in $(seq 1 50); do
+              curl -s -o /dev/null http://127.0.0.1:28188/ && exit 0
+              sleep 0.2
+            done
+            echo "VulnLab did not start; see $TARGET_TEMP_DIR/vulnlab.log" >&2
+            exit 1
+      postActions:
+        - name: Stop VulnLab
+          script: pkill -f "gulp-vulnlab --port 28188" || true

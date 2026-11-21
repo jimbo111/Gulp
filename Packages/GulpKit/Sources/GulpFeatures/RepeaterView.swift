@@ -78,6 +78,7 @@ public final class RepeaterModel {
         /// A group.
         case group(Int64)
 
+        /// Identity for the alert presentation.
         public var id: String {
             switch self {
             case .tab(let id, _): "tab-\(id)"
@@ -590,6 +591,7 @@ public struct RepeaterView: View {
         model = models.repeater
     }
 
+    /// The screen.
     public var body: some View {
         VStack(spacing: 0) {
             tabBar
@@ -818,11 +820,13 @@ public struct RepeaterView: View {
                 Button("Send") { model.send() }
                     .keyboardShortcut(.return, modifiers: .command)
                     .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("repeater.send")
             }
             TextField("https://host:port", text: $model.targetText)
                 .textFieldStyle(.roundedBorder)
                 .frame(minWidth: 200, maxWidth: 320)
                 .onSubmit { model.commitTarget() }
+                .accessibilityIdentifier("repeater.target")
                 .help(model.targetError ?? "Where requests go (the Host header is sent as written)")
             if let error = model.targetError {
                 Image(systemName: "exclamationmark.triangle").foregroundStyle(.yellow).help(error)
@@ -1024,7 +1028,7 @@ public struct RepeaterView: View {
         HStack(spacing: 10) {
             if let exchange = model.shown {
                 if let response = exchange.response {
-                    Text("\(response.parsed.statusCode)").bold()
+                    Text("\(response.parsed.statusCode)").bold().accessibilityIdentifier("repeater.status")
                     Text("\(response.bytes.count) bytes")
                 }
                 if case .failed(let error) = exchange.state {
