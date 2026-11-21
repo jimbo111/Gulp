@@ -15,17 +15,26 @@ public struct Redactor: Sendable {
     /// broad ones (a whole header value, a whole key block) mask first.
     public init(enabled: Bool = true) {
         self.enabled = enabled
-        // Field names that carry secrets (`access_token`, `client_secret`, `api-key`, `password`, …).
+        // Redaction runs over whole HTTP messages, which the target controls, so every pattern must
+        // stay linear: a name or token is matched only from the START of a run of its characters
+        // (the lookbehind), name fragments are bounded, and runs that cannot give anything back are
+        // possessive. Without that, a 1 MB run of name characters backtracks quadratically.
+        //
+        // Field names that carry secrets (`access_token`, `client_secret`, `api-key`, `password`, …),
+        // up to 64 characters around the keyword.
         let secretName =
-            #"[A-Za-z0-9_\-]*(?:api[_\-]?key|secret|token|pass(?:word|wd|phrase))[A-Za-z0-9_\-]*"#
+            #"(?<![A-Za-z0-9_\-])[A-Za-z0-9_\-]{0,64}?"#
+            + #"(?:api[_\-]?key|secret|token|pass(?:word|wd|phrase))[A-Za-z0-9_\-]{0,64}+"#
         let rules: [(String, String, String)] = [
             // Header rules keep the header name and mask the value.
             ("authorization", #"(?im)^((?:proxy-)?authorization:[ \t]*)(.+)$"#, "$1[REDACTED]"),
             ("cookie", #"(?im)^((?:set-)?cookie:[ \t]*)(.+)$"#, "$1[REDACTED]"),
-            // The whole PEM block, body included; to the end of the text when the END line is cut off.
+            // The whole PEM block, body included; to the end of the text when the END line is cut off
+            // (then the match runs to the end, so the lazy body is scanned at most once).
             (
                 "private-key",
-                #"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----|\z)"#,
+                #"-----BEGIN (?:[A-Z0-9]++ ){0,3}PRIVATE KEY-----[\s\S]*?"#
+                    + #"(?:-----END (?:[A-Z0-9]++ ){0,3}PRIVATE KEY-----|\z)"#,
                 "[REDACTED]"
             ),
             ("bearer", #"(?i)\bBearer\s+[A-Za-z0-9._~+/\-]{8,}=*"#, "[REDACTED]"),
@@ -34,12 +43,15 @@ public struct Redactor: Sendable {
             ("slack", #"\bxox[baprs]-[0-9A-Za-z\-]{10,}"#, "[REDACTED]"),
             ("github", #"\bgh[pousr]_[0-9A-Za-z]{30,}\b"#, "[REDACTED]"),
             // A JSON string field with a secret name keeps its key and quotes and loses its value.
-            ("json-secret", #"(?i)("\#(secretName)"\s*:\s*")(?:[^"\\]|\\.)*(")"#, "$1[REDACTED]$2"),
+            ("json-secret", #"(?i)("\#(secretName)"\s*+:\s*+")(?:[^"\\]|\\.)*+(")"#, "$1[REDACTED]$2"),
             // A JWT anywhere (header and payload are base64url JSON, so both start with `eyJ`).
-            ("jwt", #"\beyJ[A-Za-z0-9_\-]+\.eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]*"#, "[REDACTED]"),
+            (
+                "jwt", #"(?<![A-Za-z0-9_\-])eyJ[A-Za-z0-9_\-]++\.eyJ[A-Za-z0-9_\-]++\.[A-Za-z0-9_\-]*+"#,
+                "[REDACTED]"
+            ),
             // `name=value` / `name: value` assignments (query strings, forms, config, YAML).
             (
-                "api-key-assign", #"(?i)(\#(secretName)\s*[=:]\s*['"]?)[A-Za-z0-9._~+/\-]{8,}=*"#,
+                "api-key-assign", #"(?i)(\#(secretName)\s*+[=:]\s*+['"]?)[A-Za-z0-9._~+/\-]{8,}+=*+"#,
                 "$1[REDACTED]"
             ),
         ]

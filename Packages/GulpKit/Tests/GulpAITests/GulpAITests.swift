@@ -59,6 +59,20 @@ struct RedactionTests {
         #expect(!result.contains("dXNlcjpwYXNz") && result.contains("Host: x"))
     }
 
+    @Test(
+        "AI-003: redaction is linear on attacker-shaped input (no catastrophic backtracking)",
+        arguments: [
+            ("a", 1 << 20),  // a 1 MB name-character run with no keyword
+            ("eyJ-", 1 << 18),  // JWT starts with no dot
+            ("\"a", 1 << 19),  // quote-name runs with no keyword
+            ("-----BEGIN PRIVATE KEY-----\n", 1 << 15),  // BEGIN lines, no END
+        ])
+    func test_AI003_linearTime(unit: String, count: Int) {
+        let input = String(repeating: unit, count: count)
+        let elapsed = ContinuousClock().measure { _ = Redactor().redact(input) }
+        #expect(elapsed < .seconds(1))
+    }
+
     @Test("AI-003: a bare JWT anywhere in the text is masked")
     func test_AI003_bareJWT() {
         let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk"
