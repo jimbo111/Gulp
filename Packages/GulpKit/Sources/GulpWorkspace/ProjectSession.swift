@@ -120,7 +120,8 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
     private var store: ProjectStore
     private var writer: StoreWriter
     private var paused = false
-    private var held: [(Exchange, CheckedContinuation<ExchangeID, Never>)] = []
+    /// Recordings and updates that arrived during a pause, in arrival order.
+    private var held: [HeldWrite] = []
     private var waiting: [CheckedContinuation<Void, Never>] = []
     /// TGT-024: when set, proxy exchanges out of this scope are not recorded.
     private var proxyScope: ScopeService?
@@ -157,7 +158,7 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
         }
         let id: ExchangeID
         if paused {
-            id = await withCheckedContinuation { held.append((exchange, $0)) }
+            id = await withCheckedContinuation { held.append(.record(exchange, $0)) }
         } else {
             id = await writer.record(exchange)
         }
@@ -173,10 +174,20 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
 
     func update(_ exchange: Exchange) async {
         guard exchange.id != Self.notRecorded else { return }
-        await writer.update(exchange)
+        if paused {
+            held.append(.update(exchange))
+        } else {
+            await writer.update(exchange)
+        }
     }
 
-    /// Hold new recordings (Save As copies the file meanwhile, PRJ-002).
+    /// A write held while Save As copies the file.
+    private enum HeldWrite {
+        case record(Exchange, CheckedContinuation<ExchangeID, Never>)
+        case update(Exchange)
+    }
+
+    /// Hold new recordings and updates (Save As copies the file meanwhile, PRJ-002).
     func pause() {
         paused = true
     }
@@ -189,8 +200,13 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
         while !held.isEmpty {
             let batch = held
             held = []
-            for (exchange, continuation) in batch {
-                continuation.resume(returning: await newWriter.record(exchange))
+            for write in batch {
+                switch write {
+                case .record(let exchange, let continuation):
+                    continuation.resume(returning: await newWriter.record(exchange))
+                case .update(let exchange):
+                    await newWriter.update(exchange)
+                }
             }
         }
         paused = false
@@ -276,7 +292,9 @@ public actor ProjectSession {
     public nonisolated let activeTasks = ActiveTasks()
     /// OAST (F10): payloads, polling, interactions.
     public nonisolated let oast: OASTService
-    private let currentStore: CurrentStore
+    /// The file the session writes to now: long-running work resolves the store through it, so it
+    /// follows Save As instead of writing to the closed old file.
+    nonisolated let currentStore: CurrentStore
 
     private init(
         store: ProjectStore, events: EventBus, settings: LayeredSettings, isTemporary: Bool,
@@ -298,13 +316,13 @@ public actor ProjectSession {
                 await events.publish(.log(LogEntry(level: .info, message: message, module: "gulp.session")))
             }
         }
-        // Signing keys come from the secret store, never the project file (see SessionSecrets.swift).
+        // Session secrets come from the secret store, never the project file (see SessionSecrets.swift).
         let (sessionSettings, missingSecrets) = settings.get(SessionSettings.self)
-            .resolvingSigningSecrets(from: environment.secretStore)
+            .resolvingSecrets(from: environment.secretStore)
         if !missingSecrets.isEmpty {
             let message =
-                "\(missingSecrets.count) signing key(s) of this project aren't in this machine's secret store; "
-                + "re-enter them in the session rules to sign requests."
+                "\(missingSecrets.count) session secret(s) of this project (signing keys, identity credentials, "
+                + "macro steps) aren't in this machine's secret store; re-enter them in the session settings."
             Task {
                 await events.publish(
                     .log(LogEntry(level: .warning, message: message, module: "gulp.session")))
@@ -410,6 +428,7 @@ public actor ProjectSession {
             let values = try await template.allSettingsJSON()
             try await template.close()
             try await settings.importProjectSettings(values)
+            try await settings.copySessionSecrets(in: environment.secretStore)
         }
         let minter = (try? environment.certificateAuthority()).flatMap { try? LeafMinter(authority: $0) }
         let session = ProjectSession(
@@ -423,7 +442,7 @@ public actor ProjectSession {
         await session.startPassiveScan()
         await session.applyNetworkSettings()
         await session.startSession()
-        await session.moveInlineSigningSecrets()
+        await session.moveInlineSecrets()
         if session.settings.get(OASTSettings.self).enabled {
             do {
                 try await session.startOAST()
@@ -436,7 +455,8 @@ public actor ProjectSession {
     }
 
     /// Save the project to `url` and continue working there (PRJ-002). A saved temporary project
-    /// becomes a normal one and its temporary file is removed.
+    /// becomes a normal one and its temporary file is removed (the new file takes over its secrets);
+    /// otherwise the new file gets its own copies of the session secrets.
     public func saveAs(_ destination: URL) async throws {
         let current = store.url.standardizedFileURL.resolvingSymlinksInPath()
         guard destination.standardizedFileURL.resolvingSymlinksInPath() != current else {
@@ -468,7 +488,11 @@ public actor ProjectSession {
         await recorder.resume(with: newStore)
         await siteMap.idle()  // a site-map read still on the old file would make close fail
         try await oldStore.close()
-        if isTemporary { Self.removeDatabaseFiles(oldStore.url) }
+        if isTemporary {
+            Self.removeDatabaseFiles(oldStore.url)
+        } else {
+            try await settings.copySessionSecrets(in: environment.secretStore)
+        }
         isTemporary = false
         RecentProjects.note(destination, in: environment)
     }
@@ -494,22 +518,28 @@ public actor ProjectSession {
     /// Start every enabled proxy listener from the settings (PRX-001). Returns the bound port per
     /// listener, or the user-facing bind error.
     public func startProxyListeners() async -> [UUID: Result<Int, GulpError>] {
-        await applyProxyScope()
-        var results: [UUID: Result<Int, GulpError>] = [:]
-        if let minter { await proxy.setTLS(settings.get(ProxySettings.self).tlsOptions(minter: minter)) }
         listenerPorts = []
+        var results: [UUID: Result<Int, GulpError>] = [:]
         for listener in settings.get(ProxySettings.self).listeners where listener.enabled {
-            do {
-                let port = try await proxy.start(listener)
-                listenerPorts.append(port)
-                results[listener.id] = .success(port)
-            } catch let error as GulpError {
-                results[listener.id] = .failure(error)
-            } catch {
-                results[listener.id] = .failure(GulpError(message: "\(error)"))
-            }
+            results[listener.id] = await startProxyListener(listener)
         }
         return results
+    }
+
+    /// Start `listener` with the project's TLS and scope settings, without storing it (a headless
+    /// run's own port). Returns the bound port or the user-facing bind error.
+    public func startProxyListener(_ listener: ProxyListenerConfig) async -> Result<Int, GulpError> {
+        await applyProxyScope()
+        if let minter { await proxy.setTLS(settings.get(ProxySettings.self).tlsOptions(minter: minter)) }
+        do {
+            let port = try await proxy.start(listener)
+            listenerPorts.append(port)
+            return .success(port)
+        } catch let error as GulpError {
+            return .failure(error)
+        } catch {
+            return .failure(GulpError(message: "\(error)"))
+        }
     }
 
     /// Project name and notes (PRJ-006), stored in `meta`.
@@ -518,9 +548,10 @@ public actor ProjectSession {
         if let notes { try await store.setMeta("notes", notes) }
     }
 
-    /// Stop the proxy, flush everything and close the file. A temporary project is deleted unless
-    /// `keepTemporary` (PRJ-001: "prompt to save on close (or discard)").
+    /// Stop active tools and the proxy, flush everything and close the file. A temporary project is
+    /// deleted unless `keepTemporary` (PRJ-001: "prompt to save on close (or discard)").
     public func close(keepTemporary: Bool = false) async throws {
+        await activeTasks.cancelAll()  // scans, attacks, crawls: stopped and their results written
         let tasks = backgroundTasks
         backgroundTasks = []
         for task in tasks { task.cancel() }
@@ -531,7 +562,10 @@ public actor ProjectSession {
         await http.shutdown()
         await passiveScan.drain()  // headless runs (gulp-cli proxy) finish scanning what they recorded
         try await store.close()
-        if isTemporary && !keepTemporary { Self.removeDatabaseFiles(store.url) }
+        if isTemporary && !keepTemporary {
+            Self.removeDatabaseFiles(store.url)
+            await deleteSecrets(settings.get(SessionSettings.self).secretRefs)  // discarded with it
+        }
     }
 
     static func removeDatabaseFiles(_ url: URL) {

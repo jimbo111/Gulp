@@ -116,7 +116,7 @@ struct OASTCommand: AsyncParsableCommand {
         var connectTo: String?
         @Option(
             help:
-                "The server's token (kept in the Keychain on macOS, only in memory elsewhere; or GULP_OAST_TOKEN)."
+                "The server's token (kept in the secret store: the Keychain on macOS, a 0600 file elsewhere; or GULP_OAST_TOKEN)."
         )
         var token: String?
         @Option(help: "Background poll interval in seconds.") var poll: Double = 5

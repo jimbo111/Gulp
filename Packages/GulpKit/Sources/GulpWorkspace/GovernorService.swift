@@ -1,6 +1,7 @@
 // GulpWorkspace — the shared limiter's settings (F03 §3.4: HTTP-013 rates, GOV-002/003 concurrency
 // budgets, GOV-007 backoff) and the panic stop (F20 GOV-001). Active tools register while they run,
-// so the panic stop can pause them all, report what it stopped and resume them together.
+// so the panic stop can pause them all, report what it stopped and resume them together, and
+// closing the project can cancel them and wait until they have stopped.
 
 import Foundation
 import GulpCore
@@ -35,6 +36,8 @@ public struct ActiveTask: Sendable, Identifiable {
     public let name: String
     let pause: @Sendable () async -> Void
     let resume: @Sendable () async -> Void
+    /// Stop for good; the tool unregisters once its last result is written.
+    let cancel: @Sendable () async -> Void
 }
 
 /// The project's running active tasks.
@@ -43,17 +46,39 @@ public actor ActiveTasks {
     private var order: [UUID] = []
     /// Whether the panic stop is engaged.
     public private(set) var panicked = false
+    /// The project is closing: tasks are cancelled, new ones as soon as they register.
+    private var closing = false
+    /// `cancelAll` callers waiting for the last task to unregister.
+    private var drainWaiters: [CheckedContinuation<Void, Never>] = []
 
-    /// Register a task; it is paused at once if the panic stop is engaged.
+    /// Register a task; it is paused at once if the panic stop is engaged, cancelled at once if the
+    /// project is closing.
     func add(_ task: ActiveTask) async {
         tasks[task.id] = task
         order.append(task.id)
-        if panicked { await task.pause() }
+        if closing {
+            await task.cancel()
+        } else if panicked {
+            await task.pause()
+        }
     }
 
     func remove(_ id: UUID) {
         tasks[id] = nil
         order.removeAll { $0 == id }
+        if order.isEmpty {
+            let waiters = drainWaiters
+            drainWaiters = []
+            for waiter in waiters { waiter.resume() }
+        }
+    }
+
+    /// Cancel every task and wait until each has unregistered, i.e. written its last result
+    /// (closing the project: nothing may send or write after the engine and store shut down).
+    func cancelAll() async {
+        closing = true
+        for task in all { await task.cancel() }
+        while !order.isEmpty { await withCheckedContinuation { drainWaiters.append($0) } }
     }
 
     /// The running tasks, oldest first.
