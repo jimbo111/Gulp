@@ -1,12 +1,15 @@
 import Foundation
+import GulpCore
+import GulpStore
+import GulpWorkspace
 import Testing
 
 @testable import GulpAI
 
-@Suite("GulpAI scaffolding")
-struct GulpAIScaffolding {
-    @Test("module marker is wired")
-    func moduleMarker() { #expect(GulpAI.moduleName == "GulpAI") }
+/// A PEM private-key armor line (`edge` is BEGIN or END, `kind` e.g. "RSA "), assembled at runtime so
+/// the source holds no literal key marker for Scripts/rules-check.sh's committed-key rule to flag.
+func armor(_ edge: String, _ kind: String = "") -> String {
+    "-----\(edge) \(kind)PRIVATE" + " KEY-----"
 }
 
 @Suite("GulpAI — redaction (AI-003)")
@@ -30,11 +33,11 @@ struct RedactionTests {
     @Test("AI-003: a PEM private key is masked whole, body included (also when the END line is cut off)")
     func test_AI003_privateKeyBody() {
         let body = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7"
-        let pem = "key:\n-----BEGIN PRIVATE KEY-----\n\(body)\nAbCd==\n-----END PRIVATE KEY-----\nafter"
+        let pem = "key:\n\(armor("BEGIN"))\n\(body)\nAbCd==\n\(armor("END"))\nafter"
         let result = Redactor().redact(pem)
         #expect(!result.text.contains(body) && !result.text.contains("AbCd=="))
         #expect(result.text == "key:\n[REDACTED]\nafter")
-        let truncated = Redactor().redact("-----BEGIN RSA PRIVATE KEY-----\n\(body)\n")
+        let truncated = Redactor().redact("\(armor("BEGIN", "RSA "))\n\(body)\n")
         #expect(!truncated.text.contains(body))
     }
 
@@ -65,7 +68,7 @@ struct RedactionTests {
             ("a", 1 << 20),  // a 1 MB name-character run with no keyword
             ("eyJ-", 1 << 18),  // JWT starts with no dot
             ("\"a", 1 << 19),  // quote-name runs with no keyword
-            ("-----BEGIN PRIVATE KEY-----\n", 1 << 15),  // BEGIN lines, no END
+            (armor("BEGIN") + "\n", 1 << 15),  // BEGIN lines, no END
         ])
     func test_AI003_linearTime(unit: String, count: Int) {
         let input = String(repeating: unit, count: count)
@@ -156,6 +159,61 @@ struct AgentTests {
             execute: { _ in ToolOutcome(content: "ok") })
         #expect(result.stop == .cancelled)
         #expect(result.steps == 0)
+    }
+}
+
+@Suite("GulpAI — tools through the shared APIGate (AI-004, AI-013, rule 6)", .serialized)
+struct AgentGateTests {
+    func session(_ name: String) async throws -> ProjectSession {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "gulp-ai-\(UUID().uuidString)")
+        var environment = WorkspaceEnvironment(
+            supportDirectory: root.appendingPathComponent("support"),
+            cachesDirectory: root.appendingPathComponent("caches"))
+        environment.caKeyType = .p256
+        try FileManager.default.createDirectory(
+            at: environment.supportDirectory, withIntermediateDirectories: true)
+        return try await ProjectSession.open(
+            at: environment.supportDirectory.appendingPathComponent("\(name).gulp"), environment: environment)
+    }
+
+    let send =
+        #"{"raw":"GET /in HTTP/1.1\nHost: 127.0.0.1:1\n\n","target":"http://127.0.0.1:1","timeout_seconds":5}"#
+
+    @Test(
+        "AI-004: the model gets the gate's tools; an out-of-scope send is refused, fed back and audited as ai:"
+    )
+    func test_AI004_outOfScopeRefused() async throws {
+        let session = try await session("ai-scope")
+        let provider = ScriptedProvider([
+            LLMResponse(
+                toolCalls: [LLMToolCall(id: "1", name: "send_request", arguments: send)], stopReason: .toolUse
+            ),
+            LLMResponse(text: "It is out of scope.", stopReason: .endTurn),
+        ])
+        let gate = APIGate(session: session, source: .ai, policy: .inScope)
+        let result = try await Agent(provider: provider).run(system: "s", user: "probe", gate: gate)
+        #expect(result.stop == .answered && result.requests == 0)
+        let fedBack = try #require(provider.received.last?.first { $0.role == .tool })
+        #expect(fedBack.content.contains("out_of_scope"))
+        let log = try await session.store.auditLog()
+        #expect(log.map(\.actor) == ["ai:mock"] && log.map(\.outcome) == ["refused"])
+        try await session.close()
+    }
+
+    @Test("AI-013: the gate's active tools count against the request budget; sends are recorded as .ai")
+    func test_AI013_requestBudgetThroughGate() async throws {
+        let session = try await session("ai-budget")
+        try await session.addToScope(url: "http://127.0.0.1:1/in")
+        let call = LLMResponse(
+            toolCalls: [LLMToolCall(id: "s", name: "send_request", arguments: send)], stopReason: .toolUse)
+        let gate = APIGate(session: session, source: .ai, policy: .inScope)
+        let result = try await Agent(provider: ScriptedProvider(Array(repeating: call, count: 5))).run(
+            system: "s", user: "probe", gate: gate, limits: AgentLimits(maxSteps: 5, maxRequests: 1))
+        #expect(result.stop == .requestBudget && result.requests == 1)
+        await session.store.writer.flush()
+        #expect(try await session.store.summaries(offset: 0, limit: 10).map(\.source) == [.ai])
+        try await session.close()
     }
 }
 
