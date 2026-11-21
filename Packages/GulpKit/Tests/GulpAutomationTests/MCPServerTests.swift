@@ -1,10 +1,10 @@
 import Foundation
 import GulpCore
-import GulpStore
 import GulpWorkspace
 import Testing
 
 @testable import GulpAutomation
+@testable import GulpStore
 
 // F21 AUT-020…AUT-023: the MCP server's protocol, tools, resources and safety.
 
@@ -174,6 +174,30 @@ struct MCPServerTests {
         let sends = log.filter { $0.action == "send_request" }
         #expect(sends.map(\.outcome) == ["refused", "refused", "error", "refused", "refused"])
         #expect(sends.first?.actor == "mcp:claude-code" && sends[1].target == "http://127.0.0.1:1/out")
+        try await session.close()
+    }
+
+    @Test("AUT-023: an allowed send whose audit write fails is a JSON-RPC error, not a success")
+    func test_AUT023_auditFailureIsAnError() async throws {
+        let session = try await mcpSession("audit-fails")
+        try await session.addToScope(url: "http://127.0.0.1:1/in")
+        let server = MCPServer(session: session, policy: .inScope)
+        try await session.store.pool.write { db in
+            try db.execute(
+                sql: "CREATE TRIGGER off BEFORE INSERT ON audit_log BEGIN SELECT RAISE(ABORT, 'offline'); END"
+            )
+        }
+        let reply = try await call(
+            server, 1, "tools/call",
+            [
+                "name": "send_request",
+                "arguments": [
+                    "raw": "GET /in HTTP/1.1\nHost: 127.0.0.1:1\n\n", "target": "http://127.0.0.1:1",
+                    "timeout_seconds": 5,
+                ],
+            ])
+        #expect(reply["result"] == nil)
+        #expect((reply["error"] as? [String: Any])?["code"] as? Int == -32603)
         try await session.close()
     }
 

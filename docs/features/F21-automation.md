@@ -62,9 +62,15 @@ Minimal GUI: Settings → an "Automation" area to enable the REST/MCP server, sh
 
 ## 4. Implementation notes
 
-- `GulpAutomation` builds on `ProjectSession`; the REST handlers and MCP tools are thin adapters over
-  the same service methods the UI uses — no duplicate logic. Define request/response DTOs once
-  (Codable) and generate the OpenAPI + MCP tool schemas from them.
+- `GulpAutomation` builds on `ProjectSession`; the MCP tools (and later the REST handlers) are thin
+  adapters over the shared agent tool surface, `APIGate` in `GulpWorkspace` (architecture §3 rule 6):
+  one definition of each tool's name, JSON schema, argument checks and JSON result, which the
+  assistant (F22) reuses too. The OpenAPI document is generated from the same tool definitions when
+  REST lands.
+- AUT-023 order, enforced by `APIGate.call` for every caller: validate → ScopeGuard (active tools) →
+  approval policy → send → audit. Every tool call and MCP resource read is written to the audit log
+  as `mcp:<client>` / `ai:<model>`; if that write fails, the call fails (a JSON-RPC error for MCP),
+  after a send too, so an unrecorded action never looks like a success.
 - Auth: a random token stored in the Keychain; constant-time comparison; per-connection rate limits.
 - Streaming mirrors `EventBus`; backpressure/bounded buffers as elsewhere (doc 01 §5.3).
 - MCP: implement the protocol (initialize/capabilities, tools/list, tools/call, resources) over

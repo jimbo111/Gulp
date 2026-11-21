@@ -17,7 +17,7 @@ struct SessionLifecycleTests {
     func test_PRJ002_updateDuringSaveAsCopy() async throws {
         let environment = isolatedEnvironment()
         let old = try ProjectStore.open(at: projectURL(environment, "old"))
-        let recorder = ProjectRecorder(store: old)
+        let recorder = ProjectRecorder(store: old, events: EventBus())
         var exchange = Exchange(
             source: .proxy, target: HTTPTarget(scheme: .http, host: "a"),
             request: RawRequest(Bytes("GET / HTTP/1.1\r\nHost: a\r\n\r\n")))

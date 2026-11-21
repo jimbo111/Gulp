@@ -146,9 +146,13 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
     /// The id that stands for "not recorded" (an out-of-scope proxy exchange, TGT-024).
     static let notRecorded: ExchangeID = 0
 
-    init(store: ProjectStore) {
+    /// Where failed WebSocket row writes are reported (they must not fail silently).
+    private let events: EventBus
+
+    init(store: ProjectStore, events: EventBus) {
         self.store = store
         self.writer = store.writer
+        self.events = events
     }
 
     func record(_ exchange: Exchange) async -> ExchangeID {
@@ -223,20 +227,26 @@ actor ProjectRecorder: ExchangeRecorder, WebSocketRecorder {
 
     func webSocketOpened(upgradeExchangeID: ExchangeID?, url: String) async -> Int64? {
         guard upgradeExchangeID != Self.notRecorded else { return nil }  // its upgrade was out of scope
-        return try? await currentStore().openWebSocket(upgradeExchangeID: upgradeExchangeID, url: url)
+        return await persisting("a WebSocket connection", events: events) {
+            try await currentStore().openWebSocket(upgradeExchangeID: upgradeExchangeID, url: url)
+        }
     }
 
     func webSocketMessage(
         _ connection: Int64, direction: WSDirection, message: WSMessage, original: [UInt8]?, dropped: Bool
     ) async {
-        _ = try? await currentStore().recordWebSocketMessage(
-            connection: connection, direction: direction.rawValue, opcode: Int(message.opcode),
-            payload: message.payload, frames: message.frames, originalPayload: original,
-            comment: dropped ? "Dropped in Intercept" : nil)
+        await persisting("a WebSocket message", events: events) {
+            try await currentStore().recordWebSocketMessage(
+                connection: connection, direction: direction.rawValue, opcode: Int(message.opcode),
+                payload: message.payload, frames: message.frames, originalPayload: original,
+                comment: dropped ? "Dropped in Intercept" : nil)
+        }
     }
 
     func webSocketClosed(_ connection: Int64, code: Int?) async {
-        try? await currentStore().closeWebSocket(connection, code: code)
+        await persisting("a WebSocket close", events: events) {
+            try await currentStore().closeWebSocket(connection, code: code)
+        }
     }
 }
 
@@ -305,7 +315,7 @@ public actor ProjectSession {
         self.settings = settings
         self.isTemporary = isTemporary
         self.environment = environment
-        let recorder = ProjectRecorder(store: store)
+        let recorder = ProjectRecorder(store: store, events: events)
         self.recorder = recorder
         let matchReplace = MatchReplaceHook(rules: settings.get(MatchReplaceSettings.self).rules)
         self.matchReplace = matchReplace

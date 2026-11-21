@@ -13,14 +13,15 @@ fail=0
 problem() { echo "RULE VIOLATION: $*" >&2; fail=1; }
 
 # 1. Scope safety (CLAUDE.md §4): active CLI tools send through ScopedSender, which refuses
-#    out-of-scope targets before sending. A bare NIOHTTPEngine() in gulp-cli bypasses that, unless it
-#    is a manual send the operator typed (Repeater-like), marked `// rules-check: manual send` above.
+#    out-of-scope targets before sending. In gulp-cli, constructing an NIOHTTPEngine (any arguments)
+#    or sending on a session's unguarded engine (`….http.send(`) bypasses that, unless it is a manual
+#    send the operator typed (Repeater-like), marked `// rules-check: manual send` on the line above.
 while IFS=: read -r file line _; do
   [ -z "$file" ] && continue
   if ! sed -n "$((line - 1))p" "$file" | grep -q "rules-check: manual send"; then
-    problem "$file:$line constructs NIOHTTPEngine() directly — use ScopedSender(scope: .pinned(destination)) (CLAUDE.md scope safety)"
+    problem "$file:$line sends without ScopeGuard — use ScopedSender(scope: .pinned(destination)) (CLAUDE.md scope safety)"
   fi
-done < <(grep -rnE "NIOHTTPEngine\(\)" "$SRC/gulp-cli" || true)
+done < <(grep -rnE "NIOHTTPEngine\(|\.http\.send\(" "$SRC/gulp-cli" || true)
 
 # 2. Reproducible tests: randomness in Tests/ comes from a seeded generator (GulpTestSupport's
 #    SplitMix64), so a failure reproduces. Bans the system generator and generator-less draws.
@@ -30,13 +31,16 @@ while IFS= read -r hit; do
 done < <(grep -rnE "SystemRandomNumberGenerator|\.random\(in:[^)]*\)|\.randomElement\(\)|\.shuffled\(\)|\.shuffle\(\)" \
   "$TESTS" --include='*.swift' | grep -v "using:" | grep -vE "^[^:]+:[0-9]+:[[:space:]]*//" || true)
 
-# 3. Store writes never fail silently in GulpWorkspace: a dropped `store.record(finding)` loses an
-#    issue. Wrap the write in `persisting(_:events:_:)`, which reports failures to the Event Log.
+# 3. Store writes never fail silently in the orchestration layer: a dropped `store.record(finding)`
+#    loses an issue, a dropped `appendAudit` loses an agent action. In GulpWorkspace wrap the write in
+#    `persisting(_:events:_:)`, which reports failures to the Event Log; in GulpAutomation/GulpAI let
+#    the error propagate (the APIGate fails the call). Matches any receiver ending in `store` or
+#    `Store()` (`session.store.`, `currentStore().`).
 while IFS= read -r hit; do
   [ -z "$hit" ] && continue
-  problem "$hit — a store write behind try? fails silently; use persisting(\"…\", events: events) { try await … }"
-done < <(grep -rnE "try\? await [A-Za-z_.]*store\.(record|append|set|add|attach|save|insert|update|delete|write|put|upsert)" \
-  "$SRC/GulpWorkspace" --include='*.swift' || true)
+  problem "$hit — a store write behind try? fails silently; propagate it, or use persisting(\"…\", events: events) { try await … }"
+done < <(grep -rnE "try\? await [A-Za-z_.]*[Ss]tore(\(\))?\.(record|append|set|add|attach|save|insert|update|delete|write|put|upsert|open|close)" \
+  "$SRC/GulpWorkspace" "$SRC/GulpAutomation" "$SRC/GulpAI" --include='*.swift' || true)
 
 # 4. Registry lookups go through the checked `require`, which names what is missing, never a
 #    force-unwrapped named(…)! — issue definitions (IssueIDCoverageTests checks the ids themselves) and
