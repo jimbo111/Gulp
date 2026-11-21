@@ -2,8 +2,8 @@ import Testing
 
 @testable import GulpCore
 
-// M1 GulpCore: the raw-bytes-are-truth guarantee (CLAUDE.md §4) and HTTP/1 framing (F03 HTTP-001/002).
-// Tests name the requirement ID they cover, per CLAUDE.md §2.
+// M1 GulpCore: the raw-bytes-are-truth guarantee (AGENTS.md §4) and HTTP/1 framing (F03 HTTP-001/002).
+// Tests name the requirement ID they cover, per AGENTS.md §2.
 
 @Suite("GulpCore — Bytes")
 struct BytesTests {

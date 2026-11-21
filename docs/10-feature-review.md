@@ -366,7 +366,7 @@ Each subsection: **what it does · module · proof (tests + DoD) · Burp verdict
 
 ## 4. Cross-cutting quality evidence
 
-- **Scope safety (CLAUDE.md hard rule):** `GulpScannerTests` includes "SCN-012 / CLAUDE.md scope
+- **Scope safety (AGENTS.md hard rule):** `GulpScannerTests` includes "SCN-012 / AGENTS.md scope
   safety: out-of-scope requests are never sent"; every active tool checks `ScopeGuard` before sending.
 - **Precision discipline:** the active scanner's DoD asserts **nothing** on every `/safe/` twin — a
   false-positive is a build failure. The LDAP wildcard check was tightened this session precisely

@@ -1,4 +1,4 @@
-// GulpWorkspace — session secrets never reach the project file (CLAUDE.md "No secrets in the repo").
+// GulpWorkspace — session secrets never reach the project file (AGENTS.md "No secrets in the repo").
 // Before SessionSettings is persisted, its secrets move into the SecretStore:
 //
 //   - each inline `SigningSecret` in a rule is stored and replaced by `.stored(ref:)`;

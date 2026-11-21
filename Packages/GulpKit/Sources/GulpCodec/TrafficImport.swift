@@ -72,7 +72,7 @@ public enum TrafficFormat: String, Sendable, Hashable, CaseIterable, Codable {
     /// One URL per line.
     case urlList = "urls"
 
-    /// A readable name (never the reference suite's product name, CLAUDE.md §4).
+    /// A readable name (never the reference suite's product name, AGENTS.md §4).
     public var title: String {
         switch self {
         case .har: "HAR"

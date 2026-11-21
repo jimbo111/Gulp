@@ -7,7 +7,7 @@ An independent review of all 32 feature specs against how web apps and their tes
 and against the goal in `00-vision.md`: a credible, daily-usable macOS alternative for pentesters and
 bug-bounty hunters, built by a small team. This file records the verdicts, what was **adopted**, and
 what is **proposed and waiting for the owner's decision** (scope cuts are product decisions,
-CLAUDE.md §4).
+AGENTS.md §4).
 
 > **Update 2026-11-08: the owner adopted every §3 proposal** ("Adopt the feature review
 > proposals"). §3 is kept unchanged as the record; how each proposal was applied — the new IDs, the

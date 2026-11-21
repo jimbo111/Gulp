@@ -120,7 +120,7 @@ final class FuzzerModel {
     @ObservationIgnored let session: ProjectSession
     @ObservationIgnored private var run: FuzzRun?
     @ObservationIgnored private var discovery: ContentDiscovery?
-    /// Results not yet in the table, and the 100 ms tick that moves them there (CLAUDE.md §4).
+    /// Results not yet in the table, and the 100 ms tick that moves them there (AGENTS.md §4).
     @ObservationIgnored private var pendingResults: [FuzzResult] = []
     @ObservationIgnored private var resultTicker: Task<Void, Never>?
 

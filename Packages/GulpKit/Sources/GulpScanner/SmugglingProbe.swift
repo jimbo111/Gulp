@@ -1,5 +1,5 @@
 // GulpScanner — HTTP request-smuggling / desync probes (F23 ADV-030/031). These rely on Gulp's
-// byte-exact engine (CLAUDE.md "raw bytes are the truth"): the probes carry deliberately conflicting
+// byte-exact engine (AGENTS.md "raw bytes are the truth"): the probes carry deliberately conflicting
 // length framing (Content-Length vs Transfer-Encoding) that a parser-normalizing client could never
 // send. A front-end and back-end that disagree on where the body ends make a vulnerable chain wait for
 // bytes that never come, so a timing differential against a normal baseline classifies the vector. The

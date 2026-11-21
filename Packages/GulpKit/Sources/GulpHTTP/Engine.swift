@@ -209,7 +209,7 @@ public struct SendOptions: Sendable {
     /// Record the exchange (default). Content discovery probes thousands of paths and records only
     /// the ones it finds (F07 ETL-003).
     public var record = true
-    /// The scope every redirect hop must be in, whatever the redirect mode (CLAUDE.md "Scope
+    /// The scope every redirect hop must be in, whatever the redirect mode (AGENTS.md "Scope
     /// safety"; F04 TGT-022). Active tools pass their scope check; without one, `in-scope` follows
     /// nothing off the current host. The first request is the caller's to check.
     public var scope: ScopeCheck?

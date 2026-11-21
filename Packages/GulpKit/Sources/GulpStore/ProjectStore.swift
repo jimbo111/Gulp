@@ -1,6 +1,6 @@
 // GulpStore — one open `.gulp` project file (doc 04 §4): a WAL-mode SQLite database with schema
 // migrations, the write coalescer, and async paged reads (the main thread never waits on the
-// database, CLAUDE.md §4).
+// database, AGENTS.md §4).
 
 import Foundation
 import GRDB

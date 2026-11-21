@@ -84,7 +84,7 @@ extension ProjectSession {
     /// Run the GraphQL security checks against `path` and raise issues (ADV-042). `authzProbe`, when
     /// given, is a query that should be denied to an unauthenticated caller but whose `sensitiveMarker`
     /// appearing in the unauthenticated response proves broken object/field authorization. An active
-    /// tool (CLAUDE.md "Scope safety"): out of scope throws `OutOfScope` unless `allowOutOfScope`; both
+    /// tool (AGENTS.md "Scope safety"): out of scope throws `OutOfScope` unless `allowOutOfScope`; both
     /// probes go to `target`/`path`, the one place checked.
     public func scanGraphQL(
         path: String, target: HTTPTarget, authzProbe: GraphQLRequest? = nil, sensitiveMarker: String? = nil,

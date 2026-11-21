@@ -1,6 +1,6 @@
 // GulpFeatures — Proxy → WebSockets History (F01 PRX-032): the connection list, the selected
 // connection's messages with direction/kind/text filters, and a viewer for the selected message.
-// Updates from traffic are coalesced (at most one refresh per 100 ms, CLAUDE.md §4).
+// Updates from traffic are coalesced (at most one refresh per 100 ms, AGENTS.md §4).
 
 #if canImport(AppKit)
 import AppKit

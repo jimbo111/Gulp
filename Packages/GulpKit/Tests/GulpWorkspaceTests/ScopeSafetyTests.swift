@@ -5,7 +5,7 @@ import Testing
 
 @testable import GulpWorkspace
 
-// CLAUDE.md "Scope safety" / F04 TGT-023 for the project-backed tools that aren't the Scanner,
+// AGENTS.md "Scope safety" / F04 TGT-023 for the project-backed tools that aren't the Scanner,
 // Crawler or Fuzzer: nothing leaves the machine for an out-of-scope target unless the action
 // carries an explicit override. Port 1 refuses connections, so a send that did go out is still
 // recorded (an exchange with an error) and shows up in the store count.

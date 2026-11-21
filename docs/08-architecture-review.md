@@ -9,7 +9,7 @@ A higher-level, architectural review of the Gulp codebase as it stands **with ev
 post-1.0 phases implemented** (the full WebSocket workbench WSX-002…008, AI/redaction, the extension
 hosts, Sequencer, JS Recon, smuggling confirmation, param discovery/pollution, and all the macOS tool
 screens), judged against the ideal the project set for itself in `docs/01-architecture.md` and the hard
-rules in `CLAUDE.md`. It is backed by an executable check (`Scripts/arch-check.sh`) so the conclusions
+rules in `AGENTS.md`. It is backed by an executable check (`Scripts/arch-check.sh`) so the conclusions
 stay true as the code changes, not just on the day they were written.
 
 ## 1. Scope and method
@@ -22,7 +22,7 @@ stay true as the code changes, not just on the day they were written.
   SwiftUI) and the `GulpScript` JavaScriptCore host — both behind `#if canImport(...)` and verified by
   the macOS CI leg.
 - **Method**: static inspection of the module/import graph, the concurrency surface
-  (`actor`/`Sendable`/`@unchecked`), the invariants `CLAUDE.md` calls non-negotiable, and the test
+  (`actor`/`Sendable`/`@unchecked`), the invariants `AGENTS.md` calls non-negotiable, and the test
   and DoD coverage. Each structural claim is re-checkable: the dependency rules now run as
   `Scripts/arch-check.sh` in the gate and CI.
 
@@ -89,7 +89,7 @@ GulpFeatures     → the engines it surfaces + GulpWorkspace + GulpUI   # UI (ma
 
 ## 3. The hard invariants
 
-`CLAUDE.md` names a few invariants as non-negotiable. Each was checked, not assumed:
+`AGENTS.md` names a few invariants as non-negotiable. Each was checked, not assumed:
 
 - **"Raw bytes are the truth."** No engine module (`GulpHTTP`, `GulpProxy`, `GulpRepeater`,
   `GulpScanner`) imports `URLSession` or `URLRequest`; a grep returns nothing. Request edits across
@@ -105,7 +105,7 @@ GulpFeatures     → the engines it surfaces + GulpWorkspace + GulpUI   # UI (ma
   (`CrawlerModel`, `ActiveScanModel`, history).
 - **Strict concurrency.** The package is Swift 6 language mode. There are 14 `@unchecked Sendable`
   declarations and **every one carries a justifying comment** (an `NSLock`-guarded box, an immutable
-  post-init value, or thread-safe Foundation handles), exactly as `CLAUDE.md` requires. No bare
+  post-init value, or thread-safe Foundation handles), exactly as `AGENTS.md` requires. No bare
   `@unchecked`.
 - **Scope safety.** Active tools (Scanner, Crawler, Fuzzer, Authz Matrix, Beacon injection) check
   `ScopeGuard` before sending and expose an explicit per-action override that is surfaced in the CLI

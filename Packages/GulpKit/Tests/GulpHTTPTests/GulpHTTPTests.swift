@@ -4,7 +4,7 @@ import Testing
 @testable import GulpHTTP
 
 // F03 HTTP/1 engine tests against an in-process scripted server (TestServer.swift). Each test names
-// the requirement it covers (CLAUDE.md §2). Timeouts are generous so a framing bug fails fast with a
+// the requirement it covers (AGENTS.md §2). Timeouts are generous so a framing bug fails fast with a
 // typed error instead of hanging the suite.
 
 func options(_ configure: (inout SendOptions) -> Void = { _ in }) -> SendOptions {

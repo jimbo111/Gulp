@@ -78,7 +78,7 @@ technical-terms dictionary) reports no misspellings.
 By the objective standard (D1–D16) and multiple independent reviews, the documentation set is
 **build-ready**: no Blockers, no Majors. The only unmet item, C1 (Swift compiles), is out of scope in
 this environment and is CI's job. Next step is implementation: let CI verify the M0 scaffolding, then
-build M1 onward following [`CLAUDE.md`](../CLAUDE.md) and [`03-roadmap.md`](03-roadmap.md).
+build M1 onward following [`AGENTS.md`](../AGENTS.md) and [`03-roadmap.md`](03-roadmap.md).
 
 ## Documentation Definition of Done (moved from PROGRESS.md on 2026-11-20)
 

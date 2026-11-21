@@ -1,4 +1,4 @@
-// GulpWorkspace — where secrets live instead of the project file (CLAUDE.md "No secrets in the
+// GulpWorkspace — where secrets live instead of the project file (AGENTS.md "No secrets in the
 // repo"). A `.gulp` project is a file people share, attach to tickets and commit; signing keys,
 // identity credentials and OAST tokens must not travel with it. The project stores a reference; the
 // material goes here: the macOS Keychain for the app, a directory of mode-0600 files elsewhere

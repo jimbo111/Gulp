@@ -27,7 +27,7 @@ struct StoredFindings: Codable {
 
 extension ProjectSession {
     /// Start an attack (FUZ-004). Every request is scope-checked unless `allowOutOfScope` (the explicit
-    /// per-action override, CLAUDE.md §4); out-of-scope requests come back as rows with error
+    /// per-action override, AGENTS.md §4); out-of-scope requests come back as rows with error
     /// `out_of_scope` and are not sent.
     public func startAttack(_ config: FuzzAttackConfig, allowOutOfScope: Bool = false) async throws -> FuzzRun
     {

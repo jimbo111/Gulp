@@ -401,7 +401,7 @@ struct ActiveScanTests {
             decoding: jsonPoint.build(json, payload: #"a"b\c"#).bytes.rawBytes, as: UTF8.self)
         #expect(jsonText.hasSuffix(#"{"q":"a\"b\\c"}"#), "JSON strings stay valid")
 
-        // Raw bytes elsewhere are untouched (CLAUDE.md: raw bytes are the truth).
+        // Raw bytes elsewhere are untouched (AGENTS.md: raw bytes are the truth).
         let odd = RawRequest(
             Bytes(Array("GET /a?x=1 HTTP/1.1\r\nHost: app.test\r\nX-Odd:  spaced \r\n\r\n".utf8)))
         let oddPoint = try #require(InsertionPoints.derive(odd).first { $0.name == "x" })
@@ -559,7 +559,7 @@ struct ActiveScanTests {
         #expect(findings.filter { $0.typeID == "active.ssti" }.count == 1)
     }
 
-    @Test("SCN-012 / CLAUDE.md scope safety: out-of-scope requests are never sent")
+    @Test("SCN-012 / AGENTS.md scope safety: out-of-scope requests are never sent")
     func test_SCN012_outOfScopeSkipped() async {
         let sent = SentPaths()
         let (findings, summary) = await scan(

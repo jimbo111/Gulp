@@ -116,7 +116,7 @@ public struct SSOProtectionFinding: Sendable, Equatable {
 
 /// The OAuth/OIDC analysis core (F25 SSO-001/003/004).
 public enum SSOWorkbench {
-    // MARK: Query parsing (own parser — no URL normalization, CLAUDE.md "raw bytes are the truth")
+    // MARK: Query parsing (own parser — no URL normalization, AGENTS.md "raw bytes are the truth")
 
     /// Parse a URL's query string into ordered key/value pairs (percent-decoded). A value-less key maps
     /// to the empty string. `url` may be a full URL or a bare `a=b&c=d` query.

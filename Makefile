@@ -44,7 +44,7 @@ perf: ## Performance budget tests (doc 06 §5; slow, excluded from `test`)
 lint: rules ## Check formatting (strict) + the rules/architecture gates
 	swift format lint --strict --recursive App Packages Beacon UITests
 
-rules: ## CLAUDE.md hard rules + architecture invariants as checks (grep only; works on Linux)
+rules: ## AGENTS.md hard rules + architecture invariants as checks (grep only; works on Linux)
 	Scripts/arch-check.sh
 	Scripts/rules-check.sh
 

@@ -1,5 +1,5 @@
 // GulpFeatures — the HTTP History view model (F05 HIS-001…HIS-006). Main-actor UI state over the
-// async store: the main thread never waits on the database (CLAUDE.md §4); rows arrive by page, and
+// async store: the main thread never waits on the database (AGENTS.md §4); rows arrive by page, and
 // live traffic is coalesced into at most one refresh per 100 ms.
 
 #if canImport(AppKit)

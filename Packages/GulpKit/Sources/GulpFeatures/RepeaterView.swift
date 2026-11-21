@@ -97,7 +97,7 @@ public final class RepeaterModel {
     @ObservationIgnored private var listener: Task<Void, Never>?
     @ObservationIgnored private var webSocketWatch: Task<Void, Never>?
     /// The streamed response shown live: its tab, the bytes not yet published, and the 100 ms tick
-    /// that publishes them (CLAUDE.md §4).
+    /// that publishes them (AGENTS.md §4).
     @ObservationIgnored private var liveTab: Int64?
     @ObservationIgnored private var livePending: [UInt8] = []
     @ObservationIgnored private var livePendingTotal = 0

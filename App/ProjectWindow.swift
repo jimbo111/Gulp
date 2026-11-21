@@ -305,7 +305,7 @@ struct ProjectWindow: View {
                         if url.pathExtension == "gulp" {
                             report = try await session.importExport.importProject(at: url)
                         } else {
-                            // Read off the main thread: traffic files can be large (CLAUDE.md §4).
+                            // Read off the main thread: traffic files can be large (AGENTS.md §4).
                             let data = try await Task.detached { try Data(contentsOf: url) }.value
                             report = try await session.importExport.importFile(data)
                         }

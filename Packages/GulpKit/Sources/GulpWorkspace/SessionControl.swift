@@ -31,7 +31,7 @@ extension ProjectSession {
 
     /// Store and apply a new session configuration. Its secrets (signing keys, identity credentials,
     /// macro steps) go to the environment's secret store and the project keeps only references
-    /// (CLAUDE.md "No secrets in the repo"); secrets the new configuration no longer uses are deleted
+    /// (AGENTS.md "No secrets in the repo"); secrets the new configuration no longer uses are deleted
     /// from the store.
     public func setSessionSettings(_ value: SessionSettings) async throws {
         let secrets = environment.secretStore

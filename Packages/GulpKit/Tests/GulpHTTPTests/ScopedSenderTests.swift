@@ -1,4 +1,4 @@
-// ScopedSender (CLAUDE.md "Scope safety"): an out-of-scope send throws before anything is sent.
+// ScopedSender (AGENTS.md "Scope safety"): an out-of-scope send throws before anything is sent.
 
 import GulpCore
 import Testing

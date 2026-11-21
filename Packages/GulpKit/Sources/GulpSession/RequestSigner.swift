@@ -23,7 +23,7 @@ import GulpCore
 import GulpHTTP
 
 /// Private key material for a signing scheme. Projects persist only `.stored(ref:)`; the material
-/// itself lives in the workspace's SecretStore (CLAUDE.md "No secrets in the repo").
+/// itself lives in the workspace's SecretStore (AGENTS.md "No secrets in the repo").
 public enum SigningSecret: Sendable, Hashable, Codable {
     /// An EC private key (raw bytes) on a curve — DPoP and RFC 9421 (ES256/384/512).
     case ec(curve: ECCurve, privateRaw: [UInt8])

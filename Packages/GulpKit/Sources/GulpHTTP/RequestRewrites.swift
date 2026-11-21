@@ -1,5 +1,5 @@
 // GulpHTTP — the only byte rewrites the engine performs, each strictly opt-in via `SendOptions`
-// (CLAUDE.md §4: send exactly the bytes the user wrote unless a documented option says otherwise).
+// (AGENTS.md §4: send exactly the bytes the user wrote unless a documented option says otherwise).
 
 import GulpCore
 

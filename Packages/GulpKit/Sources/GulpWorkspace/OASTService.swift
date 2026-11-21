@@ -4,7 +4,7 @@
 // the `beacon()` Transform Tag, watches recorded requests for its payloads (linking each to the
 // exchange that carried it, so Fuzzer, Repeater and Scanner traffic are all correlated), polls in
 // the background, and stores interactions. The server token lives in the environment's secret
-// store (the Keychain on macOS, a 0600 file elsewhere), never in the project (CLAUDE.md §4).
+// store (the Keychain on macOS, a 0600 file elsewhere), never in the project (AGENTS.md §4).
 
 import Foundation
 import GulpCodec

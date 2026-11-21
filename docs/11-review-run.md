@@ -9,7 +9,7 @@ This document is the **executed** counterpart to the written reviews in `08-arch
 test and acceptance suites**, with counts and timestamps, so the "review with test cases" is a
 reproducible artifact rather than a claim.
 
-Re-running it is one command set (see `CLAUDE.md` §3 and `docs/06-testing-strategy.md`):
+Re-running it is one command set (see `AGENTS.md` §3 and `docs/06-testing-strategy.md`):
 
 ```bash
 swift test --package-path Packages/GulpKit      # unit/integration suites (Linux + macOS)

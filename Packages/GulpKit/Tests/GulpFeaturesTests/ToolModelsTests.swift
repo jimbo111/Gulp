@@ -25,7 +25,7 @@ struct ToolModelsTests {
         try await session.close()
     }
 
-    /// CLAUDE.md §4 / doc 01 §5.4: a model's session subscription ends when the window closes;
+    /// AGENTS.md §4 / doc 01 §5.4: a model's session subscription ends when the window closes;
     /// "Send to Repeater" no longer reaches a stopped model.
     @Test func test_UI_stopEndsSessionSubscriptions() async throws {
         let session = try await openIsolatedSession()

@@ -73,7 +73,7 @@ struct DiscoveryTests {
         #expect(skipped == 2)  // /private and /private/
     }
 
-    @Test("ETL-003 / CLAUDE.md scope safety: the soft-404 fingerprint probes are scope-checked too")
+    @Test("ETL-003 / AGENTS.md scope safety: the soft-404 fingerprint probes are scope-checked too")
     func test_ETL003_fingerprintScope() async throws {
         let engine = FakeEngine { _, _ in (404, "not found") }
         let config = DiscoveryConfig(

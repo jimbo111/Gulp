@@ -1,6 +1,6 @@
 // GulpFuzzer — running an attack (F07 FUZ-004, FUZ-014, FUZ-030, FUZ-031): N lanes pull requests from
 // the plan, honour a requests-per-second cap and an optional delay (fixed + random jitter), check
-// scope before every send (ScopeGuard, CLAUDE.md §4), retry failures, stop on a grep match or after
+// scope before every send (ScopeGuard, AGENTS.md §4), retry failures, stop on a grep match or after
 // N errors, and can be paused, resumed and cancelled. Results stream out as they arrive. Requests go
 // through the shared engine (so the global throttle and the recorder apply) as source `fuzzer`.
 

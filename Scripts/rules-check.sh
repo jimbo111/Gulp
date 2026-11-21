@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CLAUDE.md hard rules, enforced as an executable check (the companion to arch-check.sh, which covers
+# AGENTS.md hard rules, enforced as an executable check (the companion to arch-check.sh, which covers
 # the dependency direction). Each rule below is a prose rule that was broken at least once; the check
 # turns "remember to" into "the gate fails". Pure grep, no build, so it runs everywhere in seconds.
 #
@@ -12,14 +12,14 @@ TESTS=Packages/GulpKit/Tests
 fail=0
 problem() { echo "RULE VIOLATION: $*" >&2; fail=1; }
 
-# 1. Scope safety (CLAUDE.md §4): active CLI tools send through ScopedSender, which refuses
+# 1. Scope safety (AGENTS.md §4): active CLI tools send through ScopedSender, which refuses
 #    out-of-scope targets before sending. In gulp-cli, constructing an NIOHTTPEngine (any arguments)
 #    or sending on a session's unguarded engine (`….http.send(`) bypasses that, unless it is a manual
 #    send the operator typed (Repeater-like), marked `// rules-check: manual send` on the line above.
 while IFS=: read -r file line _; do
   [ -z "$file" ] && continue
   if ! sed -n "$((line - 1))p" "$file" | grep -q "rules-check: manual send"; then
-    problem "$file:$line sends without ScopeGuard — use ScopedSender(scope: .pinned(destination)) (CLAUDE.md scope safety)"
+    problem "$file:$line sends without ScopeGuard — use ScopedSender(scope: .pinned(destination)) (AGENTS.md scope safety)"
   fi
 done < <(grep -rnE "NIOHTTPEngine\(|\.http\.send\(" "$SRC/gulp-cli" || true)
 
@@ -51,17 +51,17 @@ while IFS= read -r hit; do
   problem "$hit — use require(name) instead of force-unwrapping named(name)"
 done < <(grep -rnE "(IssueDefinitions|Transforms)\.named\([^)]*\)!" "$SRC" --include='*.swift' || true)
 
-# 5. CLAUDE.md §4: no `@unchecked Sendable` without a comment that justifies it (on the line or within
+# 5. AGENTS.md §4: no `@unchecked Sendable` without a comment that justifies it (on the line or within
 #    the three lines above).
 while IFS=: read -r file line _; do
   [ -z "$file" ] && continue
   start=$((line > 3 ? line - 3 : 1))
   if ! sed -n "${start},${line}p" "$file" | grep -q "//"; then
-    problem "$file:$line uses @unchecked Sendable without a justifying comment (CLAUDE.md §4)"
+    problem "$file:$line uses @unchecked Sendable without a justifying comment (AGENTS.md §4)"
   fi
 done < <(grep -rnE "@unchecked Sendable" "$SRC" --include='*.swift' || true)
 
-# 6. No secrets in the repo (CLAUDE.md §4): no private-key blocks in sources, scripts or config.
+# 6. No secrets in the repo (AGENTS.md §4): no private-key blocks in sources, scripts or config.
 #    (VulnLab's own throwaway lab keys are generated at runtime, never committed.)
 while IFS= read -r hit; do
   [ -z "$hit" ] && continue
@@ -70,7 +70,7 @@ done < <(grep -rlE -- "-----BEGIN ([A-Z]+ )?PRIVATE KEY-----" Packages App Beaco
   | grep -vE "/\.build/" || true)
 
 if [ "$fail" -ne 0 ]; then
-  echo "rules-check: FAILED (see CLAUDE.md §4 and the comment above each rule in Scripts/rules-check.sh)" >&2
+  echo "rules-check: FAILED (see AGENTS.md §4 and the comment above each rule in Scripts/rules-check.sh)" >&2
   exit 1
 fi
 echo "rules-check: OK (scope-safe CLI sends, seeded test randomness, no silent store writes, checked registry lookups, justified @unchecked Sendable, no committed private keys)"

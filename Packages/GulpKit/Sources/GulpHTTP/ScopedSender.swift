@@ -1,4 +1,4 @@
-// GulpHTTP — the only way an *active* tool sends (CLAUDE.md "Scope safety"). A `ScopedSender` is built
+// GulpHTTP — the only way an *active* tool sends (AGENTS.md "Scope safety"). A `ScopedSender` is built
 // with an explicit `SendScope`, so the scope decision is made once, up front, and every send checks it:
 // an out-of-scope target throws GulpCore's `OutOfScope` (the same error ScopeGuard raises) before a
 // byte leaves the machine. Active CLI probes use `.pinned` (the operator's `--target` is the
@@ -7,7 +7,7 @@
 
 import GulpCore
 
-/// What a `ScopedSender` may send to (CLAUDE.md "Scope safety").
+/// What a `ScopedSender` may send to (AGENTS.md "Scope safety").
 public enum SendScope: Sendable {
     /// Only the one target the operator named (scheme, host and port must match exactly).
     case pinned(HTTPTarget)
@@ -17,7 +17,7 @@ public enum SendScope: Sendable {
     case overridden(reason: String)
 }
 
-/// An HTTP engine that refuses out-of-scope sends (CLAUDE.md "Scope safety").
+/// An HTTP engine that refuses out-of-scope sends (AGENTS.md "Scope safety").
 public struct ScopedSender: Sendable {
     /// The scope every send is checked against.
     public let scope: SendScope

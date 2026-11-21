@@ -1,6 +1,6 @@
 // GulpCore — Bytes: the canonical byte buffer for raw HTTP messages (doc 04 §2).
 //
-// Raw bytes are the source of truth (CLAUDE.md §4): Bytes stores exactly what was sent/received and
+// Raw bytes are the source of truth (AGENTS.md §4): Bytes stores exactly what was sent/received and
 // never normalizes. It is a thin, value-semantic wrapper over [UInt8] with cheap slicing.
 
 /// An immutable-by-default buffer of bytes with random access and cheap sub-ranges.

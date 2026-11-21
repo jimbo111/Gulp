@@ -26,7 +26,7 @@ Minimum OS: **macOS 14 Sonoma**. Development toolchain: the latest stable Xcode 
 
 ```
 Gulp/
-├── CLAUDE.md
+├── AGENTS.md
 ├── README.md
 ├── LICENSE                          # MIT (docs/07 decision #2)
 ├── Makefile

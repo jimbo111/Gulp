@@ -17,23 +17,25 @@ Replace this block when the state changes; do not append to it.
   `EVP_PKEY` when RSA public-key DER parsing fails, which crashed `GulpCodecTests` on macOS), and
   4.5.x needs Swift tools 6.1. Linux reference image: `swift:6.1-noble`. macOS: Xcode 27.2 / Swift 6.4.
   `make lint` uses the toolchain's `swift format`; no separate swift-format install is needed.
-- **Verified on macOS (2026-11-20, `5542a1b`).** `swift test` passes all 563 GulpKit tests;
-  this was the first compile of the macOS-only code in `GulpUI`, `GulpFeatures`, `GulpBrowser` and
-  `GulpScript` and of the Keychain stores. `Gulp.app` builds with `xcodebuild` (BUILD SUCCEEDED). **Pending:**
-  the `GulpAppUITests` result and a manual smoke test of each tool screen.
-- **Verified on Linux (Swift 6.0, before the swift-crypto bump).** 563 tests, `swift format lint
-  --strict`, both rule scripts. The 41 `Scripts/*-dod.sh` passed as a set before `40c513b`; after
-  `40c513b` only m1, m4b, m7, m8, m10b, m11b, m12a and m12b were re-run. None has been re-run on
-  Swift 6.1 / swift-crypto 4.5.1 yet.
+- **Verified on macOS (2026-11-20, Xcode 27.2 / Swift 6.4).** `swift test`: 640 GulpKit tests pass.
+  `make lint` (strict format + both rule scripts) is clean. All 41 `Scripts/*-dod.sh` pass against
+  VulnLab. `Gulp.app` builds and `xcodebuild test` passes its 4 UI tests: launch, Proxy history,
+  `test_UI_everyToolOpens` (every sidebar tool opens) and `test_REP002_repeaterSendsToVulnLab`. By
+  hand: the app's proxy recorded HTTP GET/POST and HTTPS (through its CA) to VulnLab.
+- **Not verified on Linux since the swift-crypto bump** (no Linux machine in this session); the
+  last Linux run was Swift 6.0 at `40c513b`.
+- **Reviewed 2026-11-20.** Five role-specific reviews (services, engines, orchestration, UI,
+  docs) found about 70 defects; the confirmed ones are fixed with tests that failed first (log
+  entry below). Identity credentials and macro steps now live in the secret store, not the `.gulp`
+  file.
 - **Next, in order.**
-  1. Record the UI test result and smoke-test every tool screen on macOS; fill the "macOS UI
-     verified" column below.
-  2. Re-run all 41 DoD scripts on the new toolchain.
-  3. Identity credentials (`Identity.headers` / `variables`, e.g. a bearer token or a login
-     macro's password) are still stored in the `.gulp` file; move them behind
-     `environment.secretStore` like the signing keys (`GulpWorkspace/SessionSecrets.swift`).
+  1. A Linux run of `make test-core` + the DoD scripts on `swift:6.1-noble`.
+  2. The daily-driver beta gate: signed build, `Scripts/beta-dod.sh`, real use of every screen.
+  3. UI gaps found by the review and left open: an identities editor (the Authz Matrix needs it),
+     the Assistant chat (the engine and `APIGate` exist; the view only previews redaction),
+     Extensions manager, DOM Probe run from the app.
   4. The "partial" rows of the checklist and the carry-overs below.
-- **Conventions enforced by `Scripts/rules-check.sh`** (CLAUDE.md §4): active CLI probes send
+- **Conventions enforced by `Scripts/rules-check.sh`** (AGENTS.md §4): active CLI probes send
   through `ScopedSender`; GulpWorkspace store writes go through `persisting(…)`; registry lookups use
   `require` (`IssueDefinitions`, `Transforms`), never `named(…)!`; test randomness uses
   `SplitMix64(seed:)`; VulnLab twins use `SafeTwin`; secrets go to `environment.secretStore`.
@@ -43,49 +45,50 @@ Replace this block when the state changes; do not append to it.
 
 ## Milestone checklist
 
-"Engine/CLI + DoD (Linux)": **done** = the milestone's engine and `gulp-cli` surface exist and its
-DoD script passes on Linux; **partial** lists what is missing; **not started** = no code. Evidence
-names the main types and scripts. "macOS UI verified" is filled in after the macOS smoke tests.
+"Engine/CLI + DoD": **done** = the milestone's engine and `gulp-cli` surface exist and its DoD
+script passes (all 41 pass on macOS as of 2026-11-20); **partial** lists what is missing; **not
+started** = no code. "macOS UI verified" says what was actually exercised in the app: *opens* means
+`test_UI_everyToolOpens` opened the screen, nothing more.
 
-| Milestone | Engine/CLI + DoD (Linux) | macOS UI verified |
+| Milestone | Engine/CLI + DoD | macOS UI verified |
 |---|---|---|
-| M0 Scaffolding | **done** (macOS CI green at `6e17d38`) | pending |
-| M1 Core model + raw HTTP/1 engine | **done** (`m1-dod.sh`; macOS CI green at `cd84c2a`) | pending |
-| M2 Plain-HTTP proxy, storage, history UI | **done** (`m2-dod.sh`; `1acf39c`) | pending |
-| M3a TLS interception + CA | **done** (`m3a-dod.sh`; `054b24a`) | pending |
-| M3b HTTP/2 | **done** (`m3b-dod.sh`; `11cd7d5`) | pending |
-| M4a Message editor, Intercept, Match & Replace, Copy as | **done** (`m4a-dod.sh`; `dee2424`) | pending |
-| M4b Streaming, WebSockets, Gulp Browser launch | **done** (`m4b-dod.sh`, `m4b-browser.sh`; `0b0c6f7`) | pending |
-| M5 Repeater + advanced engine | **done** — `GulpRepeater`, `GroupSend`; `gulp-cli repeater/group/paste`; `m5-dod.sh` | pending |
-| M6a Site map + scope + ScopeGuard | **done** — `SiteMapService`, `Scope`, `ScopeRows`; `gulp-cli scope/target`; `m6a-dod.sh` | pending |
-| M6b Import/export, API import, MCP read surface | **done** — `ImportExportService`, `HAR`, `OpenAPIImport`, `MCPServer`/`MCPStdio`; `m6b-dod.sh` | pending |
-| M7 Decoder, Comparer, JWT Workbench | **done** — `Transforms`, `SmartDecode`, `JWT`, `GulpDiff`; `m7-dod.sh` | pending |
-| M8 Fuzzer + content discovery | **done** except Turbo mode (FUZ-032, P1) — `FuzzAttack`, `ContentDiscovery`; `m8-dod.sh` | pending |
-| M9 Logger, GulpQL, search, Notebook, coverage | **done** — `GulpQuery`, `SearchRows`, `NotebookService`, `CoverageService`; `m9-dod.sh` | pending |
-| Daily-driver beta (gate) | **not started** — no `Scripts/beta-dod.sh`, no signed build; the data-loss carry-overs (M2) are open | pending |
-| M10a Passive scanner + issue model | **done** — `PassiveChecks`, `IssueService`, `IssueExport`; `m10a-dod.sh` | pending |
-| M10b gRPC & protobuf | **done** — `Protobuf`, `RPC`, `GRPCReflection`, `RPCService`; `m10b-dod.sh` | pending |
-| M11a Static crawler, Beacon client, limiter, panic stop | **done** — `GulpCrawler`, `Interactsh`, `ResourcePool`, `GovernorService`; `m11a-dod.sh` | pending |
-| M11b Active scan engine + P0 checks | **done** — `ActiveEngine`, `ActiveChecks`, `InsertionPoints`; `m11b-dod.sh` | pending |
-| M11c Full check catalog + crawl-and-audit | **partial** — done: crawl-audit, `scan api`, gRPC insertion points, retest, `ExtendedChecks` (CORS, host header, mass assignment, prototype pollution, upload, NoSQL/LDAP/XPath, cache); `m11c-dod.sh`, `m11c-checks-dod.sh`. Missing: SCN-071 CSPT, SCN-022 nested decoding, HPP as a scanner family (only `gulp-cli pollute`), deserialization signpost, CSS-context XSS; SCN-074 covers alg:none + weak secret only (no RS→HS, no `kid`) | pending |
-| M12a Sessions, macros, request signing | **done** (P0) — `GulpSession`, `SessionHooks`, `SessionSecrets`; `m12a-dod.sh`. Missing: SES-003/014/015/040/041, a Sessions view in `GulpFeatures` | pending |
-| M12b Authz Matrix | **done** (ADV-001…003) — `AuthzMatrix`, `AuthzMatrixService`; `m12b-dod.sh`. ADV-004/005/006 not started | pending |
-| M13a CDP crawl, recorded logins, passkeys | **partial** — done: `CDPClient`, `BrowserAutomation`, `DOMProbe`. Not started: CRL-030…036, SES-030, BRW-016/SES-032 | pending |
-| M13b DOM Probe + GraphQL Workbench | **done** — `m13b-graphql-dod.sh`; DOM Probe via `m13a-dom-probe-dod.sh` (Node + Playwright, skips when absent; not driven from Swift CDP end to end) | pending |
-| M15 Extensions, scripting, Check Recipes | **partial** — done: `ExtensionHost`/`ProcessTransport`, `GulpScript/JSExtensionHost`, Check Recipes (JSON, passive). Missing: EXT-010 Snippets, EXT-011 `SDK/js/gulp.d.ts`, EXT-012 Python SDK, EXT-013, EXT-005 manager UI (`ExtensionsView` only audits a manifest), YAML and active recipes | pending |
-| M16a Reporting | **partial** — `GulpReport` HTML + Markdown, `gulp-cli report`, `report-dod.sh`. Missing: ETL-007 CSRF PoC, NB-007, PDF, report view | pending |
-| M16b Project polish, throughput panel, coverage view, timeline | **not started** (only data for JRN-002: `CoverageService` untested list, `gulp-cli coverage`) | pending |
-| M17 CLI, REST API, full MCP, scheduler | **partial** — `gulp-cli` has ~50 subcommands; MCP has 4 tools over stdio. Missing: REST API (AUT-010…015), scheduler (ETL-006), `scan --url … --fail-on` (AUT-002), remaining MCP tools | pending |
-| M18 Gulp Assistant | **partial** — `LLMProvider`, `AnthropicProvider`, `Redactor`, `Agent`. Missing: AI-002/005/006/008 and live wiring | pending |
-| M19a Param Discovery, secrets, JS Recon core | **partial** — done: `ParamMiner` (ADV-020), `ParamPollution` (ADV-022), `recon.secret` (ADV-060), `JSRecon` (JSR-003/006/008/009); `paramdisc-dod.sh`, `pollute-dod.sh`, `recon-dod.sh`, `jsrecon-dod.sh`. Missing: JSR-001/002/005, ETL-004, secret-scanner view; JSR-004 only via `recon.endpoint` | pending |
-| M19b Smuggling Probe | **partial** — CL.TE/TE.CL probes (ADV-030/031) and the confirmation workbench (ADV-032): `SmugglingProbe`; `smuggle-dod.sh`, `smuggle-confirm-dod.sh`. Missing: TE.TE and HTTP/2-downgrade vectors (ADV-030, P0), ADV-033. Deviation: VulnLab emulates on `/smuggle` (:8088), not a :8090 listener | pending |
-| M20 macOS polish, packaging, release | **not started** — only `Scripts/release.sh` + `ExportOptions.plist`, never run | pending |
-| M21 SSO Workbench | **partial** — SSO-001…005 (`SSOWorkbench`, `SAMLWorkbench`, `gulp-cli sso`); `sso-dod.sh`. Missing: live-SP SAML DoD (acceptance 3), SSO-006…010, UI | pending |
-| M22 WebSocket fuzzing and checks | **done** (WSX-002…008; WSX-001 cut) — `cswsh/ws-authz/ws-fuzz/ws-oast/ws-script` DoDs. Missing: WS workbench UI | pending |
-| M23 JS Recon Studio (rest) | **partial** — JSR-006/008/009 done (`JSRecon`, `jsrecon-diff-dod.sh`). JSR-007 not linked to `VulnLibraryCheck` | pending |
-| M24 Cache poisoning & deception | **partial** — WCP-001…004 (`CachePoisoningCheck`, `CacheDeceptionCheck`); `cache-dod.sh`. Missing: WCP-005…008 | pending |
-| M25 Issue retest | **done** — `gulp-cli retest`, `retest-dod.sh`. Deviation: no `issue_proofs`/`retest_runs` tables | pending |
-| M26 LLM/AI-feature testing | **partial** — LLM-001/002/009 (`LLMInjection`, `gulp-cli llm`); `llm-dod.sh`. Missing P0: LLM-003, LLM-004; P1: LLM-005…007; UI | pending |
+| M0 Scaffolding | **done** (macOS CI green at `6e17d38`) | app launches, sidebar (UI test) |
+| M1 Core model + raw HTTP/1 engine | **done** (`m1-dod.sh`; macOS CI green at `cd84c2a`) | n/a (engine) |
+| M2 Plain-HTTP proxy, storage, history UI | **done** (`m2-dod.sh`; `1acf39c`) | proxy records to the store (by hand); History opens (UI test) |
+| M3a TLS interception + CA | **done** (`m3a-dod.sh`; `054b24a`) | HTTPS through the app proxy and its CA (by hand); TLS settings open |
+| M3b HTTP/2 | **done** (`m3b-dod.sh`; `11cd7d5`) | n/a (engine) |
+| M4a Message editor, Intercept, Match & Replace, Copy as | **done** (`m4a-dod.sh`; `dee2424`) | Intercept, Match & Replace open |
+| M4b Streaming, WebSockets, Gulp Browser launch | **done** (`m4b-dod.sh`, `m4b-browser.sh`; `0b0c6f7`) | WebSockets history opens; Gulp Browser launch not exercised |
+| M5 Repeater + advanced engine | **done** — `GulpRepeater`, `GroupSend`; `gulp-cli repeater/group/paste`; `m5-dod.sh` | Repeater sends to VulnLab and shows 200 (UI test) |
+| M6a Site map + scope + ScopeGuard | **done** — `SiteMapService`, `Scope`, `ScopeRows`; `gulp-cli scope/target`; `m6a-dod.sh` | Target opens |
+| M6b Import/export, API import, MCP read surface | **done** — `ImportExportService`, `HAR`, `OpenAPIImport`, `MCPServer`/`MCPStdio`; `m6b-dod.sh` | import/export menus not exercised |
+| M7 Decoder, Comparer, JWT Workbench | **done** — `Transforms`, `SmartDecode`, `JWT`, `GulpDiff`; `m7-dod.sh` | Decoder, Comparer, JWT Workbench open |
+| M8 Fuzzer + content discovery | **done** except Turbo mode (FUZ-032, P1) — `FuzzAttack`, `ContentDiscovery`; `m8-dod.sh` | Fuzzer opens |
+| M9 Logger, GulpQL, search, Notebook, coverage | **done** — `GulpQuery`, `SearchRows`, `NotebookService`, `CoverageService`; `m9-dod.sh` | Logger, Notebook open |
+| Daily-driver beta (gate) | **not started** — no `Scripts/beta-dod.sh`, no signed build; the data-loss carry-overs (M2) are open | not started |
+| M10a Passive scanner + issue model | **done** — `PassiveChecks`, `IssueService`, `IssueExport`; `m10a-dod.sh` | Dashboard (issues) opens |
+| M10b gRPC & protobuf | **done** — `Protobuf`, `RPC`, `GRPCReflection`, `RPCService`; `m10b-dod.sh` | gRPC schemas sheet not exercised |
+| M11a Static crawler, Beacon client, limiter, panic stop | **done** — `GulpCrawler`, `Interactsh`, `ResourcePool`, `GovernorService`; `m11a-dod.sh` | Scanner (Crawl), Beacon open |
+| M11b Active scan engine + P0 checks | **done** — `ActiveEngine`, `ActiveChecks`, `InsertionPoints`; `m11b-dod.sh` | Scanner (Audit) opens |
+| M11c Full check catalog + crawl-and-audit | **partial** — done: crawl-audit, `scan api`, gRPC insertion points, retest, `ExtendedChecks` (CORS, host header, mass assignment, prototype pollution, upload, NoSQL/LDAP/XPath, cache); `m11c-dod.sh`, `m11c-checks-dod.sh`. Missing: SCN-071 CSPT, SCN-022 nested decoding, HPP as a scanner family (only `gulp-cli pollute`), deserialization signpost, CSS-context XSS; SCN-074 covers alg:none + weak secret only (no RS→HS, no `kid`) | Scanner opens; opt-in cache family toggle (unit test) |
+| M12a Sessions, macros, request signing | **done** (P0) — `GulpSession`, `SessionHooks`, `SessionSecrets`; `m12a-dod.sh`. Missing: SES-003/014/015/040/041, a Sessions view in `GulpFeatures` | no Sessions view yet |
+| M12b Authz Matrix | **done** (ADV-001…003) — `AuthzMatrix`, `AuthzMatrixService`; `m12b-dod.sh`. ADV-004/005/006 not started | opens; unusable without an identities editor |
+| M13a CDP crawl, recorded logins, passkeys | **partial** — done: `CDPClient`, `BrowserAutomation`, `DOMProbe`. Not started: CRL-030…036, SES-030, BRW-016/SES-032 | n/a (engine only) |
+| M13b DOM Probe + GraphQL Workbench | **done** — `m13b-graphql-dod.sh`; DOM Probe via `m13a-dom-probe-dod.sh` (Node + Playwright, skips when absent; not driven from Swift CDP end to end) | GraphQL and DOM Probe open; DOM Probe does not run from the app |
+| M15 Extensions, scripting, Check Recipes | **partial** — done: `ExtensionHost`/`ProcessTransport`, `GulpScript/JSExtensionHost`, Check Recipes (JSON, passive). Missing: EXT-010 Snippets, EXT-011 `SDK/js/gulp.d.ts`, EXT-012 Python SDK, EXT-013, EXT-005 manager UI (`ExtensionsView` only audits a manifest), YAML and active recipes | Extensions opens (manifest audit only) |
+| M16a Reporting | **partial** — `GulpReport` HTML + Markdown, `gulp-cli report`, `report-dod.sh`. Missing: ETL-007 CSRF PoC, NB-007, PDF, report view | no report view |
+| M16b Project polish, throughput panel, coverage view, timeline | **not started** (only data for JRN-002: `CoverageService` untested list, `gulp-cli coverage`) | not started |
+| M17 CLI, REST API, full MCP, scheduler | **partial** — `gulp-cli` has ~50 subcommands; MCP has 4 tools over stdio. Missing: REST API (AUT-010…015), scheduler (ETL-006), `scan --url … --fail-on` (AUT-002), remaining MCP tools | n/a (CLI and MCP) |
+| M18 Gulp Assistant | **partial** — `LLMProvider`, `AnthropicProvider`, `Redactor`, `Agent`. Missing: AI-002/005/006/008 and live wiring | Assistant opens (redaction preview only) |
+| M19a Param Discovery, secrets, JS Recon core | **partial** — done: `ParamMiner` (ADV-020), `ParamPollution` (ADV-022), `recon.secret` (ADV-060), `JSRecon` (JSR-003/006/008/009); `paramdisc-dod.sh`, `pollute-dod.sh`, `recon-dod.sh`, `jsrecon-dod.sh`. Missing: JSR-001/002/005, ETL-004, secret-scanner view; JSR-004 only via `recon.endpoint` | JS Recon opens |
+| M19b Smuggling Probe | **partial** — CL.TE/TE.CL probes (ADV-030/031) and the confirmation workbench (ADV-032): `SmugglingProbe`; `smuggle-dod.sh`, `smuggle-confirm-dod.sh`. Missing: TE.TE and HTTP/2-downgrade vectors (ADV-030, P0), ADV-033. Deviation: VulnLab emulates on `/smuggle` (:8088), not a :8090 listener | n/a (CLI) |
+| M20 macOS polish, packaging, release | **not started** — only `Scripts/release.sh` + `ExportOptions.plist`, never run | not started |
+| M21 SSO Workbench | **partial** — SSO-001…005 (`SSOWorkbench`, `SAMLWorkbench`, `gulp-cli sso`); `sso-dod.sh`. Missing: live-SP SAML DoD (acceptance 3), SSO-006…010, UI | n/a (CLI) |
+| M22 WebSocket fuzzing and checks | **done** (WSX-002…008; WSX-001 cut) — `cswsh/ws-authz/ws-fuzz/ws-oast/ws-script` DoDs. Missing: WS workbench UI | n/a (CLI) |
+| M23 JS Recon Studio (rest) | **partial** — JSR-006/008/009 done (`JSRecon`, `jsrecon-diff-dod.sh`). JSR-007 not linked to `VulnLibraryCheck` | JS Recon opens |
+| M24 Cache poisoning & deception | **partial** — WCP-001…004 (`CachePoisoningCheck`, `CacheDeceptionCheck`); `cache-dod.sh`. Missing: WCP-005…008 | n/a (scanner checks) |
+| M25 Issue retest | **done** — `gulp-cli retest`, `retest-dod.sh`. Deviation: no `issue_proofs`/`retest_runs` tables | n/a (CLI) |
+| M26 LLM/AI-feature testing | **partial** — LLM-001/002/009 (`LLMInjection`, `gulp-cli llm`); `llm-dod.sh`. Missing P0: LLM-003, LLM-004; P1: LLM-005…007; UI | n/a (CLI) |
 
 M14 is retired. F11 Sequencer, listed in the post-1.0 backlog, is built anyway (`GulpSequencer`,
 `gulp-cli sequencer`, `sequencer-dod.sh`; doc 07, 2026-11-13). Still post-1.0 and unbuilt: the
@@ -149,6 +152,29 @@ milestone are listed there instead.
 Newest first. Dates up to `40c513b` were written by Linux sessions in UTC, so the 2026-11-20 macOS
 entry at the top is later than the 2026-11-21 entry below it. Within a day the order is approximate.
 
+- 2026-11-20 — **Layer reviews and root-cause fixes** (branch `macos-build`). Five reviewers with
+  separate roles (services, engines, orchestration, UI/app, docs) found ~70 defects; eight
+  implementers fixed the confirmed ones, each with a test that failed first, and the parent merged
+  and re-verified. Highlights: **scope safety** — the Repeater "don't ask again" host no longer
+  widens active tools, scope is checked per probe at send time (scanner, crawler, discovery
+  fingerprints, every redirect hop), GraphQL scan/introspection are gated (TGT-023); **one
+  `APIGate`** in GulpWorkspace for MCP and the assistant, audit failure fails the call (AUT-023,
+  rule 6); AI tool-use transcripts valid on round 2, redaction covers PEM bodies/JSON/JWTs in linear
+  time (AI-001/003); **HTTP**: one chunk walker, capped resumable header scan, redirect credentials
+  stay with their origin, no Content-Length beside Transfer-Encoding, user CONNECT, h2 GOAWAY,
+  IP-literal TLS validation, WS reassembly cap (also in the proxy relay); **CA/storage**: an
+  unreadable CA is never silently replaced, lock file never unlinked, streamed exchanges update in
+  place (annotations kept), `matches_scope` one source of truth; **proxy**: Match & Replace before
+  Intercept, held items dropped when the client leaves, pass-through backpressure; **scanner**:
+  wire-time timing with a median baseline, no user data in format strings, cache-poisoning opt-in
+  and cache-busted, JWT negative controls, stricter XSS/redirect proof, stored XSS behind the unsafe
+  gate; **lifecycle**: identity credentials and macro steps in the secret store, Save As and close
+  safe with work in flight, CLI commands merge settings; **UI**: one model per tool per session,
+  loops end with their window, 100 ms coalescing for streamed responses, off-main file I/O, `.gulp`
+  opens from Finder, ⌘Q closes sessions, UI tests isolated. Also: DoD scripts run on macOS (proxy
+  DoDs isolate `GULP_SUPPORT_DIR`; no `grep -P`/`mapfile`), VulnLab reports a busy port instead of
+  trapping, public doc comments for swift-format 6.4, `CLAUDE.md` renamed `AGENTS.md`. Deferred:
+  identities editor (U8), WS/site-map incremental reloads (U14), merging the three zlib inflaters.
 - 2026-11-20 — **macOS build** (`5542a1b`, Xcode 27.2 / Swift 6.4): the macOS-only code compiled
   for the first time. Three compile fixes: `ScopeRows` decodes GRDB rows inside the read (`Row` is
   not `Sendable`); `OASTHealth` gained a public initializer for `GulpFeatures`; `RepeaterView`'s
@@ -715,7 +741,7 @@ entry at the top is later than the 2026-11-21 entry below it. Within a day the o
     (HTTP-002).
   - `Tests/GulpCoreTests` — real round-trip, edit-splice, and framing tests, each named for its
     requirement ID (replaces the scaffolding marker test).
-  - **Doc reconciled to code** (CLAUDE.md §4): doc 04 §2 `ParsedRequest`/`ParsedResponse`/`HeaderField`
+  - **Doc reconciled to code** (AGENTS.md §4): doc 04 §2 `ParsedRequest`/`ParsedResponse`/`HeaderField`
     marked `Hashable` (their `RawRequest`/`RawResponse` already were, which requires it).
 - 2026-11-07 — **M0 scaffolding written** (unverified at the time: no toolchain in the authoring container):
   - `Packages/GulpKit/Package.swift` with all 26 module targets + 25 test targets, the full

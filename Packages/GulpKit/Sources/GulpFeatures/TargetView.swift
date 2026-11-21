@@ -90,7 +90,7 @@ public final class SiteMapModel {
         await refresh()
         for await _ in changes {
             await refresh()
-            // Coalesce traffic-driven updates: at most one redraw per 100 ms (CLAUDE.md §4).
+            // Coalesce traffic-driven updates: at most one redraw per 100 ms (AGENTS.md §4).
             try? await Task.sleep(for: .milliseconds(100))
         }
     }

@@ -1,4 +1,4 @@
-// Session secrets never reach the project file (CLAUDE.md "No secrets in the repo", F15): signing
+// Session secrets never reach the project file (AGENTS.md "No secrets in the repo", F15): signing
 // keys (SES-016…018), identity credentials (SES-002) and macro steps (SES-020) live in the
 // environment's secret store, the project stores references, and the session layer still uses the
 // real values. Projects never share a secret (PRJ-002 Save As, PRJ-005 "Use settings from…").
