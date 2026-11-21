@@ -1,7 +1,10 @@
 name: CI
 
+# GitHub Actions minutes are exhausted, so this workflow does not run at the moment; the local
+# `make test` + `make lint` is the gate (docs/PROGRESS.md, Current state). Keep it current anyway.
+
 on:
-  # Every branch push runs CI (the repo currently has no `main`; work happens on feature branches).
+  # Every push to any branch (main and short-lived work branches), PRs, and manual runs.
   push:
   pull_request:
   workflow_dispatch:
@@ -226,9 +229,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
+        # Needs Swift 6.1+ (swift-crypto >= 4.5.1 requires tools 6.1). Xcode 16.0 ships Swift 6.0, so
+        # move this to Xcode 16.3 or later before relying on the job. Locally verified: Xcode 27.2.
         run: sudo xcode-select -s /Applications/Xcode_16.app
       - name: Install tools
-        run: brew install xcodegen swift-format
+        # swift-format ships with the toolchain (`swift format`); only XcodeGen is needed.
+        run: brew install xcodegen
       - name: Cache SwiftPM
         uses: actions/cache@v4
         with:
