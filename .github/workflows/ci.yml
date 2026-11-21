@@ -1,7 +1,8 @@
 name: CI
 
-# GitHub Actions minutes are exhausted, so this workflow does not run at the moment; the local
-# `make test` + `make lint` is the gate (docs/PROGRESS.md, Current state). Keep it current anyway.
+# The gate for every push and pull request: Linux (Swift 6.1: core tests, rule gates, every DoD
+# script) and macOS (Xcode 16.4: lint, core tests, app build, UI tests). Run `make test` + `make lint`
+# locally first; CI is what the change has to pass.
 
 on:
   # Every push to any branch (main and short-lived work branches), PRs, and manual runs.

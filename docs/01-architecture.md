@@ -34,7 +34,7 @@ Gulp/
 ├── project.yml                      # XcodeGen spec: Gulp.app target + GulpAppUITests
 ├── .swift-format                    # formatting rules
 ├── ExportOptions.plist              # developer-id export options for Scripts/release.sh
-├── .github/workflows/ci.yml         # not running at the moment (Actions minutes exhausted)
+├── .github/workflows/ci.yml         # the gate: Linux + macOS jobs on every push
 ├── App/                             # macOS app target (thin: composition + windows)
 │   ├── GulpApp.swift                # @main, WindowGroup/DocumentGroup, commands
 │   ├── AppDelegate.swift

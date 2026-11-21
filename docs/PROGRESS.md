@@ -8,11 +8,12 @@ first) is history. Task-level detail and Definitions of Done live in `docs/03-ro
 
 Replace this block when the state changes; do not append to it.
 
-- **Branches.** `main` is the only long-lived branch. Work happens on short-lived branches (this one:
-  `macos-build`); rebase on `main` before handing back.
-- **Gate.** GitHub Actions cannot run (minutes exhausted). `.github/workflows/ci.yml` is kept
-  current but is not a gate. Before every commit run `make test` (macOS) or `make test-core`
-  (Linux), and `make lint` (it runs `make rules` = `Scripts/arch-check.sh` + `Scripts/rules-check.sh`).
+- **Repository.** Public at github.com/jimbo111/Gulp since 2026-11-21 (recreated fresh; history
+  rewritten so every commit is authored by the owner). `main` is the only long-lived branch; work
+  happens on short-lived branches, rebased on `main` before handing back.
+- **Gate.** CI runs on every push and is green on `main` (`5da698a`: Linux Swift 6.1 core tests, rule
+  gates and all DoD scripts; macOS Xcode 16.4 lint, core tests, app build, UI tests). Locally run
+  `make test` (macOS) or `make test-core` (Linux) and `make lint` (it runs `make rules`) first.
 - **Toolchain.** Swift 6.1 or later. `swift-crypto` must be ≥ 4.5.1 (older versions double-free an
   `EVP_PKEY` when RSA public-key DER parsing fails, which crashed `GulpCodecTests` on macOS), and
   4.5.x needs Swift tools 6.1. Linux reference image: `swift:6.1-noble`. macOS: Xcode 27.2 / Swift 6.4.
@@ -22,14 +23,17 @@ Replace this block when the state changes; do not append to it.
   VulnLab. `Gulp.app` builds and `xcodebuild test` passes its 4 UI tests: launch, Proxy history,
   `test_UI_everyToolOpens` (every sidebar tool opens) and `test_REP002_repeaterSendsToVulnLab`. By
   hand: the app's proxy recorded HTTP GET/POST and HTTPS (through its CA) to VulnLab.
-- **Not verified on Linux since the swift-crypto bump** (no Linux machine in this session); the
-  last Linux run was Swift 6.0 at `40c513b`.
+- **Verified on Linux (Swift 6.1)** by CI and a local `swift:6.1-noble` container: core tests, rule
+  gates and all 41 DoD scripts.
 - **Reviewed 2026-11-20.** Five role-specific reviews (services, engines, orchestration, UI,
   docs) found about 70 defects; the confirmed ones are fixed with tests that failed first (log
   entry below). Identity credentials and macro steps now live in the secret store, not the `.gulp`
   file.
 - **Next, in order.**
-  1. A Linux run of `make test-core` + the DoD scripts on `swift:6.1-noble`.
+  1. UI defects seen in real screenshots (`Scripts/readme-screenshots.sh`, branch `readme-screens`): Repeater editor text
+     unreadable in dark mode, Dashboard/Notebook panes not filling the window, clipped filter bars
+     and sidebar on Target, a stray floating button, an empty toolbar circle. A partial fix exists
+     on an unmerged branch (`e9ab9ca`).
   2. The daily-driver beta gate: signed build, `Scripts/beta-dod.sh`, real use of every screen.
   3. UI gaps found by the review and left open: an identities editor (the Authz Matrix needs it),
      the Assistant chat (the engine and `APIGate` exist; the view only previews redaction),
@@ -152,6 +156,14 @@ milestone are listed there instead.
 Newest first. Dates up to `40c513b` were written by Linux sessions in UTC, so the 2026-11-20 macOS
 entry at the top is later than the 2026-11-21 entry below it. Within a day the order is approximate.
 
+- 2026-11-21 — **Public repo and first green CI.** Recreated `jimbo111/Gulp` fresh and public
+  (history rewritten: no AI trailers, owner's noreply identity); README with an animated hero;
+  CONTRIBUTING, SECURITY (private vulnerability reporting on), issue/PR templates; `CLAUDE.md` →
+  `AGENTS.md`. CI then found three real issues, each fixed with a test: Swift 6.1 rejected the
+  Comparer's detached task sending `self` (`f35b0b0`); the AI-003 ReDoS test used a wall-clock limit
+  that failed on a slower runner (now asserts linear scaling, `8e00367`); the Sequencer judged each
+  of 8 tests at alpha, downgrading a true CSPRNG about 8% of the time (now family-wise, `5da698a`).
+  CI green on both jobs at `5da698a`.
 - 2026-11-20 — **Layer reviews and root-cause fixes** (branch `macos-build`). Five reviewers with
   separate roles (services, engines, orchestration, UI/app, docs) found ~70 defects; eight
   implementers fixed the confirmed ones, each with a test that failed first, and the parent merged

@@ -48,7 +48,9 @@ make beacon      # run the OAST Beacon server locally (dev mode, high ports)
 ```
 
 The toolchain minimum is **Swift 6.1** (swift-crypto ≥ 4.5.1 needs tools 6.1). GitHub Actions CI
-cannot run at the moment, so `make test` + `make lint` locally is the only gate.
+(`.github/workflows/ci.yml`) runs on every push and pull request; run `make test` + `make lint`
+locally first. CI's macOS job uses Xcode 16.4 (Swift 6.1), which is stricter than newer local
+toolchains in some concurrency checks, so a change isn't done until CI passes.
 
 On **Linux** (for example cloud Claude sessions), `xcodebuild` is unavailable. Build and test the
 platform-independent modules with `swift build` / `swift test --package-path Packages/GulpKit`.
