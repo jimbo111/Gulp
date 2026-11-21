@@ -37,10 +37,10 @@ extension ProjectSession {
             check = { @Sendable target, path in await scopeGuard.permits(target, path: path) }
         }
         let attack = try FuzzAttack(config: config, engine: http, inScope: check)
-        let store = self.store
+        let current = currentStore
         let eventBus = self.events
         let configJSON = String(decoding: try JSONEncoder().encode(config), as: UTF8.self)
-        let id = try await store.createFuzzerAttack(
+        let id = try await current.store.createFuzzerAttack(
             name: config.name, configJSON: configJSON, baseRequest: config.request, state: "running")
         let source = await attack.start()
         let (events, continuation) = AsyncStream.makeStream(of: FuzzEvent.self, bufferingPolicy: .unbounded)
@@ -54,6 +54,7 @@ extension ProjectSession {
             var pending: [FuzzerResultRow] = []
             var lastFlush = ContinuousClock.now
             for await event in source {
+                let store = await current.store  // Save As may have switched files
                 switch event {
                 case .result(let result):
                     pending.append(Self.row(result))

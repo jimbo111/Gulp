@@ -292,7 +292,9 @@ public actor ProjectSession {
     public nonisolated let activeTasks = ActiveTasks()
     /// OAST (F10): payloads, polling, interactions.
     public nonisolated let oast: OASTService
-    private let currentStore: CurrentStore
+    /// The file the session writes to now: long-running work resolves the store through it, so it
+    /// follows Save As instead of writing to the closed old file.
+    nonisolated let currentStore: CurrentStore
 
     private init(
         store: ProjectStore, events: EventBus, settings: LayeredSettings, isTemporary: Bool,

@@ -66,7 +66,8 @@ extension ProjectSession {
     /// The project's OAST session for blind checks, when one is registered.
     func scanOAST() async -> (any OASTProvider)? {
         guard await oast.correlationID != nil else { return nil }
-        return SessionOASTProvider(oast: oast, store: { [store] in store })
+        let current = currentStore
+        return SessionOASTProvider(oast: oast, store: { await current.store })
     }
 
     /// Start an active scan of `requests` (SCN-035).
@@ -88,10 +89,11 @@ extension ProjectSession {
             ActiveTask(
                 id: taskID, kind: "scanner", name: name, pause: { await scan.pause() },
                 resume: { await scan.resume() }))
-        let store = self.store
+        let current = currentStore
         let eventBus = events_
         Task {
             for await event in source {
+                let store = await current.store  // Save As may have switched files
                 if case .finding(let finding) = event {
                     // The evidence exchange may still sit in the write coalescer: commit it first
                     // (issue evidence references it).

@@ -34,4 +34,27 @@ struct SessionLifecycleTests {
         try await old.close()
         try await new.close()
     }
+
+    /// Three requests to a closed port (each fails fast with connection refused).
+    static func refusedAttack() -> FuzzAttackConfig {
+        var settings = FuzzSettings()
+        settings.timeoutSeconds = 5
+        return FuzzAttackConfig(
+            name: "ports", target: HTTPTarget(scheme: .http, host: "127.0.0.1", port: 1),
+            request: Array("GET /§x§ HTTP/1.1\r\nHost: 127.0.0.1:1\r\n\r\n".utf8), attackType: .sniper,
+            sets: [PayloadSet(.list(["a", "b", "c"]))], matches: [], settings: settings)
+    }
+
+    @Test("PRJ-002: an attack running across Save As writes its results to the new file")
+    func test_PRJ002_attackAcrossSaveAs() async throws {
+        let environment = isolatedEnvironment()
+        let session = try await open(environment, "attack")
+        await session.panicStop()  // the attack's sends wait at the limiter until resumed
+        let run = try await session.startAttack(Self.refusedAttack(), allowOutOfScope: true)
+        try await session.saveAs(projectURL(environment, "attack-saved"))
+        await session.resumeAll()
+        for await _ in run.events {}
+        #expect(try await session.attackResults(run.id).count == 3)
+        try await session.close()
+    }
 }
