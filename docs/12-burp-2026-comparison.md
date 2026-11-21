@@ -1,5 +1,8 @@
 # 12 — Fresh per-feature comparison vs. current Burp Suite (run 2026-11-13)
 
+> **Snapshot, not current status.** `docs/PROGRESS.md` is authoritative for what is built; it
+> reflects the code as of 2026-11-13 (519 tests and 37 DoD scripts then).
+
 This is a **fresh** per-feature compare/contrast done this turn against the **current** Burp Suite
 feature set (Professional / DAST, releases 2025.2 → 2026.3 and the Burp AI line), not a refresh of the
 earlier `09-burpsuite-comparison.md`. Burp facts below are from PortSwigger's 2025 release notes, the

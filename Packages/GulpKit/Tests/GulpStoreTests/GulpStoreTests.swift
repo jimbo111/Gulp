@@ -91,6 +91,30 @@ struct StoreTests {
         try await store.close()
     }
 
+    @Test("HIS-007: a streamed exchange keeps the highlight, comment, tags and Notebook link added meanwhile")
+    func test_HIS007_updateKeepsAnnotations() async throws {
+        let store = try ProjectStore.open(at: temporaryProject())
+        var pending = sampleExchange(path: "/stream")  // tagged t1, t2
+        pending.state = .pending
+        pending.response = nil
+        let id = await store.writer.record(pending)
+        try await store.setHighlight(.red, for: [id])
+        try await store.setComment("watch this", for: [id])
+        let item = try #require(try await store.addNotebookItem(exchange: id))
+        // The engine's completed exchange carries no annotation of its own.
+        var completed = sampleExchange(path: "/stream", body: "streamdone")
+        completed.id = id
+        completed.annotation = Annotation()
+        await store.writer.update(completed)
+        await store.writer.flush()
+        let loaded = try #require(try await store.exchange(id: id))
+        #expect(loaded.response?.bytes.string().hasSuffix("streamdone") == true)
+        #expect(loaded.annotation == Annotation(comment: "watch this", highlight: .red, tags: ["t1", "t2"]))
+        #expect(try await store.notebookItem(item.id)?.exchangeID == id)
+        #expect(try await store.search(SearchQuery("streamdone")).hits.map(\.id) == [id])
+        try await store.close()
+    }
+
     @Test("PRX-031/032: WebSocket connections and messages are stored with frames and announced")
     func test_PRX031_webSocketRows() async throws {
         let bus = EventBus()

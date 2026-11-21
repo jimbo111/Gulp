@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # M13b (GraphQL half) Definition of Done (docs/03-roadmap.md):
 #   "the GraphQL Workbench introspects /graphql, renders the schema and flags the field-level authz bug."
-# (The DOM Probe half needs the managed browser/CDP and is verified on macOS CI, not here.)
+# (The DOM Probe half needs the managed browser/CDP; Scripts/m13a-dom-probe-dod.sh covers it via Node.)
 # 1. `gulp-cli graphql introspect` introspects VulnLab's /graphql and renders User.email etc.
 # 2. `gulp-cli graphql scan` raises the introspection-enabled issue and, with a probe that reads
 #    another user's email without auth, the broken-object-authz issue. The /safe/graphql twin has

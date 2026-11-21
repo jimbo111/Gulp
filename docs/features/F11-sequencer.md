@@ -1,13 +1,17 @@
 # F11 — Sequencer
 
-> Milestone: Post-1.0 backlog (out of v1 since the 2026-11-08 feature review) · Modules:
+> Milestone: Post-1.0 backlog (out of v1 since the 2026-11-08 feature review; built anyway on 2026-11-13) · Modules:
 > `GulpSequencer`, `GulpFeatures/Sequencer` · Depends on: F03
 
 **Out of v1 (2026-11-08 feature review, product decision #7).** Token-randomness analysis rarely
 finds bugs against modern frameworks and JWT-based sessions, and it cost a whole milestone (the
-retired M14). The spec is kept intact for when the owner schedules it; see the roadmap's Post-1.0
-backlog. The `GulpSequencer` module and the `sequencer_runs` table already exist as placeholders and
-stay unused until then.
+retired M14). The spec is kept intact; see the roadmap's Post-1.0 backlog.
+
+**Status (2026-11-20).** Built on 2026-11-13, reversing the deprioritization (doc 07, 2026-11-13):
+`GulpSequencer` (token capture, a NIST SP 800-22-style battery, FIPS poker, per-position χ²,
+effective-entropy verdict), `gulp-cli sequencer`, `SequencerView`, and `Scripts/sequencer-dod.sh`
+(VulnLab `/token/weak` rates poor, `/token/strong` excellent). Not built: Swift Charts output and
+runs saved to the `sequencer_runs` table (which exists in schema v1 and is still unused).
 
 ## 1. Purpose
 
