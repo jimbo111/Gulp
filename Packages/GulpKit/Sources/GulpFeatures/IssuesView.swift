@@ -19,6 +19,8 @@ final class IssuesModel {
     var selection: Set<IssueID> = []
     private(set) var detail: Issue?
     private(set) var evidenceExchanges: [Int64: Exchange] = [:]
+    /// Why the last change could not be saved, if it could not.
+    private(set) var message: String?
     var severities: Set<IssueSeverity> = [] { didSet { reload() } }
     var statuses: Set<IssueStatus> = [.open] { didSet { reload() } }
     var minimumConfidence = IssueConfidence.tentative { didSet { reload() } }
@@ -126,25 +128,23 @@ final class IssuesModel {
     func setStatus(_ status: IssueStatus) {
         let ids = Array(selection)
         let session = self.session
-        Task {
-            try? await session.store.setIssueStatus(status, for: ids)
-            reload()
+        write("Changing the status", reloading: true) {
+            try await session.store.setIssueStatus(status, for: ids)
         }
     }
 
     func override(severity: IssueSeverity?, confidence: IssueConfidence?) {
         guard let id = detail?.id else { return }
         let session = self.session
-        Task {
-            try? await session.store.overrideIssue(id, severity: severity, confidence: confidence)
-            reload()
+        write("Overriding the issue", reloading: true) {
+            try await session.store.overrideIssue(id, severity: severity, confidence: confidence)
         }
     }
 
     func saveNotes(_ notes: String) {
         guard let id = detail?.id else { return }
         let session = self.session
-        Task { try? await session.store.setIssueNotes(id, notes) }
+        write("Saving the notes") { try await session.store.setIssueNotes(id, notes) }
     }
 
     func sendToRepeater(_ exchangeID: ExchangeID) {
@@ -155,12 +155,26 @@ final class IssuesModel {
     func applyConfig() {
         let value = config
         let session = self.session
-        Task { try? await session.setPassiveScanConfig(value) }
+        write("Saving the passive scan settings") { try await session.setPassiveScanConfig(value) }
     }
 
     func rescan() {
         let session = self.session
-        Task { try? await session.passiveScan.rescanAll() }
+        write("Scanning History again") { try await session.passiveScan.rescanAll() }
+    }
+
+    /// Run a write; a failure is shown above the issues (never dropped), and `reloading` refreshes
+    /// the list afterwards.
+    private func write(_ action: String, reloading: Bool = false, _ body: @escaping () async throws -> Void) {
+        Task {
+            do {
+                try await body()
+                message = nil
+            } catch {
+                message = "\(action) failed: \(ProjectSession.describe(error))"
+            }
+            if reloading { reload() }
+        }
     }
 }
 
@@ -190,6 +204,9 @@ struct IssuesPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if let message = model.message {
+                Text(message).font(.caption).foregroundStyle(.red).padding(.horizontal, 6)
+            }
             Divider()
             HSplitView {
                 List(selection: $model.selection) {

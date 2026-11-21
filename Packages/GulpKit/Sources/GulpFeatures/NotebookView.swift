@@ -62,21 +62,20 @@ final class NotebookModel {
 
     func newNote() {
         let session = self.session
-        Task {
-            if let item = try? await session.addNote(title: "New note") {
-                reload()
-                selection = [item.id]
-            }
+        write("Adding a note") {
+            let item = try await session.addNote(title: "New note")
+            self.reload()
+            self.selection = [item.id]
         }
     }
 
     func delete() {
         let ids = Array(selection)
         let session = self.session
-        Task {
-            try? await session.store.deleteNotebookItems(ids)
-            selection = []
-            reload()
+        write("Deleting") {
+            try await session.store.deleteNotebookItems(ids)
+            self.selection = []
+            self.reload()
         }
     }
 
@@ -85,7 +84,7 @@ final class NotebookModel {
         order.move(fromOffsets: source, toOffset: destination)
         items.move(fromOffsets: source, toOffset: destination)
         let session = self.session
-        Task { try? await session.store.reorderNotebook(order) }
+        write("Reordering") { try await session.store.reorderNotebook(order) }
     }
 
     /// Save an edit after a short pause (typing in the note doesn't write on every key).
@@ -112,20 +111,39 @@ final class NotebookModel {
         }
     }
 
-    /// Write every pending edit now.
+    /// Write every pending edit now. An edit that fails stays pending (unless a newer one replaced
+    /// it) and the failure is shown.
     func flushEdits() async {
         let edits = pendingEdits
         pendingEdits = [:]
-        for (id, edit) in edits { try? await session.store.updateNotebookItem(id, edit) }
+        for (id, edit) in edits {
+            do {
+                try await session.store.updateNotebookItem(id, edit)
+            } catch {
+                if pendingEdits[id] == nil { pendingEdits[id] = edit }
+                message = "Saving the note failed: \(ProjectSession.describe(error))"
+            }
+        }
     }
 
     func send(_ id: Int64, to destination: NotebookDestination) {
         let session = self.session
-        Task {
-            let sent = (try? await session.sendNotebookItem(id, to: destination)) ?? false
-            message =
+        write("Sending") {
+            let sent = try await session.sendNotebookItem(id, to: destination)
+            self.message =
                 sent
                 ? "Sent to \(destination.rawValue.capitalized)" : "Nothing to send (a note has no request)"
+        }
+    }
+
+    /// Run a write; a failure is shown under the editor (never dropped).
+    private func write(_ action: String, _ body: @escaping () async throws -> Void) {
+        Task {
+            do {
+                try await body()
+            } catch {
+                message = "\(action) failed: \(ProjectSession.describe(error))"
+            }
         }
     }
 }
@@ -187,6 +205,10 @@ struct NotebookPanel: View {
                     Text("\(model.items.count) items").foregroundStyle(.secondary).font(.caption)
                 }
                 .padding(6)
+                if model.selected == nil, let message = model.message {
+                    Text(message).font(.caption).foregroundStyle(.secondary).padding(
+                        [.horizontal, .bottom], 6)
+                }
             }
             .frame(minWidth: 280, idealWidth: 340)
             if let item = model.selected {
