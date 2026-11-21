@@ -85,9 +85,11 @@ public actor Agent {
             steps += 1
             inputTokens += response.inputTokens
             outputTokens += response.outputTokens
-            if let text = response.text, !text.isEmpty {
-                lastText = text
-                messages.append(LLMMessage(role: .assistant, content: text))
+            let text = response.text ?? ""
+            if !text.isEmpty { lastText = text }
+            if !text.isEmpty || !response.toolCalls.isEmpty {
+                // The calls stay in the transcript so the next request can pair each result with its call.
+                messages.append(LLMMessage(role: .assistant, content: text, toolCalls: response.toolCalls))
             }
             guard !response.toolCalls.isEmpty, response.stopReason != .endTurn else {
                 return result(lastText, .answered, steps, requests, inputTokens, outputTokens, messages)

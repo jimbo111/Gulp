@@ -11,16 +11,24 @@ public enum LLMRole: String, Sendable, Codable {
     case system, user, assistant, tool
 }
 
-/// One message in the conversation.
+/// One message in the conversation. An `assistant` message carries the model's text and the tool
+/// calls it made; each call is answered by a `tool` message with its id, so a provider can pair every
+/// tool result with the call it answers.
 public struct LLMMessage: Sendable, Codable, Equatable {
+    /// Who said it.
     public var role: LLMRole
+    /// The text (for a `tool` message, the tool's result).
     public var content: String
+    /// For an `assistant` message, the tool calls the model made in that turn.
+    public var toolCalls: [LLMToolCall]
     /// For a `tool` message, the id of the tool call it answers.
     public var toolCallID: String?
 
-    public init(role: LLMRole, content: String, toolCallID: String? = nil) {
+    /// A message; `toolCalls` only on `assistant` messages, `toolCallID` only on `tool` messages.
+    public init(role: LLMRole, content: String, toolCalls: [LLMToolCall] = [], toolCallID: String? = nil) {
         self.role = role
         self.content = content
+        self.toolCalls = toolCalls
         self.toolCallID = toolCallID
     }
 }

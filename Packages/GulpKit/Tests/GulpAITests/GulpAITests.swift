@@ -147,29 +147,77 @@ struct AgentTests {
 
 @Suite("GulpAI — Anthropic provider wire format (AI-001)")
 struct AnthropicProviderTests {
-    @Test("the request body carries system, messages, tool results and tools")
-    func requestBody() throws {
-        let provider = AnthropicProvider(model: "claude-sonnet-4-5", send: { _ in Data() })
-        let body = provider.requestBody(
+    @Test("AI-001: assistant turns carry text + tool_use; one turn's tool results share one user message")
+    func test_AI001_requestBodyToolRound() throws {
+        let provider = AnthropicProvider(model: "claude-opus-5-5", send: { _ in Data() })
+        let body = try provider.requestBody(
             messages: [
                 LLMMessage(role: .system, content: "you are Gulp"),
                 LLMMessage(role: .user, content: "explain this"),
+                LLMMessage(
+                    role: .assistant, content: "Let me look.",
+                    toolCalls: [
+                        LLMToolCall(id: "tc1", name: "search", arguments: #"{"q":"a"}"#),
+                        LLMToolCall(id: "tc2", name: "search", arguments: #"{"q":"b"}"#),
+                    ]),
                 LLMMessage(role: .tool, content: "exchange 5", toolCallID: "tc1"),
+                LLMMessage(role: .tool, content: "nothing", toolCallID: "tc2"),
             ],
             tools: [LLMTool(name: "search", description: "search", schema: #"{"type":"object"}"#)])
         let object = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        #expect(object["model"] as? String == "claude-sonnet-4-5")
+        #expect(object["model"] as? String == "claude-opus-5-5")
         #expect(object["system"] as? String == "you are Gulp")
-        let messages = try #require(object["messages"] as? [[String: Any]])
-        #expect(messages.count == 2)  // user + the tool-result user turn
-        let toolResult = ((messages.last?["content"] as? [[String: Any]])?.first)
-        #expect(toolResult?["type"] as? String == "tool_result")
-        #expect(toolResult?["tool_use_id"] as? String == "tc1")
         #expect((object["tools"] as? [[String: Any]])?.first?["name"] as? String == "search")
+        let messages = try #require(object["messages"] as? [[String: Any]])
+        #expect(messages.map { $0["role"] as? String } == ["user", "assistant", "user"])
+        let assistant = try #require(messages[1]["content"] as? [[String: Any]])
+        #expect(assistant.map { $0["type"] as? String } == ["text", "tool_use", "tool_use"])
+        #expect(assistant[0]["text"] as? String == "Let me look.")
+        #expect(assistant[1]["id"] as? String == "tc1" && assistant[1]["name"] as? String == "search")
+        #expect((assistant[1]["input"] as? [String: Any])?["q"] as? String == "a")
+        let results = try #require(messages[2]["content"] as? [[String: Any]])
+        #expect(results.map { $0["type"] as? String } == ["tool_result", "tool_result"])
+        #expect(results.map { $0["tool_use_id"] as? String } == ["tc1", "tc2"])
+        #expect(results[0]["content"] as? String == "exchange 5")
+    }
+
+    @Test("AI-001: after a tool round the agent's next request answers every tool_use it made")
+    func test_AI001_agentSecondRoundIsValid() async throws {
+        let scripted = ScriptedProvider([
+            LLMResponse(
+                text: "Checking.",
+                toolCalls: [
+                    LLMToolCall(id: "t1", name: "search", arguments: "{}"),
+                    LLMToolCall(id: "t2", name: "search", arguments: "{}"),
+                ], stopReason: .toolUse),
+            LLMResponse(text: "Done.", stopReason: .endTurn),
+        ])
+        _ = try await Agent(provider: scripted).run(
+            system: "s", user: "go", tools: [LLMTool(name: "search", description: "search")],
+            execute: { _ in ToolOutcome(content: "ok") })
+        let second = try #require(scripted.received.last)
+        let body = try AnthropicProvider(send: { _ in Data() }).requestBody(messages: second, tools: [])
+        let object = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let messages = try #require(object["messages"] as? [[String: Any]])
+        // The user turn of tool_results follows an assistant turn with the matching tool_use ids.
+        #expect(messages.map { $0["role"] as? String } == ["user", "assistant", "user"])
+        let blocks = messages[1]["content"] as? [[String: Any]] ?? []
+        let uses = blocks.filter { $0["type"] as? String == "tool_use" }
+        let results = messages[2]["content"] as? [[String: Any]] ?? []
+        #expect(uses.map { $0["id"] as? String } == ["t1", "t2"])
+        #expect(results.map { $0["tool_use_id"] as? String } == ["t1", "t2"])
+    }
+
+    @Test("AI-001: an API error body is an error, not an empty answer")
+    func test_AI001_errorBodyThrows() {
+        let provider = AnthropicProvider(send: { _ in Data() })
+        let error = Data(
+            #"{"type":"error","error":{"type":"invalid_request_error","message":"bad tool_use_id"}}"#.utf8)
+        #expect(throws: AnthropicProvider.APIError.self) { try provider.parse(error) }
     }
 
     @Test("a text + tool_use response parses into an LLMResponse with usage")
-    func parseResponse() {
+    func parseResponse() throws {
         let provider = AnthropicProvider(send: { _ in Data() })
         let json = Data(
             #"""
@@ -177,7 +225,7 @@ struct AnthropicProviderTests {
                         {"type":"tool_use","id":"tu1","name":"search","input":{"q":"token"}}],
              "stop_reason":"tool_use","usage":{"input_tokens":12,"output_tokens":7}}
             """#.utf8)
-        let response = provider.parse(json)
+        let response = try provider.parse(json)
         #expect(response.text == "Let me look.")
         #expect(response.toolCalls == [LLMToolCall(id: "tu1", name: "search", arguments: #"{"q":"token"}"#)])
         #expect(response.stopReason == .toolUse)
