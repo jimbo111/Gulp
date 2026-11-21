@@ -99,6 +99,27 @@ struct FramingTests {
         #expect(r.dechunkedBody == nil)
     }
 
+    @Test("HTTP-002: a header-block scan resumed from the last read finds the same end at any split")
+    func test_HTTP002_resumableHeaderBlockEnd() {
+        for text in ["HTTP/1.1 200 OK\r\nA: b\r\n\r\nbody", "HTTP/1.1 200 OK\nA: b\n\nbody", "X\r\n\nrest"] {
+            let all = Array(text.utf8)
+            let whole = HTTP1.headerBlockEnd(all)
+            var buffer: [UInt8] = []
+            var resume = 0
+            var found: (end: Int, terminator: Int)?
+            for byte in all where found == nil {
+                buffer.append(byte)
+                let scan = HTTP1.headerBlockEnd(buffer, from: resume)
+                if scan.terminator != 0 {
+                    found = scan
+                } else {
+                    resume = HTTP1.headerScanResume(buffer.count)
+                }
+            }
+            #expect(found?.end == whole.end && found?.terminator == whole.terminator)
+        }
+    }
+
     @Test("HTTP-002: every chunked view reads a chunk-size line the same way (BWS before ';' is allowed)")
     func test_HTTP002_oneChunkSizeGrammar() {
         // RFC 9112 §7.1.1: whitespace may precede a chunk extension.

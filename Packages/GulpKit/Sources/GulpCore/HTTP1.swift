@@ -24,8 +24,6 @@ public enum BodyFraming: Sendable, Hashable { case contentLength, chunked, close
 public enum ParseWarning: Sendable, Equatable, Hashable {
     case bareLF, obsoleteLineFolding, missingFinalCRLF, invalidCharInName
     case duplicateContentLength, conflictingFraming, malformedStartLine
-    // `oversizedHeaders` is emitted by the engine's header-size guard, not the pure parser.
-    case oversizedHeaders
     case nonUTF8Header
 }
 
@@ -231,11 +229,16 @@ public enum HTTP1 {
     typealias LineScan = (ranges: [Range<Int>], ending: LineEnding, warnings: [ParseWarning])
     typealias HeaderScan = (fields: [HeaderField], warnings: [ParseWarning])
 
-    /// Locate the blank line that ends the header block. Returns the index just past it and the
-    /// terminator length: 4 for CRLFCRLF, 2 for a tolerated LFLF (including CRLF+LF), or 0 when no
-    /// blank line exists (then `end == a.count`: the whole input is headers, body empty).
-    public static func headerBlockEnd(_ a: [UInt8]) -> (end: Int, terminator: Int) {
-        var i = 0
+    /// A header block larger than this is refused rather than buffered on: the proxy answers 431,
+    /// the engine fails the exchange with `.tooLarge`.
+    public static let maxHeaderBytes = 1_024 * 1_024
+
+    /// Locate the blank line that ends the header block, scanning from `start`. Returns the index
+    /// just past it and the terminator length: 4 for CRLFCRLF, 2 for a tolerated LFLF (including
+    /// CRLF+LF), or 0 when no blank line exists (then `end == a.count`: the whole input is headers,
+    /// body empty). A growing buffer stays linear: resume at `headerScanResume(previousCount)`.
+    public static func headerBlockEnd(_ a: [UInt8], from start: Int = 0) -> (end: Int, terminator: Int) {
+        var i = start
         while i < a.count {
             if i + 3 < a.count, a[i] == CR, a[i + 1] == LF, a[i + 2] == CR, a[i + 3] == LF {
                 return (i + 4, 4)
@@ -247,6 +250,10 @@ public enum HTTP1 {
         }
         return (a.count, 0)
     }
+
+    /// Where to resume `headerBlockEnd` after a scan of `count` bytes found nothing: a terminator
+    /// (at most 4 bytes) may straddle the old end, so back up 3.
+    public static func headerScanResume(_ count: Int) -> Int { max(0, count - 3) }
 
     /// The header region `[0, regionEnd)` (start line + field lines, excluding the blank line) and
     /// the warning for a missing blank line.

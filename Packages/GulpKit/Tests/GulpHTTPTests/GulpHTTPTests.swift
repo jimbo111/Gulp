@@ -275,6 +275,17 @@ struct EngineTests {
         await server.stop()
     }
 
+    @Test("HTTP-002: a header block past HTTP1.maxHeaderBytes fails with tooLarge instead of buffering on")
+    func test_HTTP002_headerBlockCap() async throws {
+        let endless = "HTTP/1.1 200 OK\r\nX-Fill: " + String(repeating: "a", count: HTTP1.maxHeaderBytes)
+        let server = try await TestServer.start { b, _ in headersComplete(b) ? ServerReply(endless) : nil }
+        let engine = NIOHTTPEngine()
+        let result = await engine.send(get(), to: server.target, options: options())
+        #expect(result.error == .tooLarge(limit: HTTP1.maxHeaderBytes))
+        await engine.shutdown()
+        await server.stop()
+    }
+
     // MARK: HTTP-008
 
     @Test("HTTP-008: Update Content-Length fixes or adds the header; off means untouched")

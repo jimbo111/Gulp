@@ -95,6 +95,8 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
         /// Where the current (non-interim) message starts in `buffer`.
         var start = 0
         var head: ResponseHead?
+        /// Where the next header-block scan resumes, so a slow header block is scanned once.
+        var headerResume = 0
         var chunkResume = 0
         var firstByteAt: NIODeadline?
         var phaseTimer: Scheduled<Void>?
@@ -213,15 +215,22 @@ final class HTTP1ClientHandler: ChannelDuplexHandler, RemovableChannelHandler {
     private func evaluate() {
         while let p = pending {
             if p.head == nil {
-                let rest = p.start == 0 ? p.buffer : Array(p.buffer[p.start...])
-                let (end, terminator) = HTTP1.headerBlockEnd(rest)
-                guard terminator != 0 else { return }  // header block not complete yet
+                let (end, terminator) = HTTP1.headerBlockEnd(p.buffer, from: max(p.start, p.headerResume))
+                guard end - p.start <= HTTP1.maxHeaderBytes else {
+                    fail(.tooLarge(limit: HTTP1.maxHeaderBytes))
+                    context?.close(promise: nil)
+                    return
+                }
+                guard terminator != 0 else {  // header block not complete yet
+                    pending?.headerResume = HTTP1.headerScanResume(p.buffer.count)
+                    return
+                }
+                let headerBytes = Array(p.buffer[p.start..<end])
                 let head = ResponseHead(
-                    headerBytes: Array(rest[..<end]), blockEnd: p.start + end, isHead: p.isHead,
-                    isConnect: p.isConnect)
+                    headerBytes: headerBytes, blockEnd: end, isHead: p.isHead, isConnect: p.isConnect)
                 if head.isInterim {
-                    pending?.interim.append(Array(rest[..<end]))
-                    pending?.start += end
+                    pending?.interim.append(headerBytes)
+                    pending?.start = end
                     continue
                 }
                 pending?.head = head
