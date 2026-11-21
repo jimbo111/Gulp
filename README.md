@@ -1,21 +1,28 @@
-<h1 align="center">Gulp</h1>
+# Gulp
 
-<p align="center">
+An intercepting proxy and web security workbench for macOS, written in Swift. (Not related to the
+gulp.js build tool.)
+
+<p>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.svg">
     <img src="docs/assets/hero-light.svg" width="880" alt="Gulp holds a request in Intercept, the user changes &quot;role&quot; from user to admin, forwards it, and the response comes back with a mass-assignment finding.">
   </picture>
 </p>
 
-A web security testing suite for macOS, written in Swift. It's an intercepting proxy with the whole
-workbench attached: Repeater, Fuzzer, Scanner, Crawler, out-of-band testing, and a set of
-specialist tools that other suites leave to plugins.
+> **Pre-release.** The engines and CLI are tested on macOS and Linux. The macOS app runs, but there
+> is no signed build yet ([status](#status)).
+
+Repeater, Fuzzer, Scanner, Crawler, out-of-band testing, and a set of specialist tools that other
+suites leave to plugins, all around one proxy.
 
 Here it is checking an OAuth authorization server:
 
 ```console
 $ gulp-cli sso probe --target http://127.0.0.1:8088 \
-    --authorize "http://127.0.0.1:8088/authorize?response_type=code&client_id=app&redirect_uri=http://127.0.0.1:8088/callback&state=s&code_challenge=abc&code_challenge_method=S256"
+    --authorize "http://127.0.0.1:8088/authorize?response_type=code&client_id=app"\
+"&redirect_uri=http://127.0.0.1:8088/callback&state=s"\
+"&code_challenge=abc&code_challenge_method=S256"
 
 sso probe: redirect_uri variants
   [registered] http://127.0.0.1:8088/callback → accepted
@@ -33,8 +40,7 @@ pkce: DOWNGRADEABLE (plain or none accepted)
 ```
 
 Point the same command at the fixed version of that server (`/safe/authorize`) and every line
-comes back `rejected`. That pairing is how Gulp is tested, and it's the thing worth knowing about
-this project.
+comes back `rejected`. That pairing is how Gulp is tested.
 
 ## Every bug has a twin
 
@@ -53,7 +59,7 @@ drive the real CLI against it, and fail if a finding lands on a `/safe/` route.
 If you've used Burp Suite you already know the layout. The names differ in a few places
 ([full map](docs/00-vision.md#4-naming-map-reference-suite--gulp)).
 
-| | |
+| Tool | What it does |
 |---|---|
 | **Proxy** | HTTP/1.1, HTTP/2 and WebSockets, with TLS interception from a local CA. Intercept, match & replace, streaming responses and SSE. |
 | **Repeater** | Sends the bytes you wrote, exactly. Raw HTTP/2, pipelining, and race-condition groups (single-packet, parallel, sequential). |
@@ -98,10 +104,8 @@ make vulnlab          # terminal 1: VulnLab on http://127.0.0.1:8088 (binds loca
 ```
 
 ```bash
+# terminal 2: build the CLI
 swift build --package-path Packages/GulpKit --product gulp-cli
-```
-
-```bash
 alias gulp-cli="$PWD/Packages/GulpKit/.build/debug/gulp-cli"
 ```
 
@@ -137,7 +141,7 @@ Leave out `--approval in-scope` and the agent can read but not send.
 ## Status
 
 Pre-release. **The engines and the CLI are the finished part:** everything above runs headless and
-is tested on macOS and Linux (640 tests, 41 end-to-end scripts against VulnLab).
+is tested on macOS and Linux.
 
 The macOS app builds, and its UI tests open every tool and send a request from Repeater to VulnLab.
 It hasn't had a daily-driver beta yet, there are no signed downloads, and a few screens (Assistant,

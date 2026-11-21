@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="372" viewBox="0 0 960 372" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="960" height="372" viewBox="0 0 960 372" role="img" aria-labelledby="t d">
 <title id="t">Gulp intercepting a request</title>
 <desc id="d">A request held in Gulp's Intercept view is edited from role user to role admin, forwarded, and the response comes back with a mass-assignment finding.</desc>
 <style>
-    text { font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; }
+    text { font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; white-space: pre; }
     .ui { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Helvetica, Arial, sans-serif; }
     .ln { animation: ln 11s ease-out infinite both; }
     .held { animation: held 11s ease-in-out infinite both; opacity: 0; }
@@ -13,6 +13,8 @@
     .fwd { animation: fwd 11s ease-in-out infinite both; }
     .res { animation: res 11s cubic-bezier(.2,.7,.2,1) infinite both; }
     .rs { animation: rs 11s ease-out infinite both; }
+    .wait { animation: wait 11s linear infinite both; }
+    .press { opacity: 0; animation: press 11s linear infinite both; }
     .find { animation: find 11s cubic-bezier(.2,.7,.2,1) infinite both; }
     @keyframes ln { 0% { opacity: 0; } 4% { opacity: 1; } 94% { opacity: 1; } 100% { opacity: 0; } }
     @keyframes held { 0%,9% { opacity: 0; } 13%,44% { opacity: 1; } 50%,100% { opacity: 0; } }
@@ -23,10 +25,12 @@
     @keyframes res { 0%,50% { opacity: 0; transform: translateX(24px); } 56%,94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
     @keyframes rs { 0%,54% { opacity: 0; } 59%,94% { opacity: 1; } 100% { opacity: 0; } }
     @keyframes find { 0%,66% { opacity: 0; transform: translateY(10px); } 71%,94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+    @keyframes wait { 0%,46% { opacity: 1; } 50%,100% { opacity: 0; } }
+    @keyframes press { 0%,44% { opacity: 0; } 45%,48% { opacity: 1; } 52%,100% { opacity: 0; } }
     @keyframes pulse { from { opacity: 1; } to { opacity: .35; } }
     @media (prefers-reduced-motion: reduce) {
       *, .ln, .old, .strike, .new, .fwd, .res, .rs, .find, .pulse { animation: none !important; }
-      .held { opacity: 0 !important; }
+      .held, .wait, .press { opacity: 0 !important; }
       .old { opacity: .45; }
     }
     </style>
@@ -50,28 +54,36 @@
   <circle class="pulse" cx="506" cy="76" r="4" fill="#E3B341"/>
   <text class="ui" x="516" y="80" font-size="12.5" font-weight="600" fill="#E3B341">Held</text>
 </g>
-<text class="ln" style="animation-delay:0.15s" x="206" y="118"><tspan fill="#58A6FF" font-weight="600">POST</tspan><tspan fill="#E6EDF3"> /api/account HTTP/1.1</tspan></text><text class="ln" style="animation-delay:0.24s" x="206" y="141"><tspan fill="#8D96A0">Host</tspan><tspan fill="#E6EDF3">: shop.example</tspan></text><text class="ln" style="animation-delay:0.33s" x="206" y="164"><tspan fill="#8D96A0">Cookie</tspan><tspan fill="#E6EDF3">: session=7f3c9a21e0</tspan></text><text class="ln" style="animation-delay:0.42s" x="206" y="187"><tspan fill="#8D96A0">Content-Type</tspan><tspan fill="#E6EDF3">: application/json</tspan></text><text class="ln" style="animation-delay:0.60s" x="206" y="233"><tspan fill="#E6EDF3">{&quot;email&quot;:&quot;ana@shop.example&quot;,</tspan></text><text class="ln" style="animation-delay:0.69s" x="206" y="256"><tspan fill="#E6EDF3"> &quot;role&quot;:</tspan></text>
+<text class="ln" style="animation-delay:0.15s" x="206" y="118" textLength="218.92"><tspan fill="#58A6FF" font-weight="600">POST</tspan><tspan fill="#E6EDF3"> /api/account HTTP/1.1</tspan></text><text class="ln" style="animation-delay:0.24s" x="206" y="141" textLength="151.56"><tspan fill="#8D96A0">Host</tspan><tspan fill="#E6EDF3">: shop.example</tspan></text><text class="ln" style="animation-delay:0.33s" x="206" y="164" textLength="218.92"><tspan fill="#8D96A0">Cookie</tspan><tspan fill="#E6EDF3">: session=7f3c9a21e0</tspan></text><text class="ln" style="animation-delay:0.42s" x="206" y="187" textLength="252.60"><tspan fill="#8D96A0">Content-Type</tspan><tspan fill="#E6EDF3">: application/json</tspan></text><text class="ln" style="animation-delay:0.60s" x="206" y="233" textLength="235.76"><tspan fill="#E6EDF3">{&quot;email&quot;:&quot;ana@shop.example&quot;,</tspan></text><text class="ln" style="animation-delay:0.69s" x="206" y="256" textLength="67.36"><tspan fill="#E6EDF3"> &quot;role&quot;:</tspan></text>
 <g class="ln" style="animation-delay:.7s">
-  <text class="old" x="273.36" y="256" fill="#E6EDF3">"user"</text>
-  <line class="strike" x1="273.36" y1="251" x2="323.88" y2="251" stroke="#FF7B72" stroke-width="1.6"/>
+  <text class="old" x="273.36" y="256" textLength="50.52" fill="#E6EDF3">"user"</text>
+  <line class="strike" x1="273.36" y1="251" x2="323.88" y2="251" stroke="#8D96A0" stroke-width="1.6"/>
 </g>
 <g class="new">
   <rect x="331.88" y="240" width="75.36" height="21" rx="4" fill="#11302A"/>
-  <text x="335.88" y="256" fill="#3FB8A0" font-weight="600">"admin"<tspan fill="#E6EDF3" font-weight="400">}</tspan></text>
+  <text x="335.88" y="256" textLength="67.36" fill="#3FB8A0" font-weight="600">"admin"<tspan fill="#E6EDF3" font-weight="400">}</tspan></text>
 </g>
 <g class="fwd">
   <rect x="206" y="286" width="92" height="28" rx="6" fill="none" stroke="#58A6FF"/>
   <text class="ui" x="252" y="305" text-anchor="middle" font-size="13" font-weight="600" fill="#58A6FF">Forward</text>
+  <g class="press">
+    <rect x="206" y="286" width="92" height="28" rx="6" fill="#1F6FEB"/>
+    <text class="ui" x="252" y="305" text-anchor="middle" font-size="13" font-weight="600" fill="#FFFFFF">Forward</text>
+  </g>
 </g>
+<line x1="570" y1="66" x2="570" y2="348" stroke="#30363D"/>
+<text class="ui" x="596" y="80" font-size="12.5" font-weight="600" fill="#8D96A0">Response</text>
+<text class="ui wait" x="596" y="118" font-size="13" fill="#8D96A0">Waiting for Forward</text>
 <g class="res">
-  <line x1="570" y1="66" x2="570" y2="348" stroke="#30363D"/>
-  <text class="ui" x="596" y="80" font-size="12.5" font-weight="600" fill="#8D96A0">Response</text>
-  <text class="rs" x="596" y="118"><tspan fill="#E6EDF3">HTTP/1.1 </tspan><tspan fill="#3FB8A0" font-weight="600">200 OK</tspan></text><text class="rs" x="596" y="141"><tspan fill="#8D96A0">Content-Type</tspan><tspan fill="#E6EDF3">: application/json</tspan></text><text class="rs" x="596" y="187"><tspan fill="#E6EDF3">{&quot;email&quot;:&quot;ana@shop.example&quot;,</tspan></text><text class="rs" x="596" y="210"><tspan fill="#E6EDF3"> &quot;role&quot;:&quot;admin&quot;}</tspan></text>
+  <text class="rs" x="596" y="118" textLength="126.30"><tspan fill="#E6EDF3">HTTP/1.1 </tspan><tspan fill="#E6EDF3" font-weight="600">200 OK</tspan></text><text class="rs" x="596" y="141" textLength="252.60"><tspan fill="#8D96A0">Content-Type</tspan><tspan fill="#E6EDF3">: application/json</tspan></text><text class="rs" x="596" y="187" textLength="235.76"><tspan fill="#E6EDF3">{&quot;email&quot;:&quot;ana@shop.example&quot;,</tspan></text>
+  <rect class="rs" x="659.36" y="194" width="66.94" height="21" rx="4" fill="#11302A"/>
+  <text class="rs" x="596" y="210" textLength="134.72"><tspan fill="#E6EDF3"> "role":</tspan><tspan fill="#3FB8A0" font-weight="600">"admin"</tspan><tspan fill="#E6EDF3">}</tspan></text>
 </g>
 <g class="find">
-  <rect x="590" y="247" width="334" height="74" rx="8" fill="#3D1D20"/>
-  <rect x="590" y="247" width="3" height="74" fill="#FF7B72"/>
-  <text class="ui" x="606" y="273" font-size="14" font-weight="600" fill="#FF7B72">Mass assignment</text>
-  <text class="ui" x="606" y="295" font-size="13" fill="#E6EDF3">The server accepted "role" from the client.</text>
+  <rect x="590" y="240" width="334" height="74" rx="8" fill="#3D1D20"/>
+  <rect x="590" y="240" width="3" height="74" fill="#FF7B72"/>
+  <text class="ui" x="606" y="266" font-size="14" font-weight="600" fill="#FF7B72">Mass assignment</text>
+  <text class="ui" x="908" y="266" text-anchor="end" font-size="12" font-weight="600" fill="#FF7B72">High</text>
+  <text class="ui" x="606" y="288" font-size="13" fill="#E6EDF3">The server accepted "role" from the client.</text>
 </g>
 </svg>
