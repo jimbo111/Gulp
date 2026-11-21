@@ -289,7 +289,8 @@ public struct DerivedFields: Sendable, Codable, Equatable {
     public var ext: String?
     /// Response status code.
     public var status: Int?
-    /// Response body length in bytes (as framed on the wire).
+    /// Response body length in bytes as framed on the wire: every byte after the header block, so a
+    /// chunked body counts its chunk-size lines and trailers (not the de-chunked payload).
     public var responseLength: Int?
     /// Response MIME type (`Content-Type` without parameters), lowercased.
     public var mime: String?

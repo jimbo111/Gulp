@@ -1,6 +1,7 @@
-// GulpHTTP — the SwiftNIO implementation of `HTTPEngine`. M1 scope: HTTP/1 over plain TCP
-// (HTTP-001…HTTP-005, HTTP-008…HTTP-010). TLS and HTTP/2 arrive in M3, WebSockets in M4,
-// single-packet group sends in M5.
+// GulpHTTP — the SwiftNIO implementation of `HTTPEngine` (F03): raw HTTP/1 over TCP or TLS, HTTP/2
+// when negotiated (HTTP2Client.swift), upstream proxies, redirects, WebSocket upgrades
+// (WebSocketUpgrade.swift) and group sends (GroupSend.swift). Raw HTTP/2 from an `H2RequestSpec`
+// (HTTP-025) is not implemented yet.
 
 import Foundation
 import GulpCore
@@ -183,15 +184,15 @@ public final class NIOHTTPEngine: HTTPEngine {
         return result
     }
 
-    /// Raw HTTP/2 from a structured spec (HTTP-025, P1) arrives with the Repeater (M5); ordinary
-    /// requests already use HTTP/2 when the server negotiates it.
+    /// Raw HTTP/2 from a structured spec (HTTP-025, P1) is not implemented: this records a failed
+    /// exchange saying so. Ordinary requests use HTTP/2 whenever the server negotiates it.
     public func send(
         _ request: H2RequestSpec, to target: HTTPTarget, options: SendOptions
     ) async -> ExchangeResult {
         let outgoing = OutgoingRequest(request: RawRequest(Bytes()), target: target)
         return await finish(
             outgoing, options: options, wire: nil,
-            error: .other("Raw HTTP/2 (H2RequestSpec) sends arrive with the Repeater (M5)"),
+            error: .other("Raw HTTP/2 (H2RequestSpec) sending is not implemented yet (HTTP-025)"),
             connectionID: 0, timing: Timing())
     }
 

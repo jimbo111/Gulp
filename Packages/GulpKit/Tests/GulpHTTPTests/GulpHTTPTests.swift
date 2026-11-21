@@ -412,13 +412,13 @@ struct EngineTests {
         await server.stop()
     }
 
-    @Test("Raw HTTP/2 specs and WebSockets report their milestone instead of misbehaving")
+    @Test("Raw HTTP/2 specs fail with a clear error (HTTP-025 open); a WebSocket to nowhere throws")
     func test_notYetImplemented() async throws {
         let engine = NIOHTTPEngine()
         let tlsTarget = HTTPTarget(scheme: .https, host: "127.0.0.1")
         let spec = H2RequestSpec(pseudoHeaders: [], headers: [])
         let h2 = await engine.send(spec, to: tlsTarget, options: options())
-        #expect(h2.error == .other("Raw HTTP/2 (H2RequestSpec) sends arrive with the Repeater (M5)"))
+        #expect(h2.error == .other("Raw HTTP/2 (H2RequestSpec) sending is not implemented yet (HTTP-025)"))
         await #expect(throws: GulpError.self) {
             _ = try await engine.openWebSocket(get(), to: tlsTarget, options: options())
         }
