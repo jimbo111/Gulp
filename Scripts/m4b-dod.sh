@@ -28,7 +28,7 @@ wait_port() {
   return 1
 }
 
-now_ms() { date +%s%3N; }
+now_ms() { perl -MTime::HiRes=time -e 'printf "%d\n", time * 1000'; }  # portable (BSD date has no %N)
 
 "$BIN/gulp-vulnlab" > "$WORK/vulnlab.log" 2>&1 &
 VULNLAB=$!
