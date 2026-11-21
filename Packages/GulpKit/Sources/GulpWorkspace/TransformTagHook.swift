@@ -27,6 +27,7 @@ public struct TransformTagHook: RequestHook {
         self.tags = tags
     }
 
+    /// Evaluates the Transform Tags in a Repeater or Fuzzer request; other sources pass through untouched.
     public func willSend(_ req: inout OutgoingRequest, context: HookContext) async throws {
         guard Self.sources.contains(context.source.rawValue) else { return }
         let bytes = req.request.bytes.rawBytes

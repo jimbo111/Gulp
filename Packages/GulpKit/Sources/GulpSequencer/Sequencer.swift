@@ -26,10 +26,15 @@ public enum TokenVerdict: String, Sendable, Codable {
 
 /// The result of analyzing a set of tokens (SEQ-005/006).
 public struct SequencerReport: Sendable, Codable {
+    /// How many non-empty tokens were analyzed.
     public let sampleCount: Int
+    /// How many of them were distinct.
     public let uniqueCount: Int
+    /// The detected character encoding of the varying region.
     public let encoding: TokenEncoding
+    /// Constant framing stripped from the front of every token.
     public let strippedPrefix: String
+    /// Constant framing stripped from the back of every token.
     public let strippedSuffix: String
     /// The symbol length of the varying region actually analyzed (the common/shortest region).
     public let regionSymbolLength: Int
@@ -39,8 +44,11 @@ public struct SequencerReport: Sendable, Codable {
     public let estimatedBits: Double
     /// The Shannon per-bit upper bound, in bits (always ≥ `estimatedBits`).
     public let shannonBits: Double
+    /// The overall verdict, from `estimatedBits` as a share of `regionBits`.
     public let verdict: TokenVerdict
+    /// Each battery test's result (empty when the token does not vary).
     public let tests: [RandomnessTest]
+    /// Caveats for the reader: stripped framing, varying length, too few samples, duplicates.
     public let warnings: [String]
 
     /// A one-line summary like "Poor — ~18.2 of 64 bits (3,000 samples)".

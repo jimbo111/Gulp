@@ -26,6 +26,7 @@ public struct AnthropicProvider: LLMProvider {
         public var type: String
         /// The API's message.
         public var message: String
+        /// A readable form of the error: `type: message`.
         public var description: String { "\(type): \(message)" }
     }
 
@@ -63,7 +64,8 @@ public struct AnthropicProvider: LLMProvider {
                 apiMessages.append(["role": "assistant", "content": blocks])
             case .tool:
                 let result: [String: Any] = [
-                    "type": "tool_result", "tool_use_id": message.toolCallID ?? "", "content": message.content,
+                    "type": "tool_result", "tool_use_id": message.toolCallID ?? "",
+                    "content": message.content,
                 ]
                 // All of one turn's results go in one user message, right after the assistant turn.
                 if let last = apiMessages.last, last["role"] as? String == "user",
@@ -104,7 +106,8 @@ public struct AnthropicProvider: LLMProvider {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             object["type"] as? String != "error"
         else {
-            let error = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"]
+            let error =
+                (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"]
                 as? [String: Any]
             throw APIError(
                 type: error?["type"] as? String ?? "invalid_response",
@@ -117,7 +120,8 @@ public struct AnthropicProvider: LLMProvider {
             case "text":
                 text = (text ?? "") + (block["text"] as? String ?? "")
             case "tool_use":
-                let input = try JSONSerialization.data(withJSONObject: block["input"] as? [String: Any] ?? [:])
+                let input = try JSONSerialization.data(
+                    withJSONObject: block["input"] as? [String: Any] ?? [:])
                 toolCalls.append(
                     LLMToolCall(
                         id: block["id"] as? String ?? "", name: block["name"] as? String ?? "",
@@ -140,6 +144,7 @@ public struct AnthropicProvider: LLMProvider {
             outputTokens: usage?["output_tokens"] as? Int ?? 0)
     }
 
+    /// Sends `messages` and `tools` through the injected transport and parses the reply.
     public func complete(messages: [LLMMessage], tools: [LLMTool]) async throws -> LLMResponse {
         try parse(try await send(requestBody(messages: messages, tools: tools)))
     }

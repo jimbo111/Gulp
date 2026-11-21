@@ -15,7 +15,9 @@ public protocol ExtensionTransport: Sendable {
 
 /// A passive check an extension declared at `initialize` time.
 public struct ExtensionCheck: Sendable, Codable, Equatable {
+    /// The check's id, as the extension declared it.
     public let id: String
+    /// The check's display name.
     public let name: String
 
     /// A check. (Public so hosts in other modules — e.g. the in-process JS host in GulpScript — can

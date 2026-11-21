@@ -55,6 +55,7 @@ public struct RPCServiceError: Error, Sendable, Hashable, CustomStringConvertibl
         self.outOfScope = outOfScope
     }
 
+    /// A readable form of the error: its message.
     public var description: String { message }
 }
 

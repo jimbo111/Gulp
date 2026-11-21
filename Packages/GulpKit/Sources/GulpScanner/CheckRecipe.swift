@@ -30,6 +30,7 @@ public struct RecipeMatcher: Sendable, Hashable, Codable {
     /// An OR group: at least one of these sub-matchers must hold.
     public var any: [RecipeMatcher]?
 
+    /// A matcher; every condition defaults to absent (no constraint).
     public init(
         statusIn: [Int]? = nil, bodyContains: String? = nil, bodyAbsent: String? = nil,
         bodyRegex: String? = nil,
@@ -87,11 +88,14 @@ public struct CheckRecipe: Sendable, Hashable, Codable, Identifiable {
     public var match: RecipeMatcher
     /// Templated issue detail. `{{header:Name}}` is replaced with that response header's value.
     public var detail: String
-    /// Optional background/remediation/references for the issue.
+    /// Optional background text for the issue.
     public var background: String?
+    /// Optional remediation text for the issue.
     public var remediation: String?
+    /// Optional references for the issue.
     public var references: String?
 
+    /// A recipe; severity defaults to `.info` and confidence to `.firm`.
     public init(
         id: String, name: String, severity: IssueSeverity = .info, confidence: IssueConfidence = .firm,
         pathContains: String? = nil, contentType: String? = nil, match: RecipeMatcher, detail: String,

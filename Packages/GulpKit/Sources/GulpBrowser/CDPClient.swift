@@ -18,6 +18,7 @@ public enum CDPError: Error, Sendable, Equatable {
 
 /// A CDP event (`Target.attachedToTarget`, `Runtime.bindingCalled`, …).
 public struct CDPEvent: Sendable, Equatable {
+    /// The CDP event name, e.g. `Target.attachedToTarget`.
     public let method: String
     /// The event's `params` object as a JSON string.
     public let params: String
@@ -141,15 +142,19 @@ public actor CDPClient {
 public struct WebSocketCDPTransport: CDPTransport {
     private let session: WebSocketSession
 
+    /// A transport over an open WebSocket session.
     public init(session: WebSocketSession) { self.session = session }
 
+    /// Sends `text` as a WebSocket text message.
     public func send(_ text: String) async throws { try await session.send(text: text) }
 
+    /// Delivers each incoming text message to `onText`; returns when the session's message stream ends.
     public func receiveLoop(_ onText: @Sendable @escaping (String) -> Void) async {
         for await message in session.messages where message.opcode == WSOpcode.text.rawValue {
             onText(String(decoding: message.payload, as: UTF8.self))
         }
     }
 
+    /// Closes the WebSocket session.
     public func close() async { await session.close() }
 }

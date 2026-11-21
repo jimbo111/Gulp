@@ -26,10 +26,12 @@ public final class ProcessExtensionTransport: ExtensionTransport, @unchecked Sen
         try process.run()
     }
 
+    /// Writes `bytes` to the child's stdin.
     public func send(_ bytes: [UInt8]) async throws {
         try inPipe.fileHandleForWriting.write(contentsOf: Data(bytes))
     }
 
+    /// Delivers stdout data to `onData` as it arrives; returns when the child closes stdout.
     public func receiveLoop(_ onData: @Sendable @escaping ([UInt8]) -> Void) async {
         let handle = outPipe.fileHandleForReading
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
@@ -45,6 +47,7 @@ public final class ProcessExtensionTransport: ExtensionTransport, @unchecked Sen
         }
     }
 
+    /// Terminates the child if it is still running and closes its stdin.
     public func close() async {
         if process.isRunning { process.terminate() }
         try? inPipe.fileHandleForWriting.close()

@@ -94,8 +94,11 @@ public enum LLMInjection {
 
     /// A target MCP tool as advertised (name + description), for poisoning analysis.
     public struct MCPTool: Sendable, Equatable {
+        /// The tool's advertised name.
         public let name: String
+        /// The tool's advertised description, the text checked for poisoning.
         public let description: String
+        /// A tool as advertised.
         public init(name: String, description: String) {
             self.name = name
             self.description = description
@@ -105,8 +108,11 @@ public enum LLMInjection {
     /// A tool-poisoning finding (F32 LLM-009): hidden instructions in a tool description that would
     /// steer a connected agent.
     public struct ToolPoisoning: Sendable, Equatable {
+        /// The name of the poisoned tool.
         public let tool: String
+        /// The suspicious phrase found in its description.
         public let cue: String
+        /// A finding.
         public init(tool: String, cue: String) {
             self.tool = tool
             self.cue = cue

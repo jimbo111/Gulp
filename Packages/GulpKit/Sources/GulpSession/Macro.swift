@@ -83,9 +83,10 @@ public struct MacroResult: Sendable {
 }
 
 /// Sends a macro's request and returns the response plus the recorded exchange id.
-public typealias MacroSender = @Sendable (RawRequest, HTTPTarget) async -> (
-    response: RawResponse?, exchangeID: ExchangeID, error: String?
-)
+public typealias MacroSender =
+    @Sendable (RawRequest, HTTPTarget) async -> (
+        response: RawResponse?, exchangeID: ExchangeID, error: String?
+    )
 
 /// Replays a macro to refresh session state (SES-020).
 public struct MacroRunner: Sendable {

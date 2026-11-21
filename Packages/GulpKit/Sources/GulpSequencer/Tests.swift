@@ -9,10 +9,13 @@ import Foundation
 
 /// One test's outcome.
 public struct RandomnessTest: Sendable, Codable {
+    /// The test's display name.
     public let name: String
     /// The test's p-value in `[0, 1]`, or nil when there were too few bits to run it.
     public let pValue: Double?
+    /// Whether the p-value met the significance level (a skipped test counts as passed).
     public let passed: Bool
+    /// A short detail for the report, such as the counts behind the statistic or why it was skipped.
     public let note: String
 
     static func skipped(_ name: String, _ note: String) -> RandomnessTest {

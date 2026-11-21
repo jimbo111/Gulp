@@ -16,6 +16,7 @@ public struct CodecError: Error, Sendable, Equatable, CustomStringConvertible {
         self.message = message
     }
 
+    /// A readable form of the error: its message.
     public var description: String { message }
 }
 
