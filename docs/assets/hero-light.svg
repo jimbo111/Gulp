@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="372" viewBox="0 0 960 372" role="img" aria-labelledby="t d">
+<title id="t">Gulp intercepting a request</title>
+<desc id="d">A request held in Gulp's Intercept view is edited from role user to role admin, forwarded, and the response comes back with a mass-assignment finding.</desc>
+<style>
+    text { font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; }
+    .ui { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Helvetica, Arial, sans-serif; }
+    .ln { animation: ln 11s ease-out infinite both; }
+    .held { animation: held 11s ease-in-out infinite both; opacity: 0; }
+    .pulse { animation: pulse 1.1s ease-in-out infinite alternate; }
+    .old { animation: old 11s ease-in-out infinite both; }
+    .strike { animation: strike 11s ease-in-out infinite both; transform-origin: 273.36px 256px; }
+    .new { animation: new 11s ease-out infinite both; }
+    .fwd { animation: fwd 11s ease-in-out infinite both; }
+    .res { animation: res 11s cubic-bezier(.2,.7,.2,1) infinite both; }
+    .rs { animation: rs 11s ease-out infinite both; }
+    .find { animation: find 11s cubic-bezier(.2,.7,.2,1) infinite both; }
+    @keyframes ln { 0% { opacity: 0; } 4% { opacity: 1; } 94% { opacity: 1; } 100% { opacity: 0; } }
+    @keyframes held { 0%,9% { opacity: 0; } 13%,44% { opacity: 1; } 50%,100% { opacity: 0; } }
+    @keyframes old { 0%,22% { opacity: 1; } 30%,94% { opacity: .45; } 100% { opacity: 0; } }
+    @keyframes strike { 0%,22% { transform: scaleX(0); } 27%,94% { transform: scaleX(1); } 100% { transform: scaleX(1); opacity: 0; } }
+    @keyframes new { 0%,28% { opacity: 0; transform: translateY(6px); } 33%,94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+    @keyframes fwd { 0%,40% { opacity: .25; } 45%,55% { opacity: 1; } 62%,94% { opacity: .25; } 100% { opacity: 0; } }
+    @keyframes res { 0%,50% { opacity: 0; transform: translateX(24px); } 56%,94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+    @keyframes rs { 0%,54% { opacity: 0; } 59%,94% { opacity: 1; } 100% { opacity: 0; } }
+    @keyframes find { 0%,66% { opacity: 0; transform: translateY(10px); } 71%,94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+    @keyframes pulse { from { opacity: 1; } to { opacity: .35; } }
+    @media (prefers-reduced-motion: reduce) {
+      *, .ln, .old, .strike, .new, .fwd, .res, .rs, .find, .pulse { animation: none !important; }
+      .held { opacity: 0 !important; }
+      .old { opacity: .45; }
+    }
+    </style>
+<rect x="8.5" y="10.5" width="943" height="351" rx="12" fill="#FFFFFF" stroke="#D0D7DE"/>
+<clipPath id="win"><rect x="8.5" y="10.5" width="943" height="351" rx="12"/></clipPath>
+<g clip-path="url(#win)">
+<rect x="8" y="10" width="944" height="41" fill="#F0F2F5"/>
+<rect x="8" y="51" width="161.5" height="322" fill="#F0F2F5"/>
+</g>
+<rect x="8.5" y="10.5" width="943" height="351" rx="12" fill="none" stroke="#D0D7DE"/>
+<line x1="8.5" y1="50.5" x2="951.5" y2="50.5" stroke="#D0D7DE"/>
+<circle cx="32" cy="30.5" r="6" fill="#FF5F57"/><circle cx="52" cy="30.5" r="6" fill="#FEBC2E"/><circle cx="72" cy="30.5" r="6" fill="#28C840"/>
+
+<line x1="169.5" y1="51" x2="169.5" y2="361.5" stroke="#D0D7DE"/>
+<text class="ui" x="32" y="84" font-size="13" font-weight="400" fill="#1F2328">Dashboard</text><rect x="20" y="96" width="138" height="27" rx="6" fill="#0969DA" fill-opacity=".14"/><text class="ui" x="32" y="115" font-size="13" font-weight="600" fill="#0969DA">Proxy</text><text class="ui" x="32" y="146" font-size="13" font-weight="400" fill="#1F2328">Target</text><text class="ui" x="32" y="177" font-size="13" font-weight="400" fill="#1F2328">Repeater</text><text class="ui" x="32" y="208" font-size="13" font-weight="400" fill="#1F2328">Fuzzer</text><text class="ui" x="32" y="239" font-size="13" font-weight="400" fill="#1F2328">Scanner</text><text class="ui" x="32" y="270" font-size="13" font-weight="400" fill="#1F2328">Decoder</text><text class="ui" x="32" y="301" font-size="13" font-weight="400" fill="#1F2328">Notebook</text>
+<text class="ui" x="480.0" y="35" text-anchor="middle" font-size="13" font-weight="600" fill="#1F2328">Gulp</text>
+<text class="ui" x="206" y="80" font-size="12.5" font-weight="600" fill="#656D76">Intercept</text>
+<g class="held">
+  <rect x="192" y="98" width="362" height="172" rx="7" fill="#FFF1C2"/>
+  <rect x="192" y="98" width="3" height="172" fill="#9A6700"/>
+  <circle class="pulse" cx="506" cy="76" r="4" fill="#9A6700"/>
+  <text class="ui" x="516" y="80" font-size="12.5" font-weight="600" fill="#9A6700">Held</text>
+</g>
+<text class="ln" style="animation-delay:0.15s" x="206" y="118"><tspan fill="#0969DA" font-weight="600">POST</tspan><tspan fill="#1F2328"> /api/account HTTP/1.1</tspan></text><text class="ln" style="animation-delay:0.24s" x="206" y="141"><tspan fill="#656D76">Host</tspan><tspan fill="#1F2328">: shop.example</tspan></text><text class="ln" style="animation-delay:0.33s" x="206" y="164"><tspan fill="#656D76">Cookie</tspan><tspan fill="#1F2328">: session=7f3c9a21e0</tspan></text><text class="ln" style="animation-delay:0.42s" x="206" y="187"><tspan fill="#656D76">Content-Type</tspan><tspan fill="#1F2328">: application/json</tspan></text><text class="ln" style="animation-delay:0.60s" x="206" y="233"><tspan fill="#1F2328">{&quot;email&quot;:&quot;ana@shop.example&quot;,</tspan></text><text class="ln" style="animation-delay:0.69s" x="206" y="256"><tspan fill="#1F2328"> &quot;role&quot;:</tspan></text>
+<g class="ln" style="animation-delay:.7s">
+  <text class="old" x="273.36" y="256" fill="#1F2328">"user"</text>
+  <line class="strike" x1="273.36" y1="251" x2="323.88" y2="251" stroke="#CF222E" stroke-width="1.6"/>
+</g>
+<g class="new">
+  <rect x="331.88" y="240" width="75.36" height="21" rx="4" fill="#D6F3EC"/>
+  <text x="335.88" y="256" fill="#0F7B68" font-weight="600">"admin"<tspan fill="#1F2328" font-weight="400">}</tspan></text>
+</g>
+<g class="fwd">
+  <rect x="206" y="286" width="92" height="28" rx="6" fill="none" stroke="#0969DA"/>
+  <text class="ui" x="252" y="305" text-anchor="middle" font-size="13" font-weight="600" fill="#0969DA">Forward</text>
+</g>
+<g class="res">
+  <line x1="570" y1="66" x2="570" y2="348" stroke="#D0D7DE"/>
+  <text class="ui" x="596" y="80" font-size="12.5" font-weight="600" fill="#656D76">Response</text>
+  <text class="rs" x="596" y="118"><tspan fill="#1F2328">HTTP/1.1 </tspan><tspan fill="#0F7B68" font-weight="600">200 OK</tspan></text><text class="rs" x="596" y="141"><tspan fill="#656D76">Content-Type</tspan><tspan fill="#1F2328">: application/json</tspan></text><text class="rs" x="596" y="187"><tspan fill="#1F2328">{&quot;email&quot;:&quot;ana@shop.example&quot;,</tspan></text><text class="rs" x="596" y="210"><tspan fill="#1F2328"> &quot;role&quot;:&quot;admin&quot;}</tspan></text>
+</g>
+<g class="find">
+  <rect x="590" y="247" width="334" height="74" rx="8" fill="#FFE4E6"/>
+  <rect x="590" y="247" width="3" height="74" fill="#CF222E"/>
+  <text class="ui" x="606" y="273" font-size="14" font-weight="600" fill="#CF222E">Mass assignment</text>
+  <text class="ui" x="606" y="295" font-size="13" fill="#1F2328">The server accepted "role" from the client.</text>
+</g>
+</svg>

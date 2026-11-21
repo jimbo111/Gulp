@@ -1,0 +1,25 @@
+name: Bug report
+description: Something in Gulp doesn't work as it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what Gulp did instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Steps or a raw request, ideally against VulnLab (`make vulnlab`). Don't paste real targets or captured credentials.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Commit hash or release, macOS version, and `swift --version`.
+    validations:
+      required: true

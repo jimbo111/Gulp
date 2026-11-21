@@ -1,4 +1,11 @@
-# Gulp
+<h1 align="center">Gulp</h1>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.svg">
+    <img src="docs/assets/hero-light.svg" width="880" alt="Gulp holds a request in Intercept, the user changes &quot;role&quot; from user to admin, forwards it, and the response comes back with a mass-assignment finding.">
+  </picture>
+</p>
 
 A web security testing suite for macOS, written in Swift. It's an intercepting proxy with the whole
 workbench attached: Repeater, Fuzzer, Scanner, Crawler, out-of-band testing, and a set of
@@ -38,7 +45,7 @@ twin under `/safe/` with the same shape and the bug fixed: `/sqli/error` and `/s
 Each check has to find the bug on one and stay quiet on the other. Catching the bug proves the check
 works. Staying quiet on the fixed twin proves it isn't just flagging every response.
 
-The test suite is built around it: 563 unit tests and 41 end-to-end scripts that start VulnLab,
+The test suite is built around it: 640 unit tests and 41 end-to-end scripts that start VulnLab,
 drive the real CLI against it, and fail if a finding lands on a `/safe/` route.
 
 ## What's in it
@@ -76,7 +83,15 @@ If you've used Burp Suite you already know the layout. The names differ in a few
 
 ## Try it
 
-You need Swift 6.1 or later. The engines and CLI build on macOS 14+ and on Linux.
+You need Swift 6.1 or later. The engines and CLI build on macOS 14+ and on Linux; the app needs
+macOS 14+ and Xcode.
+
+```bash
+make bootstrap && make run     # macOS: generate the Xcode project, build Gulp.app, launch it
+```
+
+The app listens as a proxy on `127.0.0.1:8080`. Point a browser at it, or use the toolbar's
+Open Browser for a preconfigured one. To stay headless, use the CLI:
 
 ```bash
 make vulnlab          # terminal 1: VulnLab on http://127.0.0.1:8088 (binds localhost only)
@@ -121,13 +136,14 @@ Leave out `--approval in-scope` and the agent can read but not send.
 
 ## Status
 
-Honest version: **the engines and the CLI are the finished part.** Everything above runs headless
-and is tested on Linux and macOS (563 tests). GitHub Actions can't run right now, so the local
-`make test` + `make lint` is the gate.
+Pre-release. **The engines and the CLI are the finished part:** everything above runs headless and
+is tested on macOS and Linux (640 tests, 41 end-to-end scripts against VulnLab).
 
-The macOS app (SwiftUI) is written and, as of 2026-11-20, builds on macOS, but its screens haven't
-been tested in use yet, so treat the GUI as pre-alpha. Brotli/zstd decoding, an extension gallery and some polish are
-still on the list. [`docs/PROGRESS.md`](docs/PROGRESS.md) has the unvarnished details.
+The macOS app builds, and its UI tests open every tool and send a request from Repeater to VulnLab.
+It hasn't had a daily-driver beta yet, there are no signed downloads, and a few screens (Assistant,
+Extensions, DOM Probe) are still previews of engines the CLI already drives. Brotli/zstd decoding
+and an extension gallery are still on the list. [`docs/PROGRESS.md`](docs/PROGRESS.md) tracks every
+milestone as it stands.
 
 ## How it's built
 
@@ -138,13 +154,20 @@ still on the list. [`docs/PROGRESS.md`](docs/PROGRESS.md) has the unvarnished de
   out-of-scope targets unless you override them for that one action.
 - **Swift 6 with strict concurrency.** SwiftNIO for networking, swift-crypto and swift-certificates
   for the CA, SQLite (GRDB) for `.gulp` project files, JavaScriptCore for scripting.
-- **The rules are checked by machine.** `make rules` runs the architecture and hard-rule checks
-  that CI enforces, like no bare network engine in an active tool, and no randomness in tests
-  without a seed.
+- **The rules are checked by machine.** `make rules` (part of `make lint`) runs the architecture
+  and hard-rule checks, like no bare network engine in an active tool, no silent store writes, and
+  no randomness in tests without a seed.
 
 The code is one SwiftPM package (`Packages/GulpKit`) split into layered modules. The app is a thin
 shell over it. [`docs/01-architecture.md`](docs/01-architecture.md) has the module map, and
 [`docs/07-decisions.md`](docs/07-decisions.md) explains why each piece is the way it is.
+
+## Contributing
+
+Bug reports and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers the build, the
+gate (`make test` and `make lint`) and how changes are reviewed. If you use a coding agent,
+[AGENTS.md](AGENTS.md) is the brief it should read first. Found a vulnerability in Gulp itself? See
+[SECURITY.md](SECURITY.md).
 
 ## Use it on things you're allowed to test
 

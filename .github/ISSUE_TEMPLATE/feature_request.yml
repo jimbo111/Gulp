@@ -1,0 +1,16 @@
+name: Feature request
+description: A check, tool or workflow Gulp should have
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you're trying to test
+      description: The bug class or workflow, and why the current tools don't cover it.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How you'd expect it to work. For a new check, what a vulnerable and a fixed endpoint look like.
