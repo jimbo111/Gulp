@@ -156,6 +156,15 @@ milestone are listed there instead.
 Newest first. Dates up to `40c513b` were written by Linux sessions in UTC, so the 2026-11-20 macOS
 entry at the top is later than the 2026-11-21 entry below it. Within a day the order is approximate.
 
+- 2026-11-21 — **UI defects from the README screenshots**, fixed at the shared cause and checked
+  by eye in regenerated `docs/assets/screens/`: editor plain text drew black in dark mode (the
+  highlighter removed the color attribute; now `NSColor.textColor`); split views sized to their
+  panes' ideal height (GulpUI `HSplit`/`VSplit`, rules-check rule 7); filter bars truncated chips
+  or widened the detail past the window, which also squeezed the Target sidebar (GulpUI
+  `FlowLayout`); Panic Stop named a nonexistent SF Symbol (test now checks every symbol name);
+  Writing Tools' button lingered over the sidebar (off in all text views); Scanner had no title
+  (titles default to the sidebar name); Proxy's `TabView` moved into the toolbar and hid the
+  title (now a segmented control). Windows open at 1280×820, minimum 1000×640 (doc 07).
 - 2026-11-21 — **Public repo and first green CI.** Recreated `jimbo111/Gulp` fresh and public
   (history rewritten: no AI trailers, owner's noreply identity); README with an animated hero;
   CONTRIBUTING, SECURITY (private vulnerability reporting on), issue/PR templates; `CLAUDE.md` →
