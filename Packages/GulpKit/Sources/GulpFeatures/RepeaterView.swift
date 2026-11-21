@@ -25,10 +25,11 @@ public final class RepeaterModel {
     public var selectedID: Int64? {
         didSet { if oldValue != selectedID { loadSelection() } }
     }
-    /// The selected tab's request, as edited.
+    /// The selected tab's request, as edited (saved to the tab here and in the service).
     public var draft: [UInt8] = [] {
         didSet {
             guard !loading, draft != oldValue, let id = selectedID else { return }
+            if let index = tabs.firstIndex(where: { $0.id == id }) { tabs[index].draft = draft }
             let repeater = session.repeater
             let bytes = draft
             Task { await repeater.updateDraft(id, bytes: bytes) }
@@ -48,8 +49,11 @@ public final class RepeaterModel {
     public private(set) var shown: Exchange?
     /// The redirect hops before `shown` (from the last send).
     public private(set) var chain: [Exchange] = []
-    /// A streamed response as it arrives (REP-016).
+    /// The first `liveLimit` bytes of a streamed response as it arrives (REP-016), refreshed at most
+    /// every 100 ms.
     public private(set) var live: [UInt8] = []
+    /// How many bytes of the streamed response have arrived so far.
+    public private(set) var liveTotal = 0
     /// A WebSocket tab's message log for its current session (REP-012).
     public private(set) var webSocketLog: [RepeaterWSEntry] = []
     /// Whether the selected WebSocket tab is connected.
@@ -91,18 +95,35 @@ public final class RepeaterModel {
     @ObservationIgnored private var loading = false
     @ObservationIgnored private var listener: Task<Void, Never>?
     @ObservationIgnored private var webSocketWatch: Task<Void, Never>?
+    /// The streamed response shown live: its tab, the bytes not yet published, and the 100 ms tick
+    /// that publishes them (CLAUDE.md §4).
+    @ObservationIgnored private var liveTab: Int64?
+    @ObservationIgnored private var livePending: [UInt8] = []
+    @ObservationIgnored private var livePendingTotal = 0
+    @ObservationIgnored private var liveTicker: Task<Void, Never>?
 
-    /// The Repeater of `session`.
+    /// The live view keeps at most this many bytes (what `MessageViewer` displays anyway).
+    static let liveLimit = MessageViewer.displayLimit
+
+    /// The Repeater of `session`. Follows "Send to Repeater" until `stop()`.
     public init(session: ProjectSession) {
         self.session = session
         listener = Task { [weak self] in
             guard let opened = await self?.session.repeaterTabsOpened() else { return }
             for await id in opened {
-                await self?.reload(select: id)
+                guard let self else { return }
+                await self.reload(select: id)
             }
         }
         // Opened by "Send to Repeater": the newest tab (just appended) is the one to show.
         Task { await reload(select: await session.repeater.allTabs.last?.id) }
+    }
+
+    /// Stop following the session (its window is closing).
+    public func stop() {
+        listener?.cancel()
+        webSocketWatch?.cancel()
+        endLive()
     }
 
     /// The selected tab.
@@ -406,16 +427,24 @@ public final class RepeaterModel {
     private func performSend(_ id: Int64) {
         guard !sendingTabs.contains(id) else { return }
         sendingTabs.insert(id)
-        live = []
+        beginLive(for: id)
         let repeater = session.repeater
-        Task {
-            let result = await repeater.send(id) { [weak self] bytes in
-                Task { @MainActor in self?.received(bytes, for: id) }
+        // Chunks arrive in order on one stream; the main actor only buffers them, and the 100 ms
+        // tick publishes.
+        let (chunks, delivery) = AsyncStream.makeStream(of: [UInt8].self)
+        Task { [weak self] in
+            for await bytes in chunks {
+                guard let self else { return }
+                self.received(bytes, for: id)
             }
+        }
+        Task {
+            let result = await repeater.send(id) { bytes in delivery.yield(bytes) }
+            delivery.finish()
             sendingTabs.remove(id)
+            if liveTab == id { endLive() }
             guard selectedID == id else { return }
             history = await repeater.history(id)
-            live = []
             if let result {
                 shown = result.exchange
                 chain = result.redirectChain
@@ -431,9 +460,47 @@ public final class RepeaterModel {
         Task { await repeater.cancel(id) }
     }
 
-    private func received(_ bytes: [UInt8], for id: Int64) {
-        guard selectedID == id, sendingTabs.contains(id) else { return }
-        live += bytes
+    /// Whether the live view belongs to the selected tab.
+    public var showsLive: Bool { isSending && liveTab == selectedID }
+
+    /// Start showing tab `id`'s streamed response.
+    func beginLive(for id: Int64) {
+        endLive()
+        liveTab = id
+        liveTicker = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(100))
+                guard let self else { return }
+                self.publishLive()
+            }
+        }
+    }
+
+    /// Buffer a streamed chunk; only the first `liveLimit` bytes are kept.
+    func received(_ bytes: [UInt8], for id: Int64) {
+        guard liveTab == id else { return }
+        livePendingTotal += bytes.count
+        let room = Self.liveLimit - live.count - livePending.count
+        if room > 0 { livePending += bytes.prefix(room) }
+    }
+
+    private func publishLive() {
+        if !livePending.isEmpty {
+            live += livePending
+            livePending = []
+        }
+        if liveTotal != livePendingTotal { liveTotal = livePendingTotal }
+    }
+
+    /// Drop the live view (the send finished, or another began).
+    func endLive() {
+        liveTicker?.cancel()
+        liveTicker = nil
+        liveTab = nil
+        livePending = []
+        livePendingTotal = 0
+        live = []
+        liveTotal = 0
     }
 
     // MARK: history (REP-004)
@@ -932,9 +999,10 @@ public struct RepeaterView: View {
 
     @ViewBuilder private var responseSide: some View {
         VStack(spacing: 0) {
-            if model.isSending {
+            if model.showsLive {
                 MessageViewer(
-                    title: "Response (receiving…)", bytes: model.live.isEmpty ? nil : Bytes(model.live))
+                    title: "Response (receiving… \(model.liveTotal) bytes)",
+                    bytes: model.live.isEmpty ? nil : Bytes(model.live))
             } else {
                 ResponsePane(exchange: model.shown)
             }
