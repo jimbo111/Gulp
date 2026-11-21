@@ -1,6 +1,7 @@
-// GulpHTTP — the SwiftNIO implementation of `HTTPEngine`. M1 scope: HTTP/1 over plain TCP
-// (HTTP-001…HTTP-005, HTTP-008…HTTP-010). TLS and HTTP/2 arrive in M3, WebSockets in M4,
-// single-packet group sends in M5.
+// GulpHTTP — the SwiftNIO implementation of `HTTPEngine` (F03): raw HTTP/1 over TCP or TLS, HTTP/2
+// when negotiated (HTTP2Client.swift), upstream proxies, redirects, WebSocket upgrades
+// (WebSocketUpgrade.swift) and group sends (GroupSend.swift). Raw HTTP/2 from an `H2RequestSpec`
+// (HTTP-025) is not implemented yet.
 
 import Foundation
 import GulpCore
@@ -171,7 +172,7 @@ public final class NIOHTTPEngine: HTTPEngine {
         while chain.count - authHops < options.followRedirects.maxHops, result.error == nil,
             !Task.isCancelled,
             let response = result.exchange.response,
-            let next = Redirects.next(
+            let next = await Redirects.next(
                 after: response, request: current.request, target: current.target,
                 policy: options.followRedirects, scope: options.scope)
         {
@@ -183,15 +184,15 @@ public final class NIOHTTPEngine: HTTPEngine {
         return result
     }
 
-    /// Raw HTTP/2 from a structured spec (HTTP-025, P1) arrives with the Repeater (M5); ordinary
-    /// requests already use HTTP/2 when the server negotiates it.
+    /// Raw HTTP/2 from a structured spec (HTTP-025, P1) is not implemented: this records a failed
+    /// exchange saying so. Ordinary requests use HTTP/2 whenever the server negotiates it.
     public func send(
         _ request: H2RequestSpec, to target: HTTPTarget, options: SendOptions
     ) async -> ExchangeResult {
         let outgoing = OutgoingRequest(request: RawRequest(Bytes()), target: target)
         return await finish(
             outgoing, options: options, wire: nil,
-            error: .other("Raw HTTP/2 (H2RequestSpec) sends arrive with the Repeater (M5)"),
+            error: .other("Raw HTTP/2 (H2RequestSpec) sending is not implemented yet (HTTP-025)"),
             connectionID: 0, timing: Timing())
     }
 
@@ -678,7 +679,7 @@ public final class NIOHTTPEngine: HTTPEngine {
         let result = await connection.send(
             parts, maxResponseBytes: options.maxResponseBytes, deadline: deadline)
         if !Task.isCancelled, result.error == .connectionReset || result.error == .incompleteResponse {
-            await h2Pool.remove(connection, for: key)  // GOAWAY or a dead connection: don't reuse
+            await h2Pool.remove(connection, for: key)  // dead: don't reuse (GOAWAY: see isUsable)
         }
         var wire: WireResponse?
         if let received = result.received {
@@ -773,8 +774,7 @@ public final class NIOHTTPEngine: HTTPEngine {
         }
         text += "\r\n"
         let result = await exchange(
-            on: channel, request: RawRequest(Bytes(text)), options: options, totalDeadline: deadline,
-            isConnect: true)
+            on: channel, request: RawRequest(Bytes(text)), options: options, totalDeadline: deadline)
         let status = RawResponse(Bytes(result.wire.bytes)).parsed.statusCode
         guard result.wire.error == nil, (200..<300).contains(status) else {
             channel.close(promise: nil)
@@ -792,15 +792,14 @@ public final class NIOHTTPEngine: HTTPEngine {
 
     /// Write the exact request bytes and wait for the framed response.
     func exchange(
-        on channel: any Channel, request: RawRequest, options: SendOptions, totalDeadline: NIODeadline,
-        isConnect: Bool = false
+        on channel: any Channel, request: RawRequest, options: SendOptions, totalDeadline: NIODeadline
     ) async -> WireResult {
         var buffer = channel.allocator.buffer(capacity: request.bytes.count)
         buffer.writeBytes(request.bytes.rawBytes)
         let promise = channel.eventLoop.makePromise(of: WireResponse.self)
         let command = RequestCommand(
-            bytes: buffer, isHead: request.bytes[request.parsed.method].string() == "HEAD",
-            isConnect: isConnect, maxResponseBytes: options.maxResponseBytes,
+            bytes: buffer, method: request.bytes[request.parsed.method].string(),
+            maxResponseBytes: options.maxResponseBytes,
             firstByteTimeout: timeAmount(options.timeouts.firstByte),
             idleTimeout: timeAmount(options.timeouts.idleBetweenBytes), totalDeadline: totalDeadline,
             promise: promise, onBytes: options.onResponseBytes)

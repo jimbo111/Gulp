@@ -128,9 +128,10 @@ let package = Package(
         .target(name: "GulpSequencer", dependencies: ["GulpCore", "GulpHTTP"]),
         .target(name: "GulpReport", dependencies: ["GulpCore"]),
         .target(name: "GulpExtensions", dependencies: ["GulpCore", "GulpHTTP"]),
-        // GulpAI is an orchestration-layer consumer (architecture §3 rule 6): it builds on the
-        // GulpWorkspace agent tool surface, so it depends on GulpWorkspace, not the other way round.
-        .target(name: "GulpAI", dependencies: ["GulpCore", "GulpWorkspace", "GulpReport"]),
+        // GulpAI is an orchestration-layer consumer (architecture §3 rule 6): it runs tools through
+        // the GulpWorkspace agent tool surface (APIGate), so it depends on GulpWorkspace, not the
+        // other way round, and never on GulpAutomation.
+        .target(name: "GulpAI", dependencies: ["GulpWorkspace"]),
 
         // macOS-capability modules (empty shells on Linux). GulpBrowser implements
         // GulpCrawler's BrowserDriver; GulpWorkspace injects it on macOS.
@@ -149,12 +150,9 @@ let package = Package(
                 "GulpCrawler", "GulpScanner", "GulpSequencer", "GulpReport", "GulpExtensions",
                 "GulpBrowser", "GulpScript",
             ]),
-        .target(
-            name: "GulpAutomation",
-            dependencies: [
-                "GulpCore", "GulpWorkspace", "GulpStore", "GulpHTTP",
-                .product(name: "Hummingbird", package: "hummingbird"),
-            ]),
+        // GulpAutomation is the MCP server over the same APIGate (rule 6). The REST API (AUT-010) is
+        // not built yet; it adds its HTTP server dependency when it lands.
+        .target(name: "GulpAutomation", dependencies: ["GulpCore", "GulpWorkspace"]),
 
         // ---- UI layer (macOS content; empty on Linux) ----
         .target(
@@ -244,7 +242,8 @@ let package = Package(
         .testTarget(name: "GulpSequencerTests", dependencies: ["GulpSequencer", "GulpTestSupport"]),
         .testTarget(name: "GulpReportTests", dependencies: ["GulpReport", "GulpCore"]),
         .testTarget(name: "GulpExtensionsTests", dependencies: ["GulpExtensions"]),
-        .testTarget(name: "GulpAITests", dependencies: ["GulpAI"]),
+        .testTarget(
+            name: "GulpAITests", dependencies: ["GulpAI", "GulpWorkspace", "GulpCore", "GulpStore"]),
         .testTarget(name: "GulpBrowserTests", dependencies: ["GulpBrowser"]),
         .testTarget(name: "GulpVulnLabTests", dependencies: ["gulp-vulnlab", "GulpCore"]),
         .testTarget(name: "GulpScriptTests", dependencies: ["GulpScript"]),

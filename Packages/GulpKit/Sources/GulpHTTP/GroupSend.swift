@@ -299,8 +299,8 @@ extension NIOHTTPEngine {
             let waitForFinal = timeAmount(options.singlePacketWarmUp) + .seconds(5)
             let command = RequestCommand(
                 bytes: channel.allocator.buffer(bytes: bytes.dropLast()),
-                isHead: outgoing.request.bytes[outgoing.request.parsed.method].string() == "HEAD",
-                isConnect: false, maxResponseBytes: itemOptions.maxResponseBytes,
+                method: outgoing.request.bytes[outgoing.request.parsed.method].string(),
+                maxResponseBytes: itemOptions.maxResponseBytes,
                 firstByteTimeout: timeAmount(itemOptions.timeouts.firstByte) + waitForFinal,
                 idleTimeout: timeAmount(itemOptions.timeouts.idleBetweenBytes), totalDeadline: deadline,
                 promise: promise)
@@ -325,7 +325,7 @@ extension NIOHTTPEngine {
                     // promise is unused (the handler never sees it), so it is completed here.
                     let unused = loop.makePromise(of: WireResponse.self)
                     var command = RequestCommand(
-                        bytes: item.final, isHead: false, isConnect: false, maxResponseBytes: 0,
+                        bytes: item.final, method: "", maxResponseBytes: 0,
                         firstByteTimeout: .seconds(0), idleTimeout: .seconds(0),
                         totalDeadline: .distantFuture, promise: unused)
                     command.continuation = true
@@ -447,7 +447,7 @@ extension NIOHTTPEngine {
             let request = entry.outgoing.request
             var command = RequestCommand(
                 bytes: channel.allocator.buffer(bytes: request.bytes.rawBytes),
-                isHead: request.bytes[request.parsed.method].string() == "HEAD", isConnect: false,
+                method: request.bytes[request.parsed.method].string(),
                 maxResponseBytes: entry.options.maxResponseBytes,
                 firstByteTimeout: timeAmount(entry.options.timeouts.firstByte),
                 idleTimeout: timeAmount(entry.options.timeouts.idleBetweenBytes), totalDeadline: deadline,

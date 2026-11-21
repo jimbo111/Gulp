@@ -9,7 +9,8 @@ import Security
 
 /// Persistent storage for the CA.
 public protocol CAStore: Sendable {
-    /// The stored CA, or nil if none was saved yet.
+    /// The stored CA, or nil only when nothing was saved yet. A CA that exists but can't be read
+    /// (or is half there) throws: `loadOrCreate` must never replace a root the user trusts.
     func load() throws -> CertificateAuthority?
     /// Save (replace) the CA.
     func save(_ authority: CertificateAuthority) throws
@@ -18,7 +19,8 @@ public protocol CAStore: Sendable {
 }
 
 extension CertificateAuthority {
-    /// Load the CA from `store`, or generate and save a new one (first run, TLS-001).
+    /// Load the CA from `store`, or generate and save a new one (first run, TLS-001). A stored CA
+    /// that fails to load is an error, never a reason to make a new one.
     public static func loadOrCreate(
         from store: any CAStore, keyType: CAKeyType = .rsa2048
     ) throws -> CertificateAuthority {
@@ -48,12 +50,16 @@ public struct FileCAStore: CAStore {
     var certificateURL: URL { directory.appendingPathComponent("ca.pem") }
     var keyURL: URL { directory.appendingPathComponent("ca.key") }
 
-    /// Load `ca.pem` + `ca.key`.
+    /// Load `ca.pem` + `ca.key`; nil when neither exists.
     public func load() throws -> CertificateAuthority? {
-        guard let certificate = try? String(contentsOf: certificateURL, encoding: .utf8),
-            let key = try? String(contentsOf: keyURL, encoding: .utf8)
-        else { return nil }
-        return try CertificateAuthority(certificatePEM: certificate, privateKeyPEM: key)
+        let manager = FileManager.default
+        let present = [certificateURL, keyURL].filter { manager.fileExists(atPath: $0.path) }
+        if present.isEmpty { return nil }
+        guard present.count == 2 else {
+            throw TLSError.storage("\(directory.path) holds only \(present[0].lastPathComponent)")
+        }
+        return try CertificateAuthority(
+            certificatePEM: FileSecrets.read(certificateURL), privateKeyPEM: FileSecrets.read(keyURL))
     }
 
     /// Write both files; the key file is created with mode 0600.
@@ -81,12 +87,33 @@ enum FileSecrets {
         }
     }
 
-    /// Replace the file at `url` with `data`, created with `mode` (never briefly world-readable).
+    static func read(_ url: URL) throws -> String {
+        do {
+            return try String(contentsOf: url, encoding: .utf8)
+        } catch {
+            throw TLSError.storage("cannot read \(url.path): \(error)")
+        }
+    }
+
+    /// Replace the file at `url` with `data`. The bytes go to a new file created with `mode`
+    /// (`O_EXCL`, so it is never briefly readable by others), which is then renamed over `url`:
+    /// the old file stays whole until the new one is.
     static func write(_ data: Data, to url: URL, mode: Int) throws {
-        let manager = FileManager.default
-        if manager.fileExists(atPath: url.path) { try? manager.removeItem(at: url) }
-        guard manager.createFile(atPath: url.path, contents: data, attributes: [.posixPermissions: mode])
-        else { throw TLSError.storage("cannot write \(url.path)") }
+        let temporary = url.path + ".\(UUID().uuidString).tmp"
+        let fd = open(temporary, O_WRONLY | O_CREAT | O_EXCL, mode_t(mode))
+        guard fd >= 0 else { throw TLSError.storage("cannot create \(temporary) (errno \(errno))") }
+        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        do {
+            try handle.write(contentsOf: data)
+            try handle.close()
+        } catch {
+            unlink(temporary)
+            throw TLSError.storage("cannot write \(temporary): \(error)")
+        }
+        guard rename(temporary, url.path) == 0 else {
+            unlink(temporary)
+            throw TLSError.storage("cannot write \(url.path) (errno \(errno))")
+        }
     }
 }
 
@@ -108,19 +135,25 @@ public struct KeychainCAStore: CAStore {
 
     var certificateURL: URL { directory.appendingPathComponent("ca.pem") }
 
-    /// Load the certificate file and the Keychain key.
+    /// Load the certificate file and the Keychain key; nil when neither exists.
     public func load() throws -> CertificateAuthority? {
-        guard let certificate = try? String(contentsOf: certificateURL, encoding: .utf8) else { return nil }
         var query = baseQuery
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return nil }
+        let hasCertificate = FileManager.default.fileExists(atPath: certificateURL.path)
+        if status == errSecItemNotFound {
+            guard hasCertificate else { return nil }
+            throw TLSError.storage("\(certificateURL.path) exists but its Keychain key is missing")
+        }
         guard status == errSecSuccess, let data = result as? Data,
             let pem = String(data: data, encoding: .utf8)
         else { throw TLSError.storage("Keychain read failed (\(status))") }
-        return try CertificateAuthority(certificatePEM: certificate, privateKeyPEM: pem)
+        guard hasCertificate else {
+            throw TLSError.storage("the Keychain holds a CA key but \(certificateURL.path) is missing")
+        }
+        return try CertificateAuthority(certificatePEM: FileSecrets.read(certificateURL), privateKeyPEM: pem)
     }
 
     /// Save the certificate file and replace the Keychain key.

@@ -1,6 +1,6 @@
 // GulpCore — Server-Sent Events for the History "Events" view (F05 HIS-007): an incremental
-// `text/event-stream` parser (WHATWG HTML §9.2.6), an incremental chunked-body decoder, and the
-// event timeline of a recorded streamed response (each event with the time its bytes arrived).
+// `text/event-stream` parser (WHATWG HTML §9.2.6) and the event timeline of a recorded streamed
+// response (each event with the time its bytes arrived; chunked bodies via `HTTP1.walkChunked`).
 
 /// One dispatched SSE event.
 public struct SSEEvent: Sendable, Equatable {
@@ -95,65 +95,6 @@ public struct SSEParser: Sendable {
     }
 }
 
-/// Incremental `Transfer-Encoding: chunked` body decoder: feed the body's wire bytes in any pieces.
-public struct ChunkedBodyDecoder: Sendable {
-    private enum State: Sendable {
-        case size, data(Int), dataEnd, trailer, done
-    }
-
-    private var state = State.size
-    private var line: [UInt8] = []
-
-    /// A decoder at the start of a body.
-    public init() {}
-
-    /// Feed bytes; returns the payload bytes they carried.
-    public mutating func feed(_ bytes: [UInt8]) -> [UInt8] {
-        var out: [UInt8] = []
-        var index = 0
-        while index < bytes.count {
-            switch state {
-            case .size, .dataEnd, .trailer:
-                let byte = bytes[index]
-                index += 1
-                guard byte == 0x0A else {
-                    line.append(byte)
-                    continue
-                }
-                let text = String(decoding: line, as: UTF8.self).trimmingSpaces()
-                line = []
-                switch state {
-                case .size:
-                    let hex = text.split(separator: ";", maxSplits: 1).first.map(String.init) ?? ""
-                    let size = Int(hex.trimmingSpaces(), radix: 16) ?? 0
-                    state = size == 0 ? .trailer : .data(size)
-                case .dataEnd:
-                    state = .size
-                default:
-                    if text.isEmpty { state = .done }
-                }
-            case .data(let remaining):
-                let take = min(remaining, bytes.count - index)
-                out += bytes[index..<(index + take)]
-                index += take
-                state = remaining - take == 0 ? .dataEnd : .data(remaining - take)
-            case .done:
-                return out
-            }
-        }
-        return out
-    }
-}
-
-extension String {
-    fileprivate func trimmingSpaces() -> String {
-        var s = Substring(self)
-        while let c = s.first, c == " " || c == "\t" || c == "\r" { s = s.dropFirst() }
-        while let c = s.last, c == " " || c == "\t" || c == "\r" { s = s.dropLast() }
-        return String(s)
-    }
-}
-
 /// The events of a recorded `text/event-stream` response.
 public enum SSETimeline {
     /// Whether `response` is an event stream.
@@ -167,30 +108,45 @@ public enum SSETimeline {
         let wire = response.bytes.rawBytes
         let (headerEnd, terminator) = HTTP1.headerBlockEnd(wire)
         guard terminator != 0 else { return [] }
-        let chunked = response.parsed.transferEncodingChunked
+        // The payload as ranges of `wire`: each chunk's data up to where the framing ends or breaks
+        // (the same walker every chunked view uses), or the whole body.
+        var payload: [Range<Int>] = []
+        if response.parsed.transferEncodingChunked {
+            _ = HTTP1.walkChunked(wire, from: headerEnd, data: { payload.append($0) })
+        } else {
+            payload = [headerEnd..<wire.count]
+        }
+        var parser = SSEParser()
         let isHTTP1 = response.bytes[response.parsed.version].string().hasPrefix("HTTP/1")
         let encoded = response.headerValue("content-encoding") != nil
-        var parser = SSEParser()
-        var decoder = ChunkedBodyDecoder()
-        func body(_ piece: [UInt8]) -> [UInt8] { chunked ? decoder.feed(piece) : piece }
         guard let marks, !marks.isEmpty, isHTTP1, !encoded, let total = marks.last?.offset else {
-            let whole = Array(wire[headerEnd...])
-            return parser.feed(isHTTP1 ? body(whole) : whole)
+            return parser.feed(payload.flatMap { wire[$0] })
         }
         // Marks count every byte received; bytes before this response (interim 1xx) come first.
         let shift = max(0, total - wire.count)
         var events: [SSEEvent] = []
         var position = headerEnd
+        var next = 0  // the first payload range not wholly fed yet
+        func take(upTo end: Int) -> [UInt8] {
+            var out: [UInt8] = []
+            while next < payload.count, payload[next].lowerBound < end {
+                let range = payload[next]
+                out += wire[max(range.lowerBound, position)..<min(range.upperBound, end)]
+                guard range.upperBound <= end else { break }
+                next += 1
+            }
+            return out
+        }
         for mark in marks {
             let end = min(wire.count, max(headerEnd, mark.offset - shift))
             guard end > position else { continue }
-            for var event in parser.feed(body(Array(wire[position..<end]))) {
+            for var event in parser.feed(take(upTo: end)) {
                 event.receivedMs = mark.ms
                 events.append(event)
             }
             position = end
         }
-        if position < wire.count { events += parser.feed(body(Array(wire[position...]))) }
+        if position < wire.count { events += parser.feed(take(upTo: wire.count)) }
         return events
     }
 }

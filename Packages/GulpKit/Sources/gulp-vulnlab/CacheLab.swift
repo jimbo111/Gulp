@@ -1,6 +1,6 @@
 // gulp-vulnlab — web cache poisoning & deception fixtures (F28 WCP-002/003). `/cache/poison` is a
-// URL-keyed cache: the FIRST request for a path is computed (reflecting an unkeyed `X-Forwarded-Host`
-// into the body) and stored; later requests for the same path are served the stored copy regardless of
+// URL-keyed cache: the FIRST request for a URL is computed (reflecting an unkeyed `X-Forwarded-Host`
+// into the body) and stored; later requests for the same URL are served the stored copy regardless of
 // their headers — so a header-less victim gets the poison a prior request planted (WCP-002's clean
 // follow-up). The `/safe/` twin never reflects the header, so there is nothing to cache. `/cache/acct`
 // is private content that the vulnerable app also serves — cacheable — at a static-looking suffix
@@ -18,11 +18,12 @@ enum CacheLab {
 
         switch route {
         case "/cache/poison":
-            // Cache keyed on path alone. A request that carries the unkeyed `X-Forwarded-Host` reflects
-            // it AND fills the cache (the poisoning request); a later request *without* the header is
-            // served that cached, poisoned copy (the victim) — the whole point of WCP-002. The safe twin
-            // never reflects the header and never caches anything attacker-controlled.
-            let key = path
+            // Cache keyed on the full request target (path and query, like a CDN's default key), not
+            // on the header. A request that carries the unkeyed `X-Forwarded-Host` reflects it AND
+            // fills the cache (the poisoning request); a later request for the same URL *without* the
+            // header is served that cached, poisoned copy (the victim) — the whole point of WCP-002.
+            // The safe twin never reflects the header and never caches anything attacker-controlled.
+            let key = request.bytes[request.parsed.target].string()
             let forwarded = request.headerValue("x-forwarded-host")?.string()
             func page(_ host: String) -> String { "<script src=\"https://\(host)/app.js\"></script>\n" }
             if let forwarded, !safe {

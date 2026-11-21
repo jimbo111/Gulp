@@ -18,6 +18,7 @@ public struct SessionRequestHook: RequestHook {
     /// A hook over `state`.
     public init(state: SessionState) { self.state = state }
 
+    /// Applies the session rules that match this request's source and target.
     public func willSend(_ req: inout OutgoingRequest, context: HookContext) async throws {
         req.request = await state.prepare(req.request, target: req.target, source: context.source)
     }
@@ -33,6 +34,7 @@ public struct SessionSignerHook: RequestHook {
     /// A signer over `state`.
     public init(state: SessionState) { self.state = state }
 
+    /// Signs the final request bytes when a signing scheme matches its source and target.
     public func willSend(_ req: inout OutgoingRequest, context: HookContext) async throws {
         let path = req.request.bytes[req.request.parsed.target].string()
         guard
@@ -54,6 +56,7 @@ public struct SessionResponseHook: ResponseHook {
     /// A hook over `state`.
     public init(state: SessionState) { self.state = state }
 
+    /// Feeds the response to the session state, which records cookies and nonces and marks staleness.
     public func didReceive(
         _ response: inout RawResponse, for request: OutgoingRequest, context: HookContext
     ) async throws {

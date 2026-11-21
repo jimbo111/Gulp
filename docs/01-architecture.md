@@ -154,13 +154,15 @@ Rules:
    higher one. Example: `GulpHTTP` defines `RequestHook`; `GulpSession` and `GulpExtensions`
    implement it; `GulpWorkspace` registers them.
 6. **Agent tool surface.** The set of capabilities an automated/AI caller can invoke (list/send
-   exchanges, start a scan, read issues, change scope…) — its request/response DTOs, JSON schemas,
-   and the `APIGate` that enforces ScopeGuard, the approval mode and the audit log — is defined once
-   in **`GulpWorkspace`** (orchestration). Both `GulpAutomation` (REST/MCP, F21) and `GulpAI`
-   (assistant, F22) are orchestration-layer consumers that depend on `GulpWorkspace` and reuse that
-   one definition; `GulpAI` additionally uses `GulpReport` for drafting. Neither imports the other,
-   and `GulpWorkspace` does **not** depend on `GulpAI`/`GulpAutomation` (that would cycle) — the app
-   and `GulpFeatures` compose them on top.
+   exchanges, start a scan, read issues, change scope…) is defined once in **`GulpWorkspace`**
+   (`APIGate.swift`): each tool's name, JSON schema, argument checks and JSON result, and the
+   `APIGate` every call goes through — validate → (active tools) ScopeGuard → approval policy → send
+   → audit log, attributed to the caller. An audit write that fails fails the call, so no agent
+   action goes unrecorded silently. Both `GulpAutomation` (MCP now, REST later; F21) and `GulpAI`
+   (assistant, F22) are orchestration-layer consumers that depend on `GulpWorkspace` and run tools
+   only through that gate (`GulpAI` may add `GulpReport` when drafting lands). Neither imports the
+   other, and `GulpWorkspace` does **not** depend on `GulpAI`/`GulpAutomation` (that would cycle) —
+   the app and `GulpFeatures` compose them on top. `Scripts/arch-check.sh` enforces these edges.
 
 ## 4. Linux compatibility matrix
 

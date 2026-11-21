@@ -45,13 +45,14 @@ extension ProjectSession {
             var options = SendOptions(recordAs: .scanner)
             options.timeouts.total = .seconds(30)
             options.updateContentLength = false
-            let started = ContinuousClock.now
             let result = await engine.send(request, to: target, options: options)
-            let elapsed = ContinuousClock.now - started
+            // Wire time only (SCN-032): limiter/throttle waits, backoff and connection setup are
+            // not the server's response time, so time-based checks must not see them.
+            let timing = result.exchange.timing
             return Probe(
                 request: result.exchange.request, response: result.exchange.response,
                 exchangeID: result.exchange.id,
-                seconds: Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18,
+                seconds: ((timing.ttfbMs ?? 0) + (timing.downloadMs ?? 0)) / 1_000,
                 error: result.error?.code)
         }
     }
@@ -66,7 +67,8 @@ extension ProjectSession {
     /// The project's OAST session for blind checks, when one is registered.
     func scanOAST() async -> (any OASTProvider)? {
         guard await oast.correlationID != nil else { return nil }
-        return SessionOASTProvider(oast: oast, store: { [store] in store })
+        let current = currentStore
+        return SessionOASTProvider(oast: oast, store: { await current.store })
     }
 
     /// Start an active scan of `requests` (SCN-035).
@@ -87,11 +89,12 @@ extension ProjectSession {
         await tasks.add(
             ActiveTask(
                 id: taskID, kind: "scanner", name: name, pause: { await scan.pause() },
-                resume: { await scan.resume() }))
-        let store = self.store
+                resume: { await scan.resume() }, cancel: { await scan.cancel() }))
+        let current = currentStore
         let eventBus = events_
         Task {
             for await event in source {
+                let store = await current.store  // Save As may have switched files
                 if case .finding(let finding) = event {
                     // The evidence exchange may still sit in the write coalescer: commit it first
                     // (issue evidence references it).
@@ -154,6 +157,7 @@ extension ProjectSession {
         }
         var config = ScanConfig.preset(.thorough)
         config.oastGraceSeconds = 8
+        config.disabledFamilies = []  // re-running this one check is the opt-in, whatever its family
         let label = issue.insertionPoint
         let scan = ActiveScan(
             requests: [(exchange.request, exchange.target)], config: config, checks: [check],

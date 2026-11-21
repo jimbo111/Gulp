@@ -75,20 +75,24 @@ struct M11aWorkspaceTests {
         let environment = isolatedEnvironment()
         let session = try await open(environment, "panic")
         let log = Log()
+        let aID = UUID()
         await session.activeTasks.add(
             ActiveTask(
-                id: UUID(), kind: "fuzzer", name: "a", pause: { await log.add("pause a") },
-                resume: { await log.add("resume a") }))
+                id: aID, kind: "fuzzer", name: "a", pause: { await log.add("pause a") },
+                resume: { await log.add("resume a") },
+                cancel: { await session.activeTasks.remove(aID) }))
         let report = await session.panicStop()
         #expect(report.tasks == ["fuzzer: a"] && report.cut == 0)
         let paused = await session.http.resources.isPaused
         let panicked = await session.isPanicked
         #expect(paused && panicked)
         // A task that starts during the panic is paused at once.
+        let bID = UUID()
         await session.activeTasks.add(
             ActiveTask(
-                id: UUID(), kind: "crawler", name: "b", pause: { await log.add("pause b") },
-                resume: { await log.add("resume b") }))
+                id: bID, kind: "crawler", name: "b", pause: { await log.add("pause b") },
+                resume: { await log.add("resume b") },
+                cancel: { await session.activeTasks.remove(bID) }))
         let resumed = await session.resumeAll()
         #expect(resumed.tasks == ["fuzzer: a", "crawler: b"])
         let entries = await log.entries

@@ -40,13 +40,15 @@ acknowledgment. A clear on/off indicator in the status bar when enabled.
 
 ## 4. Implementation notes
 
-- `GulpAI` depends only on engines + `GulpReport`; the provider is pluggable. Tool-use loops reuse
-  the exact DTOs/schemas from F21 (one definition), so the assistant and the MCP server expose
-  identical capabilities.
+- `GulpAI` depends on `GulpWorkspace` (architecture §3 rule 6), never on `GulpAutomation`; the
+  provider is pluggable. The agent loop offers the model `APIGate.tools` and runs every call through
+  `APIGate.call` (audited as `ai:<model>`, sends recorded as `.ai`), so the assistant and the MCP
+  server expose identical capabilities under identical scope/approval/audit rules; the gate's active
+  tools count against the request budget. A failed audit write ends the run with that error.
 - Redaction runs on any payload (messages + tool results) leaving the app; implement as a
   `RedactionFilter` over the DTOs with user-editable rules; keep a "what was sent" log.
-- Streaming via the provider's SSE; map tool calls to F21 service calls through the same `APIGate`
-  (scope/approval/audit) the MCP server uses.
+- Streaming via the provider's SSE. On the wire, an assistant turn carries its text plus one
+  `tool_use` block per call, and the next user turn carries all of that turn's `tool_result` blocks.
 - Keep prompts/system messages in resources, versioned; include the issue catalog text for grounded
   remediation.
 - Never store the API key outside the Keychain; never log raw prompts containing unredacted secrets.

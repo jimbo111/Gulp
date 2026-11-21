@@ -3,9 +3,13 @@
 // next request from the previous one's bytes:
 //   - 303 (and 301/302 after a POST, as browsers do) becomes a GET without the body and its
 //     framing/type headers; 307/308 repeat the method and body unchanged;
-//   - `Host` is rewritten when the authority changes; every other header is kept as written;
-//   - `on-site` stays on the same host (any scheme/port); `in-scope` follows only to in-scope URLs
-//     (the caller's `ScopeService`; with none, it behaves as `on-site`); `always` follows anywhere.
+//   - the request line is rebuilt and `Host` rewritten when the authority changes. A hop to another
+//     origin (scheme, host or port) drops `Authorization` and `Proxy-Authorization`; a hop to another
+//     host also drops `Cookie` and carries no `Set-Cookie` over (curl/Fetch semantics). Every other
+//     header line is copied byte for byte;
+//   - with a scope (`SendOptions.scope`) every hop must be in scope, whatever the mode. On top of
+//     that, `on-site` stays on the same host (any scheme/port); `in-scope` without a scope behaves
+//     as `on-site`; `always` adds no limit.
 
 import GulpCore
 
@@ -15,11 +19,11 @@ public enum Redirects {
     public static let statuses: Set<Int> = [301, 302, 303, 307, 308]
 
     /// The next request after `response` to `request` (sent to `target`), or nil when it isn't a
-    /// redirect `policy` follows.
+    /// redirect `policy` follows or `scope` refuses the hop.
     public static func next(
         after response: RawResponse, request: RawRequest, target: HTTPTarget, policy: RedirectPolicy,
-        scope: ScopeService? = nil
-    ) -> (request: RawRequest, target: HTTPTarget)? {
+        scope: ScopeCheck? = nil
+    ) async -> (request: RawRequest, target: HTTPTarget)? {
         guard policy.mode != .never, statuses.contains(response.parsed.statusCode),
             let location = response.headerValue("location")?.string().trimmedOf(" \t"),
             !location.isEmpty
@@ -28,48 +32,57 @@ public enum Redirects {
         guard let (nextTarget, path) = resolve(location, from: target, path: currentPath) else {
             return nil
         }
+        let sameHost = nextTarget.host.lowercased() == target.host.lowercased()
         switch policy.mode {
         case .never: return nil
-        case .inScope where scope != nil:
-            guard scope?.isInScope(nextTarget, path: path) == true else { return nil }
-        case .onSite, .inScope:
-            guard nextTarget.host.lowercased() == target.host.lowercased() else { return nil }
+        case .onSite: guard sameHost else { return nil }
+        case .inScope: guard scope != nil || sameHost else { return nil }
         case .always: break
         }
+        if let scope, await !scope(nextTarget, path) { return nil }
+        let sameOrigin = sameHost && nextTarget.scheme == target.scheme && nextTarget.port == target.port
         let method = request.bytes[request.parsed.method].string()
         let status = response.parsed.statusCode
         let becomesGet =
             (status == 303 && method != "HEAD") || ((status == 301 || status == 302) && method == "POST")
-        let newMethod = becomesGet ? "GET" : method
         var dropped: Set<String> = []
-        if becomesGet { dropped = ["content-length", "content-type", "transfer-encoding"] }
-        var cookies: [(String, String)] = []
-        if policy.processCookies { cookies = setCookies(response) }
+        if becomesGet { dropped.formUnion(["content-length", "content-type", "transfer-encoding"]) }
+        if !sameOrigin { dropped.formUnion(["authorization", "proxy-authorization"]) }
+        if !sameHost { dropped.insert("cookie") }
+        let cookies = policy.processCookies && sameHost ? setCookies(response) : []
 
-        var head = "\(newMethod) \(path) \(request.bytes[request.parsed.version].string())\r\n"
+        let all = request.bytes.rawBytes
+        let lineEnding = Array((request.parsed.lineEnding == .lf ? "\n" : "\r\n").utf8)
+        let version = request.bytes[request.parsed.version].string()
+        var head = Array("\(becomesGet ? "GET" : method) \(path) \(version)".utf8) + lineEnding
         let authority = authorityText(nextTarget)
         let changedAuthority = authority.lowercased() != authorityText(target).lowercased()
         var sawCookie = false
         for field in request.parsed.headers {
-            let name = request.bytes[field.name].string()
-            let lower = name.lowercased()
+            let lower = request.bytes[field.name].string().lowercased()
             if dropped.contains(lower) { continue }
-            var value = request.bytes[field.value].string()
+            var value: String?
             if lower == "host", changedAuthority { value = authority }
             if lower == "cookie", !cookies.isEmpty {
                 sawCookie = true
-                value = merge(cookie: value, with: cookies)
+                value = merge(cookie: request.bytes[field.value].string(), with: cookies)
             }
-            head += "\(name): \(value)\r\n"
+            if let value {  // only the value changes; the name and spacing stay as written
+                head += all[field.line.lowerBound..<field.value.lowerBound] + Array(value.utf8)
+                head += all[field.value.upperBound..<field.line.upperBound]
+            } else {
+                head += all[field.line]
+            }
+            head += lineEnding
         }
         if !cookies.isEmpty, !sawCookie {
-            head += "Cookie: " + cookies.map { "\($0.0)=\($0.1)" }.joined(separator: "; ") + "\r\n"
+            head += Array(("Cookie: " + cookies.map { "\($0.0)=\($0.1)" }.joined(separator: "; ")).utf8)
+            head += lineEnding
         }
-        head += "\r\n"
-        let all = request.bytes.rawBytes
+        head += lineEnding
         let bodyStart = request.parsed.headerBlockEnd
         let body = becomesGet || bodyStart >= all.count ? [] : Array(all[bodyStart...])
-        return (RawRequest(Bytes(Array(head.utf8) + body)), nextTarget)
+        return (RawRequest(Bytes(head + body)), nextTarget)
     }
 
     /// Resolve `location` against the request URL (absolute, scheme-relative, absolute-path or

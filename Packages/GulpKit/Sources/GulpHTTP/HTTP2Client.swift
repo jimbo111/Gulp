@@ -28,6 +28,8 @@ final class H2Connection: Sendable {
     let id: UInt64
     let tls: TLSInfo?
     private let multiplexer: NIOLoopBound<HTTP2StreamMultiplexer>
+    /// Set when the server sent GOAWAY: the connection may finish its streams but open no more.
+    private let goingAway: NIOLockedValueBox<Bool>
     /// The stream multiplexer, for group sends (GroupSend.swift).
     var multiplexerForGroups: NIOLoopBound<HTTP2StreamMultiplexer> { multiplexer }
 
@@ -39,26 +41,34 @@ final class H2Connection: Sendable {
     ]
 
     private init(
-        channel: any Channel, id: UInt64, tls: TLSInfo?, multiplexer: NIOLoopBound<HTTP2StreamMultiplexer>
+        channel: any Channel, id: UInt64, tls: TLSInfo?, multiplexer: NIOLoopBound<HTTP2StreamMultiplexer>,
+        goingAway: NIOLockedValueBox<Bool>
     ) {
         self.channel = channel
         self.id = id
         self.tls = tls
         self.multiplexer = multiplexer
+        self.goingAway = goingAway
     }
 
-    var isUsable: Bool { channel.isActive }
+    /// Whether a new request may use this connection: open, and no GOAWAY received.
+    var isUsable: Bool { channel.isActive && !goingAway.withLockedValue { $0 } }
 
     /// Switch an open connection (TLS that negotiated `h2`, or cleartext prior knowledge) to HTTP/2.
     static func start(on channel: any Channel, id: UInt64, tls: TLSInfo?) async throws -> H2Connection {
         let loop = channel.eventLoop
         try await channel.pipeline.removeHandler(name: NIOHTTPEngine.http1HandlerName).get()
+        let goingAway = NIOLockedValueBox(false)
         let bound = try await channel.configureHTTP2Pipeline(
             mode: .client, initialLocalSettings: settings, inboundStreamInitializer: nil
-        ).map { NIOLoopBound($0, eventLoop: loop) }.get()
+        ).flatMapThrowing { multiplexer in
+            // Connection-level frames (stream 0) pass the multiplexer on to here.
+            try channel.pipeline.syncOperations.addHandler(GoAwayWatcher(goingAway: goingAway))
+            return NIOLoopBound(multiplexer, eventLoop: loop)
+        }.get()
         // Bytes the server sent right after the handshake were held back until now (TLS only).
         channel.pipeline.fireUserInboundEventTriggered(ReleaseHeldReads())
-        return H2Connection(channel: channel, id: id, tls: tls, multiplexer: bound)
+        return H2Connection(channel: channel, id: id, tls: tls, multiplexer: bound, goingAway: goingAway)
     }
 
     /// Send one request on a new stream and collect the response (HTTP-021 conversion is the
@@ -123,6 +133,21 @@ final class H2Connection: Sendable {
         } catch {
             return (nil, HTTP1ClientHandler.networkError(error), writeEnd)
         }
+    }
+}
+
+/// Notes a GOAWAY from the server, so the pool stops handing the connection out (RFC 9113 §6.8).
+final class GoAwayWatcher: ChannelInboundHandler {
+    typealias InboundIn = HTTP2Frame
+    private let goingAway: NIOLockedValueBox<Bool>
+
+    init(goingAway: NIOLockedValueBox<Bool>) {
+        self.goingAway = goingAway
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        if case .goAway = unwrapInboundIn(data).payload { goingAway.withLockedValue { $0 = true } }
+        context.fireChannelRead(data)
     }
 }
 

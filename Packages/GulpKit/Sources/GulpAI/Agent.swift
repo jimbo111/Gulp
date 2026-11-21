@@ -1,19 +1,25 @@
 // GulpAI — the bounded agentic loop (F22 AI-013). "Investigate this endpoint" lets the assistant plan
 // and run a short sequence of tool calls to confirm or rule out a hypothesis, within hard limits the
-// user sets: a step budget (provider round-trips), a request budget (active sends, which the executor
-// runs through ScopeGuard and the approval mode), and a cancel/panic stop. The loop redacts every tool
-// result before it goes back to the provider. The executor and provider are injected, so the loop is
-// tested end-to-end with a scripted mock provider and no network.
+// user sets: a step budget (provider round-trips), a request budget (active sends), and a
+// cancel/panic stop. The loop redacts every tool result before it goes back to the provider.
+//
+// Tools are the shared agent tool surface, and every call goes through `APIGate` (GulpWorkspace;
+// architecture §3 rule 6): ScopeGuard, the approval policy and the audit log apply exactly as they do
+// for MCP clients, sends are recorded as `.ai`, and the gate's active tools count against the request
+// budget. A call whose audit write fails ends the run with that error. The loop itself takes an
+// injected executor (internal), so it is tested end-to-end with a scripted provider and no network.
 
 import Foundation
+import GulpWorkspace
 
 /// Hard limits for one agentic run.
 public struct AgentLimits: Sendable {
     /// Maximum provider round-trips.
     public var maxSteps: Int
-    /// Maximum active sends (ScopeGuard-checked by the executor).
+    /// Maximum active sends.
     public var maxRequests: Int
 
+    /// Limits of `maxSteps` round-trips and `maxRequests` active sends.
     public init(maxSteps: Int = 8, maxRequests: Int = 30) {
         self.maxSteps = maxSteps
         self.maxRequests = maxRequests
@@ -22,16 +28,23 @@ public struct AgentLimits: Sendable {
 
 /// Why an agentic run ended.
 public enum AgentStop: String, Sendable {
-    case answered, stepBudget, requestBudget, cancelled
+    /// The model answered without asking for more tools.
+    case answered
+    /// The step budget ran out.
+    case stepBudget
+    /// The model asked for an active send past the request budget.
+    case requestBudget
+    /// The run was cancelled (panic stop / kill switch).
+    case cancelled
 }
 
 /// The result of running a tool.
-public struct ToolOutcome: Sendable {
-    public var content: String
+struct ToolOutcome: Sendable {
+    var content: String
     /// Whether this call was an active send (counts against the request budget).
-    public var countsAsRequest: Bool
+    var countsAsRequest: Bool
 
-    public init(content: String, countsAsRequest: Bool = false) {
+    init(content: String, countsAsRequest: Bool = false) {
         self.content = content
         self.countsAsRequest = countsAsRequest
     }
@@ -39,12 +52,19 @@ public struct ToolOutcome: Sendable {
 
 /// The outcome of an agentic run.
 public struct AgentResult: Sendable {
+    /// The model's last text.
     public var answer: String
+    /// Why the run ended.
     public var stop: AgentStop
+    /// Provider round-trips made.
     public var steps: Int
+    /// Active sends made.
     public var requests: Int
+    /// Input tokens used, as the provider reported them.
     public var inputTokens: Int
+    /// Output tokens used, as the provider reported them.
     public var outputTokens: Int
+    /// The conversation as sent (tool results redacted).
     public var transcript: [LLMMessage]
 }
 
@@ -59,13 +79,33 @@ public actor Agent {
         self.redactor = redactor
     }
 
-    /// Run the loop. `sendTools` names the tools that count against the request budget; `execute`
-    /// runs a tool call (and is where ScopeGuard/approval live). `isCancelled` is polled between steps
-    /// (the panic stop / kill switch).
+    /// Run the loop over the agent tool surface, every call through `gate` and audited as
+    /// `ai:<model>`. `isCancelled` is polled between steps (the panic stop / kill switch). Throws when
+    /// the provider fails or a tool call's audit write fails.
     public func run(
+        system: String, user: String, gate: APIGate, limits: AgentLimits = AgentLimits(),
+        isCancelled: @Sendable () -> Bool = { false }
+    ) async throws -> AgentResult {
+        let tools = APIGate.tools.map {
+            LLMTool(name: $0.name, description: $0.description, schema: $0.inputSchema)
+        }
+        let caller = "ai:\(provider.model)"
+        return try await run(
+            system: system, user: user, tools: tools, limits: limits,
+            sendTools: Set(APIGate.tools.filter(\.isActive).map(\.name)), isCancelled: isCancelled
+        ) { call in
+            let result = try await gate.call(call.name, arguments: Data(call.arguments.utf8), caller: caller)
+            return ToolOutcome(
+                content: String(decoding: result.json, as: UTF8.self), countsAsRequest: result.sent)
+        }
+    }
+
+    /// The loop over an injected executor. `sendTools` names the tools that count against the request
+    /// budget; `execute` runs a tool call.
+    func run(
         system: String, user: String, tools: [LLMTool], limits: AgentLimits = AgentLimits(),
         sendTools: Set<String> = [], isCancelled: @Sendable () -> Bool = { false },
-        execute: @Sendable (LLMToolCall) async -> ToolOutcome
+        execute: @Sendable (LLMToolCall) async throws -> ToolOutcome
     ) async throws -> AgentResult {
         var messages = [
             LLMMessage(role: .system, content: system),
@@ -85,9 +125,11 @@ public actor Agent {
             steps += 1
             inputTokens += response.inputTokens
             outputTokens += response.outputTokens
-            if let text = response.text, !text.isEmpty {
-                lastText = text
-                messages.append(LLMMessage(role: .assistant, content: text))
+            let text = response.text ?? ""
+            if !text.isEmpty { lastText = text }
+            if !text.isEmpty || !response.toolCalls.isEmpty {
+                // The calls stay in the transcript so the next request can pair each result with its call.
+                messages.append(LLMMessage(role: .assistant, content: text, toolCalls: response.toolCalls))
             }
             guard !response.toolCalls.isEmpty, response.stopReason != .endTurn else {
                 return result(lastText, .answered, steps, requests, inputTokens, outputTokens, messages)
@@ -101,7 +143,7 @@ public actor Agent {
                     hitRequestBudget = true
                     continue
                 }
-                let outcome = await execute(call)
+                let outcome = try await execute(call)
                 if outcome.countsAsRequest { requests += 1 }
                 messages.append(
                     LLMMessage(

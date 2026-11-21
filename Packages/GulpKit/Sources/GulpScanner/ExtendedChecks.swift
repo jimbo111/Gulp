@@ -19,9 +19,11 @@ enum ExtendedChecks {
 /// Web cache poisoning (F28 WCP-001/002/004): a candidate **unkeyed input** (a forwarded-host/scheme/
 /// port header) is reflected into a response a shared cache would store. WCP-001 detects the reflection
 /// into a cacheable response; WCP-002 *confirms* the vector by issuing a clean follow-up (without the
-/// header) and checking the canary is still served — i.e. the poison was cached and would reach other
-/// users. The per-request canary is unique so no real user is served a lasting poisoned page. WCP-004:
-/// the finding carries the poisoning request, the confirming cached response, and the vector header.
+/// header) and checking the canary is still served — i.e. the poison was cached. A unique canary alone
+/// would not protect anyone: the poisoned entry is served to every user of that URL for its TTL. So
+/// both requests carry a per-probe cache-buster (F08 §3.5), an extra query parameter only Gulp's own
+/// follow-up repeats, and the family is opt-in (`ActiveChecks.optInFamilies`). WCP-004: the finding
+/// carries the poisoning request, the confirming cached response, and the vector header.
 struct CachePoisoningCheck: ActiveCheck {
     let id = "active.cache-poisoning"
     let family = "cache-poisoning"
@@ -37,12 +39,13 @@ struct CachePoisoningCheck: ActiveCheck {
     func run(_ point: InsertionPoint?, baseline: Baseline?, context: AuditContext) async -> [IssueFinding] {
         for header in Self.unkeyedHeaders {
             let canary = "\(context.token(8)).gulp-cache.test"
-            let probe = await context.send(context.base.settingHeader(header, to: canary))
+            let keyed = Self.cacheBusted(context.base, context)
+            let probe = await context.send(keyed.settingHeader(header, to: canary))
             guard Self.cacheable(probe), Self.reflects(probe, canary) else { continue }
 
-            // WCP-002: confirm it was cached — a clean follow-up (no injected header) still carries the
-            // canary, so the poison would be served to other users keyed on the URL alone.
-            let cleanFollowUp = await context.send(context.base)
+            // WCP-002: confirm it was cached — a clean follow-up (no injected header, same cache key)
+            // still carries the canary, so users of a URL keyed like that one would get the poison.
+            let cleanFollowUp = await context.send(keyed)
             let confirmedCached = Self.reflects(cleanFollowUp, canary)
             let confidence: IssueConfidence = confirmedCached ? .certain : .firm
             let confirmation =
@@ -59,6 +62,12 @@ struct CachePoisoningCheck: ActiveCheck {
             ]
         }
         return []
+    }
+
+    /// `request` with a fresh cache-buster query parameter (F08 §3.5), so a cache keyed on the URL
+    /// files whatever the probe provokes under a key no real user requests.
+    static func cacheBusted(_ request: RawRequest, _ context: AuditContext) -> RawRequest {
+        ParamMiner.appendingQuery(request, [("gulpcb", context.token(8))])
     }
 
     /// Whether `canary` appears in the response's redirect Location or body.
@@ -109,7 +118,7 @@ struct CacheDeceptionCheck: ActiveCheck {
         guard let privateMarker = Self.privateMarker(original.body) else { return [] }
 
         for suffix in ["/x.css", ".css", "/x.js", "%2fx.css"] {
-            let deceptive = Self.retarget(base, path: path + suffix)
+            let deceptive = CachePoisoningCheck.cacheBusted(Self.retarget(base, path: path + suffix), context)
             let probe = await context.send(deceptive)
             guard CachePoisoningCheck.cacheable(probe), probe.body.contains(privateMarker) else { continue }
             return [
@@ -132,11 +141,12 @@ struct CacheDeceptionCheck: ActiveCheck {
         return nil
     }
 
-    /// Rebuild `base` with a new request-target path (keeps method, Host and headers).
+    /// `base` with the path of its request-target replaced (the query and every other byte — method,
+    /// version, cookies, authorization — kept), so the deceptive request is made as the same user.
     static func retarget(_ base: RawRequest, path: String) -> RawRequest {
-        let method = base.bytes[base.parsed.method].string()
-        let host = base.headerValue("host")?.string() ?? "localhost"
-        return RawRequest(Bytes("\(method) \(path) HTTP/1.1\r\nHost: \(host)\r\n\r\n"))
+        let target = base.bytes[base.parsed.target].string()
+        let query = target.firstIndex(of: "?").map { String(target[$0...]) } ?? ""
+        return base.replacing(base.parsed.target, with: Bytes(path + query))
     }
 }
 
@@ -178,7 +188,11 @@ struct HostHeaderCheck: ActiveCheck {
 
     func run(_ point: InsertionPoint?, baseline: Baseline?, context: AuditContext) async -> [IssueFinding] {
         let canary = "\(context.token(8)).gulp-canary.test"
-        let probe = await context.send(context.base.settingHeader("X-Forwarded-Host", to: canary))
+        // Cache-busted like the cache family: a cache that doesn't key the header must not keep the
+        // canary page for the URL real users request.
+        let probe = await context.send(
+            CachePoisoningCheck.cacheBusted(context.base, context).settingHeader(
+                "X-Forwarded-Host", to: canary))
         let inLocation = probe.header("location")?.lowercased().contains(canary) == true
         let inBody = ["//\(canary)", "http://\(canary)", "https://\(canary)"].contains {
             probe.body.contains($0)
@@ -194,9 +208,11 @@ struct HostHeaderCheck: ActiveCheck {
     }
 }
 
-/// JWT verification: when a request carries a Bearer JWT that authenticates it, re-send it with the
-/// signature removed (`alg: none`) or re-signed with a guessable HMAC secret; if the server still
-/// treats the request as authenticated, it isn't verifying the signature. Reuses the JWT workbench.
+/// JWT verification: when a request carries a Bearer JWT that authenticates it, and the endpoint
+/// rejects the request without a token, re-send it with the signature corrupted and then removed
+/// (`alg: none`); if the server still treats the request as authenticated, it isn't verifying the
+/// signature. An HMAC token is also cracked offline against a few guessable secrets. Reuses the JWT
+/// workbench.
 struct JWTScanCheck: ActiveCheck {
     let id = "active.jwt"
     let family = "jwt"
@@ -211,19 +227,8 @@ struct JWTScanCheck: ActiveCheck {
         // The original request must currently succeed, so a forged one "still works" means something.
         let original = await context.send(context.base)
         guard let status = original.status, (200..<400).contains(status) else { return [] }
-
-        // alg:none — the signature is removed entirely.
-        for forgery in (try? JWTAttacks.algNone(jwt)) ?? [] {
-            let probe = await context.send(Self.replacingBearer(context.base, with: forgery.token))
-            if accepted(probe, like: original) {
-                return [
-                    context.finding(
-                        id, point: nil, variant: "alg:none",
-                        detail:
-                            "The server accepted a token with its signature removed (\(forgery.label)) and still treated the request as authenticated, so JWT signatures are not verified.",
-                        evidence: probe, confidence: .certain)
-                ]
-            }
+        if let forged = await forgedTokenFinding(jwt, token, original: original, context: context) {
+            return [forged]
         }
         // Weak HMAC secret — if a guessable secret verifies the token, it is forgeable.
         if jwt.algorithm.uppercased().hasPrefix("HS"),
@@ -240,10 +245,53 @@ struct JWTScanCheck: ActiveCheck {
         return []
     }
 
-    /// Whether `probe` looks as authenticated as the original (same success, similar body).
-    func accepted(_ probe: Probe, like original: Probe) -> Bool {
+    /// A forged token the server accepts, after two negative controls: the request without a token
+    /// must be rejected (else the endpoint ignores the token and no forgery proves anything), and so
+    /// must the token with its signature corrupted (else the signature isn't checked at all, reported
+    /// as such rather than as alg:none). Only then is an accepted `alg: none` token a finding.
+    func forgedTokenFinding(_ jwt: JWT, _ token: String, original: Probe, context: AuditContext) async
+        -> IssueFinding?
+    {
+        let missing = await context.send(Self.replacingBearer(context.base, with: ""))
+        guard !Self.accepted(missing, sent: "", like: original, token: token) else { return nil }
+        if let corruptedToken = Self.corruptingSignature(token) {
+            let corrupted = await context.send(Self.replacingBearer(context.base, with: corruptedToken))
+            if Self.accepted(corrupted, sent: corruptedToken, like: original, token: token) {
+                return context.finding(
+                    id, point: nil, variant: "unverified signature",
+                    detail:
+                        "The server rejected the request without a token but accepted the token with its signature corrupted, so JWT signatures are not verified.",
+                    evidence: corrupted, confidence: .certain)
+            }
+        }
+        // alg:none — the signature is removed entirely.
+        for forgery in (try? JWTAttacks.algNone(jwt)) ?? [] {
+            let probe = await context.send(Self.replacingBearer(context.base, with: forgery.token))
+            if Self.accepted(probe, sent: forgery.token, like: original, token: token) {
+                return context.finding(
+                    id, point: nil, variant: "alg:none",
+                    detail:
+                        "The server rejected the request without a token and with a corrupted signature, but accepted a token with its signature removed (\(forgery.label)), so it honours `alg: none`.",
+                    evidence: probe, confidence: .certain)
+            }
+        }
+        return nil
+    }
+
+    /// `token` with the first character of its signature changed; nil for an unsigned token.
+    static func corruptingSignature(_ token: String) -> String? {
+        guard let dot = token.lastIndex(of: "."), let first = token[token.index(after: dot)...].first else {
+            return nil
+        }
+        return String(token[...dot]) + (first == "A" ? "B" : "A") + token[token.index(dot, offsetBy: 2)...]
+    }
+
+    /// Whether `probe`, sent with token `sent`, looks as authenticated as the `original` sent with
+    /// `token`: the same success and a similar body once both tokens are removed (a page that echoes
+    /// the request differs only by the token, and must not look like a rejection).
+    static func accepted(_ probe: Probe, sent: String, like original: Probe, token: String) -> Bool {
         guard let status = probe.status, (200..<400).contains(status) else { return false }
-        return SQLInjectionCheck.similar(probe, original, removing: [])
+        return SQLInjectionCheck.similar(probe, original, removing: [sent, token])
     }
 
     static func bearer(_ request: RawRequest) -> String? {

@@ -101,6 +101,7 @@ public struct OASTError: Error, Sendable, Hashable, CustomStringConvertible {
     /// An error.
     public init(_ message: String) { self.message = message }
 
+    /// A readable form of the error: its message.
     public var description: String { message }
 }
 

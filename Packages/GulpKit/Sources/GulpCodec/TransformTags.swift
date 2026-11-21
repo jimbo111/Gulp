@@ -22,6 +22,7 @@ public struct TransformTagError: Error, Sendable, Equatable, CustomStringConvert
     /// What is wrong.
     public var message: String
 
+    /// A readable form of the error, with the tag's byte offset.
     public var description: String { "Transform tag at byte \(offset): \(message)" }
 }
 

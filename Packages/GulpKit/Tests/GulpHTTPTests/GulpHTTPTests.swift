@@ -275,6 +275,17 @@ struct EngineTests {
         await server.stop()
     }
 
+    @Test("HTTP-002: a header block past HTTP1.maxHeaderBytes fails with tooLarge instead of buffering on")
+    func test_HTTP002_headerBlockCap() async throws {
+        let endless = "HTTP/1.1 200 OK\r\nX-Fill: " + String(repeating: "a", count: HTTP1.maxHeaderBytes)
+        let server = try await TestServer.start { b, _ in headersComplete(b) ? ServerReply(endless) : nil }
+        let engine = NIOHTTPEngine()
+        let result = await engine.send(get(), to: server.target, options: options())
+        #expect(result.error == .tooLarge(limit: HTTP1.maxHeaderBytes))
+        await engine.shutdown()
+        await server.stop()
+    }
+
     // MARK: HTTP-008
 
     @Test("HTTP-008: Update Content-Length fixes or adds the header; off means untouched")
@@ -295,6 +306,35 @@ struct EngineTests {
         let fixed = "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\n\r\nabc"
         #expect(Bytes(server.received(1)).string() == fixed)
         #expect(Bytes(server.received(2)).string() == fixed)
+        await engine.shutdown()
+        await server.stop()
+    }
+
+    @Test("HTTP-008: Update Content-Length never adds one to a Transfer-Encoding request (RFC 9112 §6.2)")
+    func test_HTTP008_noLengthBesideTransferEncoding() {
+        let chunked = RawRequest(
+            Bytes("POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\n"))
+        #expect(chunked.updatingContentLength() == chunked)
+        // A Content-Length the user wrote next to it is still theirs to have fixed (smuggling tests).
+        let both = RawRequest(
+            Bytes("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\nContent-Length: 1\r\n\r\n0\r\n\r\n"))
+        #expect(both.updatingContentLength().headerValue("content-length")?.string() == "5")
+    }
+
+    @Test("HTTP-002: a CONNECT sent as a request ends at a 2xx's header block; the tunnel is not pooled")
+    func test_HTTP002_userConnect() async throws {
+        let server = try await TestServer.start { b, _ in
+            guard headersComplete(b) else { return nil }
+            return String(decoding: b, as: UTF8.self).hasPrefix("CONNECT ")
+                ? ServerReply("HTTP/1.1 200 Connection Established\r\n\r\n") : ok("plain")
+        }
+        let engine = NIOHTTPEngine()
+        let connect = RawRequest(Bytes("CONNECT inner.test:443 HTTP/1.1\r\nHost: inner.test:443\r\n\r\n"))
+        let quick = options { $0.timeouts.idleBetweenBytes = .seconds(2) }
+        let tunnel = await engine.send(connect, to: server.target, options: quick)
+        #expect(tunnel.error == nil && tunnel.exchange.response?.parsed.statusCode == 200)
+        let next = await engine.send(get(), to: server.target, options: quick)
+        #expect(next.exchange.response?.bytes.string().hasSuffix("plain") == true && server.connections == 2)
         await engine.shutdown()
         await server.stop()
     }
@@ -372,13 +412,13 @@ struct EngineTests {
         await server.stop()
     }
 
-    @Test("Raw HTTP/2 specs and WebSockets report their milestone instead of misbehaving")
+    @Test("Raw HTTP/2 specs fail with a clear error (HTTP-025 open); a WebSocket to nowhere throws")
     func test_notYetImplemented() async throws {
         let engine = NIOHTTPEngine()
         let tlsTarget = HTTPTarget(scheme: .https, host: "127.0.0.1")
         let spec = H2RequestSpec(pseudoHeaders: [], headers: [])
         let h2 = await engine.send(spec, to: tlsTarget, options: options())
-        #expect(h2.error == .other("Raw HTTP/2 (H2RequestSpec) sends arrive with the Repeater (M5)"))
+        #expect(h2.error == .other("Raw HTTP/2 (H2RequestSpec) sending is not implemented yet (HTTP-025)"))
         await #expect(throws: GulpError.self) {
             _ = try await engine.openWebSocket(get(), to: tlsTarget, options: options())
         }

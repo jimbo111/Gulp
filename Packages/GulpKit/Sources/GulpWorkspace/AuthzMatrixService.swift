@@ -29,16 +29,19 @@ extension RawRequest {
 }
 
 extension ProjectSession {
-    /// Run the Authz Matrix over `requests` with the project's identities (ADV-001…003). The
-    /// authorized baseline is `authorizedIdentity` (default: the active identity). `includeUnauth`
-    /// adds an unauthenticated column. Bypasses become issues.
+    /// Run the Authz Matrix over `requests` as `identities` (default: the project's, ADV-001…003).
+    /// The authorized baseline is `authorizedIdentity` (default: the project's active identity when
+    /// it is one of them, else the first). `includeUnauth` adds an unauthenticated column. Bypasses
+    /// become issues.
     public func runAuthzMatrix(
-        _ requests: [(request: RawRequest, target: HTTPTarget)], authorizedIdentity: UUID? = nil,
-        includeUnauthenticated: Bool = true, threshold: Double = 0.95, allowOutOfScope: Bool = false
+        _ requests: [(request: RawRequest, target: HTTPTarget)], identities: [Identity]? = nil,
+        authorizedIdentity: UUID? = nil, includeUnauthenticated: Bool = true, threshold: Double = 0.95,
+        allowOutOfScope: Bool = false
     ) async throws -> AuthzMatrixResult {
         let config = sessionSettings()
-        let identities = config.identities
-        let authorizedID = authorizedIdentity ?? config.activeIdentity ?? identities.first?.id
+        let identities = identities ?? config.identities
+        let active = config.activeIdentity.flatMap { id in identities.contains { $0.id == id } ? id : nil }
+        let authorizedID = authorizedIdentity ?? active ?? identities.first?.id
         guard let authorizedID else { throw AuthzError.noIdentities }
 
         // Columns: the authorized identity first, then the others, then (optionally) unauthenticated.

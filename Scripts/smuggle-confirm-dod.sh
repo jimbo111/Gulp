@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Smuggling confirmation workbench Definition of Done (F23 ADV-032): the workbench CONSTRUCTS a
-# self-poisoning desync confirmation (attack + innocuous follow-up) with warnings and scope gating, and
+# desync confirmation (attack + innocuous follow-up) with warnings and scope gating, and
 # NEVER sends automatically. By default it is a dry run (nothing sent); it refuses to send an
 # out-of-scope target even when authorized. No live VulnLab send: confirmation is never auto-run.
 set -euo pipefail

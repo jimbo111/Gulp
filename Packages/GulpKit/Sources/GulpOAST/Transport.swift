@@ -17,6 +17,7 @@ public struct EngineOASTTransport: OASTTransport {
         self.timeout = timeout
     }
 
+    /// Builds the raw HTTP/1.1 request from `method`, `url`, `headers` and `body` and sends it through the engine.
     public func send(method: String, url: String, body: [UInt8]?, headers: [String: String]) async throws -> (
         status: Int, body: [UInt8]
     ) {

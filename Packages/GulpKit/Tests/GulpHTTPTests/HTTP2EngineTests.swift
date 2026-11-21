@@ -13,7 +13,8 @@ import Testing
 // F03 HTTP-020…HTTP-024, HTTP-027: the engine speaks HTTP/2 when the server negotiates it.
 
 /// An HTTP/2-only test server (TLS with ALPN h2, or cleartext prior knowledge). Each stream answers
-/// `<method> <path> <body length>`; `/trailers` adds gRPC-style trailers.
+/// `<method> <path> <body length>`; `/trailers` adds gRPC-style trailers; after `/goaway` the
+/// connection gets a GOAWAY (graceful: no new streams) but the TCP connection stays open.
 final class H2TestServer: Sendable {
     let channel: any Channel
     private let accepted: NIOLockedValueBox<Int>
@@ -85,6 +86,14 @@ final class H2EchoHandler: ChannelInboundHandler {
             context.write(wrapOutboundOut(.headers(.init(headers: fields, endStream: true))), promise: nil)
         }
         context.flush()
+        if path == "/goaway", let parent = context.channel.parent,
+            let stream = try? context.channel.syncOptions?.getOption(HTTP2StreamChannelOptions.streamID)
+        {
+            let goAway = HTTP2Frame(
+                streamID: .rootStream,
+                payload: .goAway(lastStreamID: stream, errorCode: .noError, opaqueData: nil))
+            parent.writeAndFlush(goAway, promise: nil)
+        }
     }
 }
 
@@ -201,6 +210,28 @@ struct HTTP2EngineTests {
         #expect(result.error == nil, "error: \(String(describing: result.error))")
         #expect(result.exchange.httpVersion == .http2)
         #expect(result.exchange.response?.bytes.string().hasSuffix("GET /plain 0") == true)
+        await engine.shutdown()
+        await server.stop()
+    }
+
+    @Test("HTTP-023: after a GOAWAY the pooled connection is retired; the next request opens a new one")
+    func test_HTTP023_goAwayRetiresConnection() async throws {
+        let server = try await H2TestServer.start(tls: nil)
+        let engine = NIOHTTPEngine()
+        let target = HTTPTarget(scheme: .http, host: "127.0.0.1", port: server.port)
+        func send(_ path: String) async -> ExchangeResult {
+            await engine.send(
+                RawRequest(Bytes("GET \(path) HTTP/1.1\r\nHost: x\r\n\r\n")), to: target,
+                options: options(.http2PriorKnowledge))
+        }
+        let first = await send("/goaway")
+        #expect(
+            first.error == nil && first.exchange.response?.bytes.string().hasSuffix("GET /goaway 0") == true)
+        try await Task.sleep(for: .milliseconds(200))  // let the GOAWAY arrive
+        let next = await send("/next")
+        #expect(next.error == nil, "error: \(String(describing: next.error))")
+        #expect(next.exchange.response?.bytes.string().hasSuffix("GET /next 0") == true)
+        #expect(server.connections == 2)
         await engine.shutdown()
         await server.stop()
     }

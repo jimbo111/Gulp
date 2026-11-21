@@ -29,7 +29,7 @@ Legend: ✅ parity or better · 🟡 partial · ⬜ gap/not built · ⭐ Gulp ad
 | Upstream proxies, SOCKS, match & replace | ✅ | ✅ | |
 | HTTP/3 (QUIC) client | 🟡 | ⬜ | Burp has experimental HTTP/3; Gulp has it as post-1.0 (HTTP-037). **Gap.** |
 | **HTTP request smuggling / desync** | ✅ (HTTP Request Smuggler, ext) | ✅ | Built (2026-11-13): `gulp-cli smuggle` sends byte-exact CL.TE/TE.CL timing probes the byte-exact engine makes possible and classifies by the timing differential; proven on a VulnLab desync emulation. Burp needs the HTTP Request Smuggler extension. |
-| **Smuggling confirmation (proof-of-desync)** | ✅ (HTTP Request Smuggler, ext) | ✅ | Built (2026-11-13): `gulp-cli smuggle-confirm` constructs a non-destructive self-poisoning confirmation (attack + innocuous follow-up whose poisoned 4xx proves the desync); dry-run by default, scope-gated, and never auto-sent (explicit authorization required). Matches the extension's "confirm" step with stronger safety defaults. |
+| **Smuggling confirmation (proof-of-desync)** | ✅ (HTTP Request Smuggler, ext) | ✅ | Built (2026-11-13): `gulp-cli smuggle-confirm` constructs a desync confirmation (attack + innocuous follow-up whose poisoned 4xx proves the desync); dry-run by default, scope-gated, and never auto-sent (explicit authorization required). Matches the extension's "confirm" step with stronger safety defaults. |
 
 ## 2. Repeater / Intruder-class fuzzing
 

@@ -96,7 +96,7 @@ extension ProjectSession {
             of: CrawlAuditEvent.self, bufferingPolicy: .unbounded)
         let crawlRun = await startCrawl(crawl, allowOutOfScope: allowOutOfScope)
         await handle.set(crawlRun.crawler)
-        let store = self.store
+        let current = currentStore
         Task {
             var ids: [ExchangeID] = []
             for await event in crawlRun.events {
@@ -107,6 +107,7 @@ extension ProjectSession {
                 continuation.finish()
                 return
             }
+            let store = await current.store  // Save As may have switched files during the crawl
             await store.writer.flush()
             let exchanges = (try? await store.exchanges(ids: ids)) ?? []
             let requests = AuditSelection.distinct(exchanges)

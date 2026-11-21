@@ -308,7 +308,7 @@ Each subsection: **what it does · module · proof (tests + DoD) · Burp verdict
   server's resolution (first/last-wins, concatenated, both) — a last-wins/concatenated quirk is a
   front-end/WAF bypass primitive; the Smuggling Probe (`gulp-cli smuggle`) detects CL.TE/TE.CL desync
   by byte-exact timing probes and the confirmation workbench (`gulp-cli smuggle-confirm`) constructs a
-  scope-gated, never-auto-sent self-poisoning proof-of-desync; the CSWSH probe (`gulp-cli cswsh`) flags WebSocket endpoints that
+  scope-gated, never-auto-sent proof-of-desync; the CSWSH probe (`gulp-cli cswsh`) flags WebSocket endpoints that
   upgrade without an Origin check; the WS per-message authorization probe (`gulp-cli ws-authz`) replays
   a privileged message under a stripped identity and flags sockets that authorize only at the
   handshake; and `active.cache-poisoning` flags an unkeyed header reflected into a cacheable response.

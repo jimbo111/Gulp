@@ -31,7 +31,7 @@ wait_port() {
 # Active-scan a single GET route; echo the finding lines.
 scan() {
   printf 'GET %s HTTP/1.1\r\nHost: 127.0.0.1:8088\r\n\r\n' "$1" > "$WORK/req.txt"
-  "$GULP" scan active --project "$PROJECT" --raw "$WORK/req.txt" --target "$LAB" --config thorough >/dev/null
+  "$GULP" scan active --project "$PROJECT" --raw "$WORK/req.txt" --target "$LAB" --config thorough --enable-family cache-poisoning >/dev/null
 }
 
 "$BIN/gulp-vulnlab" > "$WORK/vulnlab.log" 2>&1 &

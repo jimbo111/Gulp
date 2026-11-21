@@ -25,6 +25,7 @@ struct SessionCommand: AsyncParsableCommand {
         var options = SendOptions(recordAs: .repeater)
         options.updateContentLength = true
         options.timeouts.total = .seconds(30)
+        // rules-check: manual send — the operator's own request and target, as in Repeater.
         let result = await session.http.send(RawRequest(Bytes(raw)), to: target, options: options)
         let response = result.exchange.response
         let body =
@@ -78,7 +79,12 @@ struct SessionCommand: AsyncParsableCommand {
                 let rule = SessionRule(
                     name: "sign \(scheme)", scope: RuleScope(hostGlob: destination.host),
                     actions: [.sign(try signingScheme())])
-                try await session.setSessionSettings(SessionSettings(rules: [rule]))
+                // Add to the project's session config (replacing this command's rule from an earlier
+                // run); first, because the first matching signing rule signs.
+                var config = await session.sessionSettings()
+                config.rules.removeAll { $0.name == rule.name }
+                config.rules.insert(rule, at: 0)
+                try await session.setSessionSettings(config)
             }
             // DPoP demands a nonce on the first try; the signer reads DPoP-Nonce from the first
             // response and the retry carries it (SES-016).
@@ -133,9 +139,16 @@ struct SessionCommand: AsyncParsableCommand {
                     .checkValidity(ValidityCheck(redirectContains: "/login", bodyAbsent: "Please log in")),
                     .useCookies,
                 ])
-            try await session.setSessionSettings(
-                SessionSettings(
-                    identities: [identity], rules: [rule], macros: [macro], activeIdentity: identity.id))
+            // Add to the project's session config, replacing this command's entries from an earlier run.
+            var config = await session.sessionSettings()
+            config.identities.removeAll { $0.name == identity.name }
+            config.macros.removeAll { $0.name == macro.name }
+            config.rules.removeAll { $0.name == rule.name }
+            config.identities.append(identity)
+            config.macros.append(macro)
+            config.rules.append(rule)
+            config.activeIdentity = identity.id  // cookies from responses go to the active identity
+            try await session.setSessionSettings(config)
             // Force an initial re-auth by marking the session stale.
             await session.sessionState.markStale(identity.id)
 

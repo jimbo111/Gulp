@@ -18,7 +18,7 @@ enum Framed: Equatable {
 /// Framing of client requests from a connection's byte stream (F01 §4.1 framing-ambiguity policy).
 enum RequestFramer {
     /// A header block larger than this is refused (431) instead of buffered forever.
-    static let maxHeaderBytes = 1_024 * 1_024
+    static let maxHeaderBytes = HTTP1.maxHeaderBytes
     /// A request body larger than this is refused (413). Bodies are buffered until streaming
     /// request bodies land (see docs/07-decisions.md).
     static let maxBodyBytes = 256 * 1_024 * 1_024

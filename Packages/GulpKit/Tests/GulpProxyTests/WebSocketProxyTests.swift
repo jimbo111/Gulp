@@ -375,3 +375,44 @@ struct WebSocketProxyTests {
         #expect(ProxyWebSocket.webSocketURL(request("http://h:81/x"), target: plain) == "ws://h:81/x")
     }
 }
+
+@Suite("WebSocket relay limits (PRX-031)")
+struct WebSocketRelayLimitTests {
+    @Test("PRX-031: a held message past the reassembly cap is relayed raw, not buffered")
+    func test_PRX031_heldMessageOverCapRelaysRaw() async {
+        let queue = InterceptQueue()
+        await queue.setInterceptingWebSockets(true)
+        let hooks = WSHooks(
+            intercept: queue, matchReplace: nil,
+            upgrade: RawRequest(Bytes("GET /chat HTTP/1.1\r\nHost: x\r\n\r\n")),
+            target: HTTPTarget(scheme: .http, host: "x", port: 80))
+        // Three 6-byte fragments of one text message, over an 8-byte cap; no FIN, so it never ends.
+        let frames = [
+            WebSocketWire.frame(opcode: .text, payload: Array("aaaaaa".utf8), fin: false),
+            WebSocketWire.frame(opcode: .continuation, payload: Array("bbbbbb".utf8), fin: false),
+            WebSocketWire.frame(opcode: .continuation, payload: Array("cccccc".utf8), fin: false),
+        ]
+        let (input, feed) = AsyncStream<[UInt8]>.makeStream()
+        let (record, recorded) = AsyncStream<WSPassed>.makeStream()
+        let written = NIOLockedValueBox<[UInt8]>([])
+        let relay = Task {
+            await ProxyWebSocket.pump(
+                input, direction: .toServer, hooks: hooks, record: recorded, maxMessage: 8
+            ) {
+                bytes in written.withLockedValue { $0 += bytes }
+            }
+        }
+        for frame in frames { feed.yield(frame) }
+        // The connection is still open: the bytes must already be on their way, not held.
+        let expected = frames.flatMap { $0 }
+        for _ in 0..<200 where written.withLockedValue({ $0 }) != expected {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(written.withLockedValue { $0 } == expected)
+        feed.finish()
+        await relay.value
+        recorded.finish()
+        for await _ in record {}
+        #expect(await queue.items.isEmpty)
+    }
+}

@@ -6,7 +6,8 @@
 #    every operation."
 # 1. Accuracy: `scan active` over the whole manifest (Tests/Fixtures/vulnlab-active.json: every
 #    vulnerable route, its /safe/ twin, the M11c fixtures and the gRPC-Web Orders/SafeOrders pair)
-#    with the dev Beacon for OAST; `verify-active` requires exactly the manifest's issues.
+#    with the unsafe gate (stored XSS writes data, F08 §6) and the dev Beacon for OAST;
+#    `verify-active` requires exactly the manifest's issues.
 # 2. Crawl and audit: a new project crawls from /scanlab/ and audits what it found; every route the
 #    manifest marks `crawl` yields exactly its issues, nothing on the safe twins.
 # 3. API: `scan api` imports /openapi.json and scans one request per operation.
@@ -63,7 +64,7 @@ routes=$(grep -c '"method"' "$MANIFEST")
 # 1. Accuracy over the whole manifest.
 ACC="$WORK/accuracy.gulp"
 project "$ACC"
-"$GULP" scan active --project "$ACC" --manifest "$MANIFEST" --base "$LAB" --config balanced | tee "$WORK/scan.txt"
+"$GULP" scan active --project "$ACC" --manifest "$MANIFEST" --base "$LAB" --config balanced --unsafe | tee "$WORK/scan.txt"
 grep -qE '^scan: [0-9]+ findings, [0-9]+ probes, 0 out of scope in [0-9.]+ s \(done\)$' "$WORK/scan.txt" || fail "the accuracy scan didn't finish"
 "$GULP" scan verify-active --project "$ACC" --manifest "$MANIFEST" | tee "$WORK/verify.txt" || fail "issues differ from the manifest"
 grep -qE "^verify-active: $routes routes, [0-9]+ expected issue\(s\), 0 missing, 0 unexpected$" "$WORK/verify.txt" || fail "verification summary"
@@ -75,7 +76,7 @@ echo "PASS: accuracy — $routes routes, $pairs expected issues, 0 missing, 0 un
 # 2. Crawl and audit from the scan lab's index.
 CRAWL="$WORK/crawl.gulp"
 project "$CRAWL"
-"$GULP" scan crawl-audit --project "$CRAWL" --seed "$LAB/scanlab/" --config balanced | tee "$WORK/crawl.txt"
+"$GULP" scan crawl-audit --project "$CRAWL" --seed "$LAB/scanlab/" --config balanced --unsafe | tee "$WORK/crawl.txt"
 grep -qE '^audit: [0-9]+ distinct requests$' "$WORK/crawl.txt" || fail "the crawl didn't hand requests to the audit"
 grep -qE '^scan: [0-9]+ findings, [0-9]+ probes, [0-9]+ out of scope in [0-9.]+ s \(done\)$' "$WORK/crawl.txt" || fail "the audit didn't finish"
 "$GULP" scan verify-active --project "$CRAWL" --manifest "$MANIFEST" --crawled | tee "$WORK/verify-crawl.txt" || fail "crawl-and-audit issues differ"

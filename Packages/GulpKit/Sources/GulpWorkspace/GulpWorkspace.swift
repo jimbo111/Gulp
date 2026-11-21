@@ -1,13 +1,8 @@
-// GulpWorkspace — ProjectSession: wires engines, store and the event bus for one project.
-// Placeholder for M0 scaffolding. Real types land in later milestones
-// (see docs/03-roadmap.md and the feature specs in docs/features).
+// GulpWorkspace — one open project (`ProjectSession`, ProjectSession.swift) and the services the app,
+// the CLI and the automation API reach through it. This file only holds the module marker.
 
 /// Namespace and module marker for the `GulpWorkspace` module.
-///
-/// This is a scaffolding stand-in so the package graph builds on macOS and
-/// Linux from milestone M0 onward. It is replaced by real types as features
-/// are implemented; do not rely on it at runtime.
 public enum GulpWorkspace {
-    /// The module's name, used only in diagnostics until real types exist.
+    /// The module's name, for diagnostics.
     public static let moduleName = "GulpWorkspace"
 }

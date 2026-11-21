@@ -47,6 +47,33 @@ struct ParamMinerTests {
         #expect(found.isEmpty, "\(found)")
     }
 
+    /// A page that prints its whole query string back (and, unless `quiet`, also processes `debug`).
+    func echoApp(_ request: RawRequest, quiet: Bool) -> RawResponse {
+        let derived = DerivedFields(
+            target: HTTPTarget(scheme: .http, host: "app.test"), request: request, response: nil)
+        let query = derived.query ?? ""
+        var body = "Welcome\nYou asked for: \(query)\n"
+        if !quiet, query.split(separator: "&").contains(where: { $0.hasPrefix("debug=") }) {
+            body += "DEBUG: on\n"
+        }
+        return RawResponse(Bytes("HTTP/1.1 200 OK\r\nContent-Length: \(body.utf8.count)\r\n\r\n" + body))
+    }
+
+    @Test(
+        "ADV-020: a page that echoes its whole query string flags nothing as reflected; real behavior still shows"
+    )
+    func echoingPage() async {
+        let names = ["debug", "trace", "foo", "admin", "verbose", "x1", "x2"]
+        let quiet = await ParamMiner.discover(base: get("/page"), names: names, batchSize: 3) {
+            echoApp($0, quiet: true)
+        }
+        #expect(quiet.isEmpty, "\(quiet)")
+        let found = await ParamMiner.discover(base: get("/page"), names: names, batchSize: 3) {
+            echoApp($0, quiet: false)
+        }
+        #expect(found == [DiscoveredParam(name: "debug", evidence: "behavior change")], "\(found)")
+    }
+
     @Test("appendingQuery adds a ? or & correctly and keeps the rest of the request")
     func appendQuery() {
         let first = ParamMiner.appendingQuery(get("/a"), [("x", "1")])

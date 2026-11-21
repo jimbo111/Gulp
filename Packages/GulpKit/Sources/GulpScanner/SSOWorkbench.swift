@@ -20,20 +20,34 @@ public enum OAuthGrantType: String, Sendable, Equatable, CaseIterable {
 
 /// A structured OAuth/OIDC authorization flow reconstructed from traffic (SSO-001).
 public struct OAuthFlow: Sendable, Equatable {
+    /// The grant type (inferred from `response_type` and PKCE when reconstructed from traffic).
     public var grantType: OAuthGrantType
+    /// The `client_id` parameter.
     public var clientID: String?
+    /// The `redirect_uri` parameter.
     public var redirectURI: String?
+    /// The `scope` parameter.
     public var scope: String?
+    /// The `state` parameter (CSRF protection).
     public var state: String?
+    /// The `nonce` parameter (OIDC replay protection).
     public var nonce: String?
+    /// The `response_type` parameter.
     public var responseType: String?
+    /// The `response_mode` parameter.
     public var responseMode: String?
+    /// The PKCE `code_challenge` parameter.
     public var codeChallenge: String?
+    /// The PKCE `code_challenge_method` parameter (`S256` or `plain`).
     public var codeChallengeMethod: String?
+    /// The authorize URL without its query.
     public var authorizeEndpoint: String?
+    /// The token endpoint URL, when known.
     public var tokenEndpoint: String?
+    /// The OIDC userinfo endpoint URL, when known.
     public var userinfoEndpoint: String?
 
+    /// A flow; every field defaults to absent and the grant type to `.unknown`.
     public init(
         grantType: OAuthGrantType = .unknown, clientID: String? = nil, redirectURI: String? = nil,
         scope: String? = nil, state: String? = nil, nonce: String? = nil, responseType: String? = nil,
@@ -58,6 +72,7 @@ public struct OAuthFlow: Sendable, Equatable {
 
 /// A `redirect_uri` validation probe (SSO-003): a mutated callback URL and the attack class it tests.
 public struct RedirectURIProbe: Sendable, Equatable {
+    /// The `redirect_uri` validation weakness a probe tests.
     public enum Kind: String, Sendable, CaseIterable {
         case pathSuffix = "path-suffix"
         case pathTraversal = "path-traversal"
@@ -67,8 +82,11 @@ public struct RedirectURIProbe: Sendable, Equatable {
         case openRedirectChain = "open-redirect-chain"
         case schemeDowngrade = "scheme-downgrade"
     }
+    /// The attack class this probe tests.
     public let kind: Kind
+    /// The mutated `redirect_uri` to send.
     public let value: String
+    /// A probe.
     public init(kind: Kind, value: String) {
         self.kind = kind
         self.value = value
@@ -77,6 +95,7 @@ public struct RedirectURIProbe: Sendable, Equatable {
 
 /// A weakness in a flow's CSRF / code-injection protections (SSO-004).
 public struct SSOProtectionFinding: Sendable, Equatable {
+    /// The protection weakness found.
     public enum Kind: String, Sendable {
         case stateMissing = "state-missing"
         case stateStatic = "state-static"
@@ -84,8 +103,11 @@ public struct SSOProtectionFinding: Sendable, Equatable {
         case pkcePlain = "pkce-plain"
         case nonceMissing = "nonce-missing"
     }
+    /// The weakness found.
     public let kind: Kind
+    /// A readable explanation for the report.
     public let detail: String
+    /// A finding.
     public init(kind: Kind, detail: String) {
         self.kind = kind
         self.detail = detail

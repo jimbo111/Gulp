@@ -99,6 +99,47 @@ struct FramingTests {
         #expect(r.dechunkedBody == nil)
     }
 
+    @Test("HTTP-002: a header-block scan resumed from the last read finds the same end at any split")
+    func test_HTTP002_resumableHeaderBlockEnd() {
+        for text in ["HTTP/1.1 200 OK\r\nA: b\r\n\r\nbody", "HTTP/1.1 200 OK\nA: b\n\nbody", "X\r\n\nrest"] {
+            let all = Array(text.utf8)
+            let whole = HTTP1.headerBlockEnd(all)
+            var buffer: [UInt8] = []
+            var resume = 0
+            var found: (end: Int, terminator: Int)?
+            for byte in all where found == nil {
+                buffer.append(byte)
+                let scan = HTTP1.headerBlockEnd(buffer, from: resume)
+                if scan.terminator != 0 {
+                    found = scan
+                } else {
+                    resume = HTTP1.headerScanResume(buffer.count)
+                }
+            }
+            #expect(found?.end == whole.end && found?.terminator == whole.terminator)
+        }
+    }
+
+    @Test("HTTP-002: every chunked view reads a chunk-size line the same way (BWS before ';' is allowed)")
+    func test_HTTP002_oneChunkSizeGrammar() {
+        // RFC 9112 §7.1.1: whitespace may precede a chunk extension.
+        let body = "5 ;a=1\r\nhello\r\n6\t; b\r\n world\r\n0 \r\ngrpc-status: 0\r\n\r\n"
+        let r = resp("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n" + body)
+        #expect(!r.incomplete && r.dechunkedBody?.string() == "hello world")
+        let parts = HTTP2Text.responseParts(
+            RawResponse(Bytes("HTTP/2 200\r\ntransfer-encoding: chunked\r\n\r\n" + body)))
+        #expect(parts.body == Array("hello world".utf8) && parts.trailers == [H2Header("grpc-status", "0")])
+        // A signed or prefixed size is not a chunk size anywhere.
+        for size in ["-5", "+5", "0x5", " 5", ""] {
+            let bad = Array((size + "\r\nhello\r\n0\r\n\r\n").utf8)
+            #expect(HTTP1.scanChunked(bad, from: 0) == .malformed)
+            let response = resp(
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n" + String(decoding: bad, as: UTF8.self)
+            )
+            #expect(response.incomplete && response.dechunkedBody == nil)
+        }
+    }
+
     @Test("chunked wins over Content-Length and flags the conflict")
     func conflictingFraming() {
         let r = resp("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Length: 5\r\n\r\n0\r\n\r\n")

@@ -63,14 +63,14 @@ struct AuthzCommand: AsyncParsableCommand {
             var alice = Identity(name: "alice")
             alice.cookies.store(setCookies: ["session=\(aliceSession); Path=/"], from: destination.host)
             // bob is the authorized owner of order 2; alice and the unauthenticated user are the testers.
-            try await session.setSessionSettings(
-                SessionSettings(identities: [bob, alice], activeIdentity: bob.id))
+            // They are this run's identities; the project's own session config is left alone.
 
             func request(_ path: String) -> (RawRequest, HTTPTarget) {
                 (RawRequest(Bytes(Array("GET \(path) HTTP/1.1\r\nHost: \(host)\r\n\r\n".utf8))), destination)
             }
             let paths = ["/api/orders/2", "/safe/api/orders/2"]
-            let matrix = try await session.runAuthzMatrix(paths.map(request), authorizedIdentity: bob.id)
+            let matrix = try await session.runAuthzMatrix(
+                paths.map(request), identities: [bob, alice], authorizedIdentity: bob.id)
 
             let columnNames = matrix.columns.map { id in
                 id.flatMap { cid in [bob, alice].first { $0.id == cid }?.name } ?? "unauth"

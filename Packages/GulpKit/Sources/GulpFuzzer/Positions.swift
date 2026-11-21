@@ -11,6 +11,7 @@ public struct FuzzTemplateError: Error, Sendable, Equatable, CustomStringConvert
     /// The reason.
     public var message: String
 
+    /// A readable form of the error: its message.
     public var description: String { message }
 }
 

@@ -1,5 +1,6 @@
 // GulpCore — the structured form of an HTTP/2 request (doc 04 §3), used when a message cannot be
-// expressed as HTTP/1-style text (raw H2 mode, HTTP-025). Sending it arrives with HTTP/2 in M3.
+// expressed as HTTP/1-style text (raw H2 mode, HTTP-025). The engine cannot send it yet (HTTP-025 is
+// open): `NIOHTTPEngine.send(_: H2RequestSpec, ...)` records a failed exchange that says so.
 
 /// One HTTP/2 header field. A named struct, not a tuple, so arrays of it are `Codable`.
 public struct H2Field: Sendable, Codable, Hashable {

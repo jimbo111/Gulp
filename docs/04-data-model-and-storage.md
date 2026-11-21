@@ -139,11 +139,11 @@ public enum ExchangeState: Sendable, Equatable {  // Exchange.state
 public enum Highlight: String, Sendable, Codable, CaseIterable {  // Annotation.highlight / `exchanges.highlight`
     case red, orange, yellow, green, cyan, blue, purple, pink, gray
 }
-// The full warning set, defined once. The single-message parser emits the framing/line warnings;
-// `oversizedHeaders` is emitted by the engine's header-size guard (not the pure parser).
+// The full warning set, defined once; the single-message parser emits them. A header block over
+// `HTTP1.maxHeaderBytes` is not a warning: the proxy answers 431 and the engine fails with `.tooLarge`.
 public enum ParseWarning: Sendable, Equatable, Hashable {
     case bareLF, obsoleteLineFolding, missingFinalCRLF, invalidCharInName, duplicateContentLength,
-         conflictingFraming, malformedStartLine, oversizedHeaders, nonUTF8Header
+         conflictingFraming, malformedStartLine, nonUTF8Header
 }
 
 public struct Timing: Sendable, Codable {         // milliseconds per phase; all of HTTP-010
@@ -472,7 +472,7 @@ CREATE TABLE journal_markers (id INTEGER PRIMARY KEY, at REAL, label TEXT, note 
 | Check Recipes | `~/Library/Application Support/Gulp/recipes/` |
 | Managed browser | `~/Library/Application Support/Gulp/browser/` (Chrome for Testing) and `…/browser-profile/` |
 | API keys (AI, Beacon) | Keychain |
-| Session secrets (request-signing private keys, HMAC and AWS secret keys) | Keychain service `com.gulp.app.secrets` on macOS (`KeychainSecretStore`), 0600 files in `<support>/secrets/` elsewhere (`FileSecretStore`); the project stores only `SigningSecret.stored(ref:)` (`GulpWorkspace/SessionSecrets.swift`). Identity headers and variables are still stored in the project |
+| Session secrets (request-signing private keys, HMAC and AWS secret keys; identity variables, headers, cookies and captured values; macro steps) and the OAST server token | Keychain service `com.gulp.app.secrets` on macOS (`KeychainSecretStore`), 0600 files in `<support>/secrets/` elsewhere (`FileSecretStore`), always through `WorkspaceEnvironment.secretStore`. The project stores only references: `SigningSecret.stored(ref:)` in rules, and `credentialRefs` (id to secret name) for the emptied identities and macros (`GulpWorkspace/SessionSecrets.swift`). Save As and "Use settings from…" give the new project its own copies; a discarded temporary project deletes its secrets. The OAST token is per server, shared by projects |
 | Logs | `~/Library/Logs/Gulp/` |
 
 ## 6. Settings model

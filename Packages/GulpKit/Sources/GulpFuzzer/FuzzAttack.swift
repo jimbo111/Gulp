@@ -342,6 +342,7 @@ public actor FuzzAttack {
         options.updateContentLength = settings.updateContentLength
         options.timeouts.total = .seconds(settings.timeoutSeconds)
         if settings.followRedirects { options.followRedirects = RedirectPolicy(mode: .onSite) }
+        options.scope = inScope  // every redirect hop is scope-checked too, not just the first request
         if !settings.transformTags { options.applyHooks.remove(.transformTags) }
         let recursive = await recursivePositions
         while !Task.isCancelled, var item = await nextItem() {
