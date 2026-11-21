@@ -253,10 +253,10 @@ struct JWTScanCheck: ActiveCheck {
         -> IssueFinding?
     {
         let missing = await context.send(Self.replacingBearer(context.base, with: ""))
-        guard !accepted(missing, like: original) else { return nil }
+        guard !Self.accepted(missing, sent: "", like: original, token: token) else { return nil }
         if let corruptedToken = Self.corruptingSignature(token) {
             let corrupted = await context.send(Self.replacingBearer(context.base, with: corruptedToken))
-            if accepted(corrupted, like: original) {
+            if Self.accepted(corrupted, sent: corruptedToken, like: original, token: token) {
                 return context.finding(
                     id, point: nil, variant: "unverified signature",
                     detail:
@@ -267,7 +267,7 @@ struct JWTScanCheck: ActiveCheck {
         // alg:none — the signature is removed entirely.
         for forgery in (try? JWTAttacks.algNone(jwt)) ?? [] {
             let probe = await context.send(Self.replacingBearer(context.base, with: forgery.token))
-            if accepted(probe, like: original) {
+            if Self.accepted(probe, sent: forgery.token, like: original, token: token) {
                 return context.finding(
                     id, point: nil, variant: "alg:none",
                     detail:
@@ -286,10 +286,12 @@ struct JWTScanCheck: ActiveCheck {
         return String(token[...dot]) + (first == "A" ? "B" : "A") + token[token.index(dot, offsetBy: 2)...]
     }
 
-    /// Whether `probe` looks as authenticated as the original (same success, similar body).
-    func accepted(_ probe: Probe, like original: Probe) -> Bool {
+    /// Whether `probe`, sent with token `sent`, looks as authenticated as the `original` sent with
+    /// `token`: the same success and a similar body once both tokens are removed (a page that echoes
+    /// the request differs only by the token, and must not look like a rejection).
+    static func accepted(_ probe: Probe, sent: String, like original: Probe, token: String) -> Bool {
         guard let status = probe.status, (200..<400).contains(status) else { return false }
-        return SQLInjectionCheck.similar(probe, original, removing: [])
+        return SQLInjectionCheck.similar(probe, original, removing: [sent, token])
     }
 
     static func bearer(_ request: RawRequest) -> String? {

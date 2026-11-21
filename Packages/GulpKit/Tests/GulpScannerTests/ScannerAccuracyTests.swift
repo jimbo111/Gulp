@@ -121,6 +121,8 @@ struct AccuracyApp: Sendable {
                     form.replacingOccurrences(of: "+", with: " ").removingPercentEncoding ?? form)
             }
             return (FakeApp.html(await state.messages.joined(separator: "<br>")), 0.01)
+        case "/echo":
+            return (FakeApp.text(request.bytes.string()), 0.01)  // echoes the request, token included
         case "/public":
             return (FakeApp.text(#"{"news":[]}"#), 0.01)  // never looks at the token
         case let path where path.hasPrefix("/account"):
@@ -263,8 +265,10 @@ struct JWTAccuracyTests {
 
     @Test("SCN-074: an endpoint that ignores the token is not an alg:none finding; real ones still are")
     func test_SCN074_jwtNegativeControls() async {
-        let ignored = await scanApp([get("/public", extra: [Self.bearer])], app: AccuracyApp())
-        #expect(!ignored.contains { $0.typeID == "active.jwt" }, "\(pairs(ignored))")
+        for path in ["/public", "/echo"] {
+            let ignored = await scanApp([get(path, extra: [Self.bearer])], app: AccuracyApp())
+            #expect(!ignored.contains { $0.typeID == "active.jwt" }, "\(path): \(pairs(ignored))")
+        }
         let algNone = await scanApp([get("/me", extra: [Self.bearer])], app: AccuracyApp())
         #expect(
             algNone.contains { $0.typeID == "active.jwt" && $0.variant == "alg:none" }, "\(pairs(algNone))")
