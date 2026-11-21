@@ -106,8 +106,9 @@ public enum PayloadSource: Sendable, Hashable, Codable {
         }
     }
 
-    /// The lines of a wordlist (cached per path for the attack's duration by the caller).
-    static func lines(_ path: String) throws -> [String] {
+    /// The payloads of the wordlist file at `path`, one per line, empty lines and `#` comments
+    /// skipped. Reads the whole file: call it off the main thread.
+    public static func lines(_ path: String) throws -> [String] {
         let text = try String(contentsOfFile: (path as NSString).expandingTildeInPath, encoding: .utf8)
         return text.split(whereSeparator: \.isNewline).map(String.init).filter {
             !$0.isEmpty && !$0.hasPrefix("#")

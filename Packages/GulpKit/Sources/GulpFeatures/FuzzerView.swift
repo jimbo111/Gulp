@@ -107,9 +107,22 @@ final class FuzzerModel {
     private(set) var discovered: [DiscoveredPath] = []
     private(set) var discovering = false
 
+    /// Wordlist files by path, read off the main thread when a set's path is set (FUZ-010): the
+    /// planned count and the preview, which the view renders, never touch the disk.
+    private(set) var wordlists: [String: Wordlist] = [:]
+
+    /// A wordlist file's payloads, or why it could not be read.
+    enum Wordlist: Equatable {
+        case loaded([String])
+        case failed(String)
+    }
+
     @ObservationIgnored let session: ProjectSession
     @ObservationIgnored private var run: FuzzRun?
     @ObservationIgnored private var discovery: ContentDiscovery?
+    /// Results not yet in the table, and the 100 ms tick that moves them there (CLAUDE.md §4).
+    @ObservationIgnored private var pendingResults: [FuzzResult] = []
+    @ObservationIgnored private var resultTicker: Task<Void, Never>?
 
     /// The Fuzzer of `session`.
     init(session: ProjectSession) {
@@ -117,8 +130,31 @@ final class FuzzerModel {
         Task { await reloadSaved() }
     }
 
-    var config: FuzzAttackConfig? {
-        // Pure: the view reads this while rendering, so it must not touch observed state.
+    /// The attack as configured; wordlist sets name their file (the engine reads it).
+    var config: FuzzAttackConfig? { config(sets: sets.map(\.set)) }
+
+    /// Read the wordlist at `path` once, off the main thread.
+    func loadWordlist(_ path: String) async {
+        guard !path.isEmpty, wordlists[path] == nil else { return }
+        do {
+            let lines = try await Task.detached { try PayloadSource.lines(path) }.value
+            wordlists[path] = .loaded(lines)
+        } catch {
+            wordlists[path] = .failed(error.localizedDescription)
+        }
+    }
+
+    /// The set as planned on screen: a wordlist file becomes its loaded lines; nil while a wordlist
+    /// is not loaded.
+    private func plannedSet(_ draft: PayloadSetDraft) -> PayloadSet? {
+        let set = draft.set
+        guard draft.kind == .file else { return set }
+        guard case .loaded(let lines) = wordlists[draft.filePath] else { return nil }
+        return PayloadSet(.list(lines), processors: set.processors)
+    }
+
+    private func config(sets: [PayloadSet]) -> FuzzAttackConfig? {
+        // Pure: the view reads this while rendering, so it must not change observed state.
         guard let target = HTTPTarget(url: targetText.trimmingCharacters(in: .whitespaces)) else {
             return nil
         }
@@ -134,7 +170,7 @@ final class FuzzerModel {
         return FuzzAttackConfig(
             name: "Attack \(savedAttacks.count + 1)", target: target, request: request,
             attackType: attackType,
-            sets: sets.map(\.set), matches: matches, extracts: extracts, settings: settings,
+            sets: sets, matches: matches, extracts: extracts, settings: settings,
             rpcFields: rpcFields)
     }
 
@@ -161,7 +197,16 @@ final class FuzzerModel {
 
     /// The planned request count, or a problem.
     var plannedCount: String {
-        guard let config else { return "Target must be scheme://host[:port]" }
+        for draft in sets where draft.kind == .file {
+            switch wordlists[draft.filePath] {
+            case nil: return draft.filePath.isEmpty ? "Choose a wordlist" : "Loading wordlist…"
+            case .failed(let reason): return "Wordlist unreadable: \(reason)"
+            case .loaded: continue
+            }
+        }
+        guard let config = config(sets: sets.compactMap(plannedSet)) else {
+            return "Target must be scheme://host[:port]"
+        }
         do {
             let count = try config.plan().count
             return count == .max ? "too many to count" : "\(count) requests"
@@ -192,9 +237,8 @@ final class FuzzerModel {
 
     /// Live preview of a set's first processed payloads (FUZ-012).
     func preview(_ draft: PayloadSetDraft) -> [String] {
-        (try? PayloadPipeline(draft.set.processors).preview(draft.set.source, count: 8)) ?? [
-            "(invalid processor)"
-        ]
+        guard let set = plannedSet(draft) else { return [] }
+        return (try? PayloadPipeline(set.processors).preview(set.source, count: 8)) ?? ["(invalid processor)"]
     }
 
     /// Start the attack (FUZ-004).
@@ -212,33 +256,52 @@ final class FuzzerModel {
         let session = self.session
         let allow = allowOutOfScope
         Task {
+            beginResults()
             do {
                 let run = try await session.startAttack(config, allowOutOfScope: allow)
                 self.run = run
-                var pending: [FuzzResult] = []
-                var last = ContinuousClock.now
                 for await event in run.events {
                     switch event {
-                    case .result(let result):
-                        pending.append(result)
-                        // Coalesce UI updates (at most every 100 ms, CLAUDE.md §4).
-                        if ContinuousClock.now - last > .milliseconds(100) {
-                            results += pending
-                            pending = []
-                            last = .now
-                        }
-                    case .finished(let done):
-                        results += pending
-                        pending = []
-                        summary = done
+                    case .result(let result): buffer(result)
+                    case .finished(let done): summary = done
                     }
                 }
             } catch {
                 message = "\(error)"
             }
+            endResults()
             running = false
             await reloadSaved()
         }
+    }
+
+    /// Start moving buffered results into the table every 100 ms.
+    func beginResults() {
+        resultTicker?.cancel()
+        pendingResults = []
+        resultTicker = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(100))
+                guard let self else { return }
+                self.flushResults()
+            }
+        }
+    }
+
+    /// Hold a result for the next tick.
+    func buffer(_ result: FuzzResult) { pendingResults.append(result) }
+
+    /// Stop the tick and move what is left into the table.
+    func endResults() {
+        resultTicker?.cancel()
+        resultTicker = nil
+        flushResults()
+    }
+
+    private func flushResults() {
+        guard !pendingResults.isEmpty else { return }
+        results += pendingResults
+        pendingResults = []
     }
 
     func pause() {
@@ -495,6 +558,7 @@ struct FuzzerPanel: View {
                                         }
                                     }
                                 }
+                                .task(id: draft.filePath) { await model.loadWordlist(draft.filePath) }
                             case .numbers:
                                 HStack {
                                     Stepper("From \(draft.from)", value: $draft.from)
