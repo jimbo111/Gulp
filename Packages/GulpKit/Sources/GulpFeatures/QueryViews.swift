@@ -184,7 +184,7 @@ public struct LoggerView: View {
                             .frame(minWidth: 220, maxWidth: 420)
                             .onChange(of: query) { apply(model) }
                         Spacer()
-                        Text("\(model.rowCount) items").foregroundStyle(.secondary).monospacedDigit()
+                        Text("^[\(model.rowCount) item](inflect: true)").foregroundStyle(.secondary).monospacedDigit()
                     }
                     .toggleStyle(.button)
                     .controlSize(.small)

@@ -135,14 +135,18 @@ extension ProjectStore {
         }
     }
 
-    /// Ids of the newest exchanges whose responses may hold links (HTML, JSON, JavaScript, XML).
+    /// Ids of the newest exchanges whose responses may hold links (HTML, JSON, JavaScript, XML),
+    /// leaving out the payload-injecting tools' probes (`ToolSource.payloadInjecting`).
     public func textualResponseIDs(limit: Int = 2_000) async throws -> [ExchangeID] {
-        try await pool.read { db in
+        let probes = ToolSource.payloadInjecting.map { "'\($0.rawValue)'" }.joined(separator: ",")
+        return try await pool.read { db in
             try ExchangeID.fetchAll(
                 db,
                 sql: """
-                    SELECT id FROM exchanges WHERE mime LIKE '%html%' OR mime LIKE '%json%' \
-                    OR mime LIKE '%javascript%' OR mime LIKE '%xml%' ORDER BY id DESC LIMIT ?
+                    SELECT id FROM exchanges WHERE (mime LIKE '%html%' OR mime LIKE '%json%' \
+                    OR mime LIKE '%javascript%' OR mime LIKE '%xml%') \
+                    AND source NOT IN (\(probes)) \
+                    ORDER BY id DESC LIMIT ?
                     """,
                 arguments: [limit])
         }

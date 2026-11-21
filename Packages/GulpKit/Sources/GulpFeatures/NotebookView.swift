@@ -203,7 +203,7 @@ struct NotebookPanel: View {
                     Button("New Note") { model.newNote() }
                     Button("Delete") { model.delete() }.disabled(model.selection.isEmpty)
                     Spacer()
-                    Text("\(model.items.count) items").foregroundStyle(.secondary).font(.caption)
+                    Text("^[\(model.items.count) item](inflect: true)").foregroundStyle(.secondary).font(.caption)
                 }
                 .padding(6)
                 if model.selected == nil, let message = model.message {

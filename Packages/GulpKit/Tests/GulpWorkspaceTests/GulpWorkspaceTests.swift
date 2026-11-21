@@ -406,6 +406,32 @@ struct SiteMapServiceTests {
         try await session.close()
     }
 
+    @Test("TGT-003: responses to Scanner and Fuzzer probes echo their payloads, so they infer no nodes")
+    func test_TGT003_probeResponsesInferNothing() async throws {
+        let environment = isolatedEnvironment()
+        let session = try await open(environment, "sitemap-probes")
+        let target = HTTPTarget(scheme: .http, host: "lab", port: 80)
+        for source in [ToolSource.scanner, .fuzzer, .proxy] {
+            let body = "<a href=\"https://\(source.rawValue).canary.test/\">x</a>"
+            _ = await session.store.writer.record(
+                Exchange(
+                    source: source, target: target,
+                    request: RawRequest(Bytes("GET /go HTTP/1.1\r\nHost: lab\r\n\r\n")),
+                    response: RawResponse(
+                        Bytes(
+                            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: \(body.utf8.count)"
+                                + "\r\n\r\n\(body)"))))
+        }
+        await session.store.writer.flush()
+        let live = await waitForMap(session) { $0.node("https://proxy.canary.test:443") != nil }
+        await session.siteMap.rebuild()
+        let rebuilt = await session.siteMap.snapshot
+        for map in [live, rebuilt] {
+            #expect(map.hosts.map(\.id).sorted() == ["http://lab:80", "https://proxy.canary.test:443"])
+        }
+        try await session.close()
+    }
+
     @Test("TGT-001/022: changing scope rebuilds the map so in-scope flags follow")
     func test_TGT001_rebuildOnScope() async throws {
         let environment = isolatedEnvironment()

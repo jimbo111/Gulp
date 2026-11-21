@@ -121,7 +121,8 @@ public actor SiteMapService {
     }
 
     static func links(of exchange: Exchange) -> [String] {
-        guard let response = exchange.response else { return [] }
+        guard let response = exchange.response, !ToolSource.payloadInjecting.contains(exchange.source)
+        else { return [] }
         let target = exchange.target
         let standard = target.port == (target.scheme == .https ? 443 : 80)
         let page =

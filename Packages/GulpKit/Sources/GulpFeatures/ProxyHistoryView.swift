@@ -230,7 +230,7 @@ struct HistoryFilterBar: View {
             }
             Spacer(minLength: 0)
             Toggle("Auto-scroll", isOn: $model.autoScroll)
-            Text("\(model.rowCount) items")
+            Text("^[\(model.rowCount) item](inflect: true)")
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
                 .fixedSize()

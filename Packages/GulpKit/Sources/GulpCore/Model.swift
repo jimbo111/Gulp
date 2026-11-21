@@ -229,6 +229,10 @@ public enum ToolSource: Sendable, Hashable {
         }
     }
 
+    /// The tools whose requests carry injected payloads. Their responses echo that input rather than
+    /// describe the application, so nothing is inferred from them (TGT-003).
+    public static let payloadInjecting: [ToolSource] = [.scanner, .fuzzer]
+
     /// Decode the stable TEXT encoding; nil for unknown values.
     public init?(rawValue: String) {
         switch rawValue {
