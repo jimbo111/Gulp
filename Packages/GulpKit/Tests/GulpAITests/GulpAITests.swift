@@ -26,6 +26,45 @@ struct RedactionTests {
         // Disabled leaves the text untouched.
         #expect(Redactor(enabled: false).redact(text).text == text)
     }
+
+    @Test("AI-003: a PEM private key is masked whole, body included (also when the END line is cut off)")
+    func test_AI003_privateKeyBody() {
+        let body = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7"
+        let pem = "key:\n-----BEGIN PRIVATE KEY-----\n\(body)\nAbCd==\n-----END PRIVATE KEY-----\nafter"
+        let result = Redactor().redact(pem)
+        #expect(!result.text.contains(body) && !result.text.contains("AbCd=="))
+        #expect(result.text == "key:\n[REDACTED]\nafter")
+        let truncated = Redactor().redact("-----BEGIN RSA PRIVATE KEY-----\n\(body)\n")
+        #expect(!truncated.text.contains(body))
+    }
+
+    @Test("AI-003: JSON-quoted secrets keep their key and lose their value")
+    func test_AI003_jsonSecrets() {
+        let json =
+            #"{"user":"bob","password":"hunter22","#
+            + #""access_token":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln","api_key": "k\"9"}"#
+        let result = Redactor().redact(json).text
+        #expect(result.contains(#""user":"bob""#))
+        #expect(result.contains(#""password":"[REDACTED]""#))
+        #expect(result.contains(#""access_token":"[REDACTED]""#))
+        #expect(result.contains(#""api_key": "[REDACTED]""#))
+        #expect(!result.contains("hunter22") && !result.contains("eyJhbGci") && !result.contains(#"k\"9"#))
+    }
+
+    @Test("AI-003: Proxy-Authorization values are masked like Authorization")
+    func test_AI003_proxyAuthorization() {
+        let text = "GET http://x/ HTTP/1.1\r\nProxy-Authorization: Basic dXNlcjpwYXNz\r\nHost: x\r\n\r\n"
+        let result = Redactor().redact(text).text
+        #expect(result.contains("Proxy-Authorization: [REDACTED]\r\n"))
+        #expect(!result.contains("dXNlcjpwYXNz") && result.contains("Host: x"))
+    }
+
+    @Test("AI-003: a bare JWT anywhere in the text is masked")
+    func test_AI003_bareJWT() {
+        let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+        let result = Redactor().redact("GET /session/\(jwt)/view?x=1 HTTP/1.1")
+        #expect(result.text == "GET /session/[REDACTED]/view?x=1 HTTP/1.1")
+    }
 }
 
 /// A provider that returns a scripted sequence of responses and records what it was asked.
