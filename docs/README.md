@@ -12,7 +12,8 @@
 | 05 | [05-ui-ux.md](05-ui-ux.md) | Window layout, navigation, shared components, shortcuts, visual design |
 | 06 | [06-testing-strategy.md](06-testing-strategy.md) | Unit, integration and UI tests, VulnLab, performance budgets |
 | 07 | [07-decisions.md](07-decisions.md) | Architecture Decision Records (ADRs) and open questions |
-| — | [PROGRESS.md](PROGRESS.md) | Live progress tracker; Claude updates it as work lands |
+| 08–12 | [08](08-architecture-review.md) · [09](09-burpsuite-comparison.md) · [10](10-feature-review.md) · [11](11-review-run.md) · [12](12-burp-2026-comparison.md) | Dated review snapshots (architecture, Burp comparisons, feature review, executed review run); PROGRESS.md is authoritative for current state |
+| — | [PROGRESS.md](PROGRESS.md) | Live progress tracker: current state, milestone checklist, log |
 | — | [REVIEW.md](REVIEW.md) | Review dossier: the objective DoD, every independent review + verdict, and the build-ready judgment |
 
 ## Feature specifications (`features/`)
@@ -56,7 +57,7 @@ These build on the v1 engines and ship after release. F25 and F32 come first aft
 |---|---|---|
 | F25 | [SSO Workbench (OAuth/OIDC/SAML flow testing)](features/F25-sso-workbench.md) | M21 |
 | F32 | [LLM/AI-feature security testing](features/F32-llm-security.md) | M26 |
-| F11 | [Sequencer](features/F11-sequencer.md) | Post-1.0 backlog (unscheduled) |
+| F11 | [Sequencer](features/F11-sequencer.md) | Built 2026-11-13 (engine + CLI); UI charts and saved runs remain |
 
 ### Merged specs (2026-11-08 feature review)
 

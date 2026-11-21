@@ -122,13 +122,11 @@ struct PassiveScanTests {
         await session.passiveScan.drain()
         let count = try await session.store.issues().count
         let jsonData = try await session.exportIssues(.json)
-        let json =
-            try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
+        let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
         let entries = json?["issues"] as? [[String: Any]]
         #expect(entries?.count == count && (entries?.first?["evidence"] as? [Any])?.isEmpty == false)
         let sarifData = try await session.exportIssues(.sarif)
-        let sarif =
-            try JSONSerialization.jsonObject(with: sarifData) as? [String: Any]
+        let sarif = try JSONSerialization.jsonObject(with: sarifData) as? [String: Any]
         let run = (sarif?["runs"] as? [[String: Any]])?.first
         #expect(sarif?["version"] as? String == "2.1.0" && (run?["results"] as? [Any])?.count == count)
         let rules =

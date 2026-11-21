@@ -70,34 +70,37 @@ extension ProjectStore {
         var after: Int64 = 0
         while true {
             let start = after
-            // The rows are read inside the closure: GRDB's `Row` is not Sendable.
-            let (last, changes): (Int64?, [(Int64, Bool)]) = try await pool.read { db in
-                let rows = try Row.fetchAll(
+            // Decode inside the read: GRDB's `Row` is not Sendable, so it can't leave the closure.
+            let rows = try await pool.read { db in
+                try Row.fetchAll(
                     db,
                     sql: """
                         SELECT id, scheme, host, port, path, query, in_scope FROM exchanges WHERE id > ? \
                         ORDER BY id LIMIT ?
                         """,
-                    arguments: [start, batch])
-                var changes: [(Int64, Bool)] = []
-                for row in rows {
+                    arguments: [start, batch]
+                ).map { row -> (id: Int64, target: HTTPTarget, path: String, inScope: Bool) in
                     let scheme: String = row["scheme"] ?? "http"
-                    let target = HTTPTarget(
-                        scheme: scheme == "https" ? .https : .http, host: row["host"] ?? "",
-                        port: row["port"] ?? 0)
                     let query: String? = row["query"]
-                    let path = (row["path"] ?? "/") + (query.map { "?\($0)" } ?? "")
-                    let inScope = service.isInScope(target, path: path)
-                    if inScope != ((row["in_scope"] as Int?) == 1) { changes.append((row["id"], inScope)) }
+                    return (
+                        row["id"],
+                        HTTPTarget(
+                            scheme: scheme == "https" ? .https : .http, host: row["host"] ?? "",
+                            port: row["port"] ?? 0),
+                        (row["path"] ?? "/") + (query.map { "?\($0)" } ?? ""),
+                        (row["in_scope"] as Int?) == 1
+                    )
                 }
-                return (rows.last?["id"], changes)
             }
-            guard let last else { return }
-            after = last
+            guard let last = rows.last else { return }
+            after = last.id
+            let changes = rows.compactMap { row -> (Int64, Bool)? in
+                let inScope = service.isInScope(row.target, path: row.path)
+                return inScope == row.inScope ? nil : (row.id, inScope)
+            }
             if !changes.isEmpty {
-                let updates = changes
                 try await pool.write { db in
-                    for (id, inScope) in updates {
+                    for (id, inScope) in changes {
                         try db.execute(
                             sql: "UPDATE exchanges SET in_scope = ? WHERE id = ?", arguments: [inScope, id])
                     }

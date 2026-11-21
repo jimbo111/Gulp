@@ -8,9 +8,10 @@ import GulpCore
 
 /// What evaluation may need beyond the exchange itself.
 public struct GulpQLContext: Sendable {
-    /// The current scope (`matches_scope`, and `in_scope` when `inScope` isn't given).
+    /// The current scope (`in_scope` / `matches_scope` when `inScope` isn't given).
     public var scope: ScopeService?
-    /// The stored in-scope flag, when the caller has it (the `exchanges.in_scope` column).
+    /// The stored in-scope flag, when the caller has it (the `exchanges.in_scope` column); it then
+    /// answers both `in_scope` and `matches_scope`, as SQL push-down does.
     public var inScope: (@Sendable (Exchange) -> Bool)?
     /// Undo a `Content-Encoding` (gzip, deflate, br…); nil leaves bodies as they are.
     public var decodeBody: (@Sendable (_ body: [UInt8], _ encoding: String) -> [UInt8]?)?
@@ -291,10 +292,11 @@ final class ExchangeView {
             return .missing
         case "resp.sets_cookie": return .bool(derived.setsCookies)
         case "source": return .text(exchange.source.rawValue)
-        case "in_scope":
+        case "in_scope", "matches_scope":
+            // One source of truth per caller: the stored flag when given (the store recomputes it on
+            // every scope change, and SQL push-down reads the same column), else the scope rules.
             if let inScope = context.inScope { return .bool(inScope(exchange)) }
             return .bool(matchesScope)
-        case "matches_scope": return .bool(matchesScope)
         case "highlight": return exchange.annotation.highlight.map { .text($0.rawValue) } ?? .missing
         case "comment": return exchange.annotation.comment.map { .text($0) } ?? .missing
         case "tag": return .list(exchange.annotation.tags)

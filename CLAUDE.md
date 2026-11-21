@@ -6,7 +6,7 @@ code disagree, fix one of them in the same change and say which one in the commi
 
 ## 1. Reading order (do this at the start of every session)
 
-1. `docs/PROGRESS.md` — what is done, what is in progress, and the next task.
+1. `docs/PROGRESS.md` — "Current state" (gate, toolchain, next steps) and the milestone checklist.
 2. `docs/03-roadmap.md` — the milestone you are working on and its Definition of Done.
 3. `docs/01-architecture.md` — module boundaries and dependency rules (always applies).
 4. The feature spec(s) for the milestone: `docs/features/Fxx-*.md`.
@@ -16,8 +16,10 @@ Don't read every feature spec up front. Read the ones the current milestone list
 
 ## 2. Workflow per task
 
-1. Pick the next unchecked task in `docs/PROGRESS.md` (one milestone at a time, in order, unless the
-   user says otherwise).
+1. Pick work from the milestone checklist in `docs/PROGRESS.md`, not from the roadmap's checkboxes:
+   the first row whose "Engine/CLI" column is not **done**, and only the items that row lists as
+   missing (one milestone at a time, in order, unless the user says otherwise). Never re-implement a
+   row marked **done**.
 2. Read the requirement IDs it references (for example `PRX-003`). Every requirement has a priority:
    - **P0**: must ship in that milestone.
    - **P1**: parity feature; do it in the milestone unless it is listed as deferred.
@@ -26,28 +28,32 @@ Don't read every feature spec up front. Read the ones the current milestone list
    `func test_PRX003_upstreamProxyChaining()`.
 4. Implement it in the module the architecture doc assigns.
 5. Run `make test` (or `swift test --package-path Packages/GulpKit` on Linux) and `make lint`.
-6. Update `docs/PROGRESS.md`: tick the box and add a one-line log entry (date, what, any deviation).
+6. Update `docs/PROGRESS.md`: the milestone's checklist row (and "Current state" if it changed), plus a
+   log entry at the top of the log (date, what, any deviation).
 7. Commit with a message like `M3: TLS leaf minting with SNI (TLS-002, TLS-003)`.
 
 ## 3. Commands
 
 ```bash
-make bootstrap   # install xcodegen/swift-format via Homebrew, resolve packages
+make bootstrap   # install xcodegen via Homebrew, resolve packages
 make generate    # xcodegen generate -> Gulp.xcodeproj (git-ignored)
 make build       # build the macOS app (Debug)
 make run         # build and launch Gulp.app
 make test        # swift test for GulpKit + xcodebuild test for app/UI tests
 make test-core   # swift test only (works on Linux too)
-make lint        # swift-format lint --strict, after `make rules`
+make lint        # `swift format lint --strict` (toolchain's swift-format), after `make rules`
 make rules       # Scripts/arch-check.sh + Scripts/rules-check.sh (hard rules as grep checks; Linux too)
 make vulnlab     # run the intentionally vulnerable local test server on :8088
 make beacon      # run the OAST Beacon server locally (dev mode, high ports)
 ```
 
+The toolchain minimum is **Swift 6.1** (swift-crypto ≥ 4.5.1 needs tools 6.1). GitHub Actions CI
+cannot run at the moment, so `make test` + `make lint` locally is the only gate.
+
 On **Linux** (for example cloud Claude sessions), `xcodebuild` is unavailable. Build and test the
 platform-independent modules with `swift build` / `swift test --package-path Packages/GulpKit`.
-Modules that need Apple frameworks are behind `#if canImport(...)` or are macOS-only targets (see
-architecture §4). Never break the Linux build of the core modules.
+Modules that need Apple frameworks keep that code behind `#if canImport(...)` and compile to empty
+shells on Linux (see architecture §4). Never break the Linux build of the core modules.
 If SwiftPM cannot find zlib/sqlite headers on Linux, pass
 `SWIFTPM_FLAGS="-Xcc -I/usr/local/include -Xlinker -L/usr/local/lib"` (to `make test-core` and to the
 `Scripts/*-dod.sh` scripts), as CI does.

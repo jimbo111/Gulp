@@ -1,6 +1,9 @@
 # 03 — Roadmap
 
-Build the milestones **in order**. Each one ends with a usable, tested app. Requirement ID prefixes:
+Build the milestones **in order**. Each one ends with a usable, tested app. The checkboxes below are
+task lists, not status: what is built per milestone is the checklist in `docs/PROGRESS.md`.
+
+Requirement ID prefixes:
 
 | Prefix | Spec | Prefix | Spec |
 |---|---|---|---|
@@ -65,12 +68,12 @@ the later milestone.
 
 ## Phase A — Foundation (M0–M3): "a proxy you can browse through"
 
-### M0 — Scaffolding
-- [ ] Create the repository layout from doc 01 §2 (empty modules with a placeholder type and test each).
-- [ ] `Package.swift` with every target and the dependency graph from doc 01 §3. The manifest has **no** platform `#if`: the macOS-capability modules are ordinary targets whose AppKit/JavaScriptCore code is behind `#if canImport(...)` (empty shells on Linux), so the whole graph builds on both OSes (doc 01 §3 rule 4, ADR-010).
-- [ ] `project.yml`, `App/GulpApp.swift` showing an empty `NavigationSplitView` window with the sidebar from doc 05 §2.
-- [ ] Makefile, Brewfile, `.swift-format`, `.gitignore` (`.build/`, `*.xcodeproj`, `DerivedData`, `.DS_Store`).
-- [ ] CI workflow (doc 02 §7).
+### M0 — Scaffolding — DONE
+- [x] Create the repository layout from doc 01 §2 (empty modules with a placeholder type and test each).
+- [x] `Package.swift` with every target and the dependency graph from doc 01 §3. The manifest has **no** platform `#if`: the macOS-capability modules are ordinary targets whose AppKit/JavaScriptCore code is behind `#if canImport(...)` (empty shells on Linux), so the whole graph builds on both OSes (doc 01 §3 rule 4, ADR-010).
+- [x] `project.yml`, `App/GulpApp.swift` showing an empty `NavigationSplitView` window with the sidebar from doc 05 §2.
+- [x] Makefile, Brewfile, `.swift-format`, `.gitignore` (`.build/`, `*.xcodeproj`, `DerivedData`, `.DS_Store`).
+- [x] CI workflow (doc 02 §7).
 - **DoD:** `make bootstrap generate build test lint` pass on macOS; `swift test` for GulpKit passes on Linux; the app launches and shows the empty sidebar.
 
 ### M1 — Core model and raw HTTP engine (HTTP/1.x)
@@ -117,38 +120,38 @@ Split from the original M3 after the 2026-11-07 feature review (docs/FEATURE-REV
 - [x] **Gulp Browser launch** — the zero-setup capture path: discover/download Chromium, launch with the CA SPKI pin and proxy flags, one-click ⌘⇧O, cleanup on quit (BRW-001…BRW-004). CDP automation is M13a.
 - **DoD:** `curl -N` through Gulp to VulnLab `/sse` receives every event as it is sent and the history row goes from "streaming" to complete (F01 test 8); WebSocket messages show up in WS history; one click launches Chromium proxied through Gulp with no certificate warning on `https://localhost:8443`, its traffic is recorded, and quitting Gulp closes it (F16 test 1).
 
-### M5 — Repeater (and the advanced HTTP engine) — implemented; awaiting macOS CI (see PROGRESS)
-- [ ] All P0/P1 of F06 (tabs, groups, history, follow redirects, connection options), including streamed responses in Repeater (REP-016) and **paste to request** from cURL/fetch/raw (REP-017).
-- [ ] F03 HTTP/2 raw mode, the "update Content-Length" option, group send modes including single-packet attack (HTTP-030…HTTP-036).
-- [ ] F03 remaining P1 engine features: HTTP/1 pipelining for Turbo mode, platform auth, and the shared global/per-host throttle (HTTP-011, HTTP-012, HTTP-013). The HTTP-013 limiter is extended with concurrency budgets and backoff in M11a (F03 §3.4, GOV-002/003/007).
+### M5 — Repeater (and the advanced HTTP engine) — engine/CLI done; macOS UI pending (see PROGRESS)
+- [x] All P0/P1 of F06 (tabs, groups, history, follow redirects, connection options), including streamed responses in Repeater (REP-016) and **paste to request** from cURL/fetch/raw (REP-017).
+- [x] F03 HTTP/2 raw mode (HTTP-025 raw h2 from an `H2RequestSpec` is a carry-over), the "update Content-Length" option, group send modes including single-packet attack (HTTP-030…HTTP-036).
+- [x] F03 remaining P1 engine features: HTTP/1 pipelining for Turbo mode, platform auth (NTLMv2 is a carry-over), and the shared global/per-host throttle (HTTP-011, HTTP-012, HTTP-013). The HTTP-013 limiter is extended with concurrency budgets and backoff in M11a (F03 §3.4, GOV-002/003/007).
 - **DoD:** The VulnLab race-condition endpoint (doc 06 §3) can be exploited with a group send in single-packet mode; a pasted cURL command reproduces its request (F06 test 8); `/sse` streams in a Repeater tab (F06 test 7).
 
-### M6a — Target: site map and scope — implemented; awaiting macOS CI (see PROGRESS)
-- [ ] All P0/P1 of F04 §2.1–§2.2 (site map, scope, ScopeGuard).
+### M6a — Target: site map and scope — engine/CLI done; macOS UI pending (see PROGRESS)
+- [x] All P0/P1 of F04 §2.1–§2.2 (site map, scope, ScopeGuard).
 - **DoD:** The site map tree fills from proxy traffic; scope rules hide out-of-scope items; ScopeGuard blocks out-of-scope Repeater sends (with a confirmation dialog).
 
-### M6b — Import/export and the MCP read surface — implemented; awaiting macOS CI (see PROGRESS)
+### M6b — Import/export and the MCP read surface — engine/CLI done; macOS UI pending (see PROGRESS)
 Pulled forward from M16/M17/M19 by the 2026-11-08 feature review: importing existing traffic and API
 definitions, and letting an AI agent read the project and send a request, are daily-driver needs.
-- [ ] The **import/export service** (PRJ-012) and its entry points: History export/import (HIS-044), Project → Import/merge (PRJ-008), site-map import (TGT-009), Postman/HAR import (ADV-051); **other-proxy history import** (PRJ-013).
-- [ ] **API import**: OpenAPI/Swagger request building into the site map and schema-aware values (ADV-050, ADV-052). ("Scan the whole API" activates with the active scanner in M11c.)
-- [ ] **MCP server, read surface + `send_request`**: the stdio transport (AUT-020), the tools `list_exchanges`, `get_exchange`, `send_request` and `get_scope` (AUT-021, first part), the site map and exchanges as resources (AUT-022, first part), and agent safety — ScopeGuard, approval mode, audit log (AUT-023). The remaining MCP tools arrive with their features and are completed in M17.
+- [x] The **import/export service** (PRJ-012) and its entry points: History export/import (HIS-044), Project → Import/merge (PRJ-008), site-map import (TGT-009), Postman/HAR import (ADV-051); **other-proxy history import** (PRJ-013).
+- [x] **API import**: OpenAPI/Swagger request building into the site map and schema-aware values (ADV-050, ADV-052). ("Scan the whole API" activates with the active scanner in M11c.)
+- [x] **MCP server, read surface + `send_request`**: the stdio transport (AUT-020), the tools `list_exchanges`, `get_exchange`, `send_request` and `get_scope` (AUT-021, first part), the site map and exchanges as resources (AUT-022, first part), and agent safety — ScopeGuard, approval mode, audit log (AUT-023). The remaining MCP tools arrive with their features and are completed in M17.
 - **DoD:** Importing VulnLab's `/openapi.json` creates requests for every `/api/*` operation in the site map; a HAR export → import round-trips byte-for-byte (F20 test 6) and the other-proxy fixtures import (F20 test 7); Claude Code connected over MCP (stdio) lists history and sends a request, and an out-of-scope `send_request` is refused with a structured error and audit-logged.
 
-### M7 — Decoder, Comparer and JWT Workbench — implemented; awaiting macOS CI (see PROGRESS)
-- [ ] All P0/P1 of F12 (including Transform Tags in Repeater and the **JWT Workbench**, ADV-010…ADV-013, moved from F23) and F13.
+### M7 — Decoder, Comparer and JWT Workbench — engine/CLI done; macOS UI pending (see PROGRESS)
+- [x] All P0/P1 of F12 (including Transform Tags in Repeater and the **JWT Workbench**, ADV-010…ADV-013, moved from F23) and F13.
 - **DoD:** A Base64 → URL → Gzip chain decodes correctly; Smart Decode solves the fixture set; Comparer word-diffs two 1 MB responses in < 1 s; forged `alg:none` and RS→HS tokens are accepted by VulnLab `/api/me` and rejected by `/safe/api/me`, and a weak HMAC secret is brute-forced (F12 test 5).
 
-### M8 — Fuzzer (with content discovery) — implemented; awaiting macOS CI (see PROGRESS)
-- [ ] All P0/P1 of F07 §2.1–§2.5, including **content discovery** (ETL-003, moved from F17), except Turbo mode (optional, finish it last within this milestone) and except FUZ-025 (the OAST result column), which needs Beacon and is finished in M11a. (§2.6 WebSocket fuzzing is post-1.0, M22.)
+### M8 — Fuzzer (with content discovery) — engine/CLI done; macOS UI pending (see PROGRESS)
+- [x] All P0/P1 of F07 §2.1–§2.5, including **content discovery** (ETL-003, moved from F17), except Turbo mode (optional, finish it last within this milestone) and except FUZ-025 (the OAST result column), which needs Beacon and is finished in M11a. (§2.6 WebSocket fuzzing is post-1.0, M22.)
 - **DoD:** A Cartesian attack with 2 positions × 100 payloads runs at ≥ 1,000 req/s against VulnLab; grep-extract pulls the CSRF token from every response; "Discover content" finds VulnLab's hidden `/admin` and backup files (F07 test 6).
 
-### M9 — Logger, GulpQL, search, Notebook, coverage index — implemented; awaiting macOS CI (see PROGRESS)
-- [ ] GulpQL parser and evaluator, applied to History, Logger, site map and Fuzzer results (HIS-020…HIS-028).
-- [ ] Logger tool showing every tool's traffic (HIS-040…HIS-045).
-- [ ] Global search with FTS5 (HIS-050…HIS-054).
-- [ ] Notebook (all P0/P1 of F14 except the timeline group JRN-003/005/008/009, which is M16b).
-- [ ] **Coverage index (JRN-001, F04 §2.3, moved from F31)**: record per-endpoint tool coverage from `ToolSource` (Repeater/Fuzzer/Notebook sources exist now; Scanner columns populate at M10a/M11b). The coverage view (JRN-002) is M16b.
+### M9 — Logger, GulpQL, search, Notebook, coverage index — engine/CLI done; macOS UI pending (see PROGRESS)
+- [x] GulpQL parser and evaluator, applied to History, Logger, site map and Fuzzer results (HIS-020…HIS-028).
+- [x] Logger tool showing every tool's traffic (HIS-040…HIS-045).
+- [x] Global search with FTS5 (HIS-050…HIS-054).
+- [x] Notebook (all P0/P1 of F14 except the timeline group JRN-003/005/008/009, which is M16b).
+- [x] **Coverage index (JRN-001, F04 §2.3, moved from F31)**: record per-endpoint tool coverage from `ToolSource` (Repeater/Fuzzer/Notebook sources exist now; Scanner columns populate at M10a/M11b). The coverage view (JRN-002) is M16b.
 - **DoD:** `resp.status >= 500 and req.host ~ "api"` filters 1M rows in < 2 s (index-assisted where possible); the coverage index reflects which tools touched each endpoint.
 
 ### Release gate — Daily-driver beta (after M9)
@@ -168,10 +171,10 @@ discovery, Logger, GulpQL, search and Notebook.
 
 ## Phase C — Automation (M10a–M13b)
 
-### M10a — Passive scanner and the issue model — implemented; awaiting macOS CI (see PROGRESS)
-- [ ] Issue model, issue UI (dashboard issue list, the issue detail with highlighted evidence), dedup (SCN-001…SCN-007).
-- [ ] Passive checks catalog (F08 §3.1).
-- [ ] Live passive scanning of proxy traffic as a background task.
+### M10a — Passive scanner and the issue model — engine/CLI done; macOS UI pending (see PROGRESS)
+- [x] Issue model, issue UI (dashboard issue list, the issue detail with highlighted evidence), dedup (SCN-001…SCN-007).
+- [x] Passive checks catalog (F08 §3.1).
+- [x] Live passive scanning of proxy traffic as a background task.
 - **DoD:** Browsing VulnLab produces the expected passive issues (fixture list in doc 06 §3) and no duplicates.
 
 ### M10b — gRPC and protobuf
@@ -195,7 +198,7 @@ discovery, Logger, GulpQL, search and Notebook.
 ### M11c — Full check catalog and crawl-and-audit
 - [ ] The remaining (P1) active checks of F08 §3.2 and the checks added by the 2026-11-08 review: server-side prototype pollution, client-side path traversal, mass assignment, upload bypasses and JWT checks (SCN-070…SCN-074).
 - [x] "Crawl and audit" end-to-end (F09 + F08), "scan the whole API" for imported OpenAPI operations (ADV-050), and protobuf-field insertion points in the Scanner (GRP-005).
-- *2026-11-12: the second item is implemented (`Scripts/m11c-dod.sh` PASS, incl. SCN-036/037/038); the first (the P1 check catalog, SCN-070…074) is deferred.*
+- *2026-11-12: the second item is implemented (`Scripts/m11c-dod.sh` PASS, incl. SCN-036/037/038). 2026-11-13: most of the first landed (`ExtendedChecks`: CORS, host header, JWT, mass assignment, prototype pollution, upload, NoSQL/LDAP/XPath; `Scripts/m11c-checks-dod.sh`). Still open: SCN-071 CSPT, SCN-022 nested decoding, HPP as a scanner family, the deserialization signpost, CSS-context XSS, and SCN-074's RS→HS and `kid` cases.*
 - **DoD:** A "Crawl and audit" of VulnLab finds every planted vulnerability (the doc 06 §3 fixture manifest, including the M11c fixtures and the gRPC SQLi) with zero false positives on the safe twins — the scanner-accuracy test (doc 06 §3); a scan of the imported `/openapi.json` covers every operation.
 
 ### M12a — Sessions, authentication, macros, request signing
@@ -232,8 +235,9 @@ reused, so older references stay unambiguous.
 ### M15 — Extensions, scripting, Check Recipes
 - [x] *2026-11-13:* **Check Recipes** (SCN-060/061/064, passive) shipped — declarative no-code checks (metadata, path/content gates, matchers incl. header/body/status/regex and OR groups, templated issue) that join the passive scan; `gulp-cli scan passive --recipes <file|dir>`; `Scripts/recipe-dod.sh` PASS. Recipes are JSON (YAML is a documented thin future layer); active recipes and the editor UI remain.
 - [x] *2026-11-13:* **Out-of-process JSON-RPC extension host** (EXT-002/003/004) — manifest parsing + approved permissions, LSP-style length-prefixed JSON-RPC framing, the `ExtensionHost` actor (initialize handshake, passive-check calls, inbound `host/log` and permission-gated `http/send`), and the production `ProcessExtensionTransport` over a child's stdio. Verified against a mock transport **and a real bash subprocess**; sample extension in `SDK/examples/header-leak`. `GulpExtensions/*`.
-- [ ] Remaining F18: the in-process **JS host** (EXT-001, JavaScriptCore — macOS), Snippets (EXT-010), the Python/TS SDKs (EXT-012/013), and the extension-manager UI (EXT-005). The Extension Gallery (EXT-020/021) is post-1.0; v1 installs from a file or folder.
-- [ ] **Check Recipes** (YAML custom checks, SCN-060…SCN-064; moved out of M11 and to P1 by the 2026-11-08 review).
+- [x] *2026-11-13:* **In-process JS host** (EXT-001) — `GulpScript/JSExtensionHost` (JavaScriptCore, macOS; first compiled on macOS 2026-11-20); sample in `SDK/examples/js-header-leak`.
+- [ ] Remaining F18: Snippets (EXT-010), the JS SDK typings `SDK/js/gulp.d.ts` (EXT-011), the Python/TS SDKs (EXT-012/013), and the extension-manager UI (EXT-005; `ExtensionsView` only audits a manifest). The Extension Gallery (EXT-020/021) is post-1.0; v1 installs from a file or folder.
+- [ ] **Check Recipes** rest (SCN-060…SCN-064; moved out of M11 and to P1 by the 2026-11-08 review): the YAML layer, active recipes and the editor. JSON passive recipes shipped (above).
 - **DoD:** The sample extensions in `SDK/examples` (header injector, custom passive check, custom tab) work in both runtimes; a YAML Check Recipe for a custom header leak detects it on VulnLab and renders the templated issue (F08 §7).
 
 ### M16a — Reporting
@@ -272,8 +276,8 @@ reused, so older references stay unambiguous.
 ### M19b — Smuggling Probe
 - [x] *2026-11-13:* **Smuggling Probe** (ADV-030/031) built — byte-exact CL.TE / TE.CL timing probes (`SmugglingProbe`, leveraging the raw engine's conflicting-framing control) + a timing classifier; `gulp-cli smuggle`; VulnLab `/smuggle` emulates the desync hang (5 s) on conflicting Content-Length + Transfer-Encoding and `/safe/smuggle` rejects it; `Scripts/smuggle-dod.sh` PASS.
 - [x] *2026-11-13:* **Smuggling confirmation workbench** (ADV-032) built — `SmugglingProbe.confirmation` constructs a non-destructive **self-poisoning** desync proof (an attack that smuggles an invalid `GPOST` request-start onto the tester's own connection, plus an innocuous follow-up whose poisoned 4xx proves the desync). `gulp-cli smuggle-confirm` is a **dry run by default** (prints the pair with prominent warnings, sends nothing), is **scope-gated** (refuses an out-of-scope host even when authorized) and **never auto-sends** (an explicit `--i-am-authorized` flag is required). `SmugglingConfirmTests` (3) + `Scripts/smuggle-confirm-dod.sh` PASS.
-- [ ] All P0/P1 of F23 §4 (ADV-030…ADV-033).
-- **DoD:** The Smuggling Probe classifies VulnLab's CL.TE emulation listener (:8090) as vulnerable via timing differentials and a correctly-behaving endpoint as safe (F23 test 4).
+- [ ] All P0/P1 of F23 §4 (ADV-030…ADV-033). Open: ADV-033 (report probes + opt-in Scanner family) and ADV-030's TE.TE and HTTP/2-downgrade vectors (CL.TE and TE.CL are built).
+- **DoD:** The Smuggling Probe classifies VulnLab's CL.TE emulation listener (:8090) as vulnerable via timing differentials and a correctly-behaving endpoint as safe (F23 test 4). *As built: VulnLab emulates the desync on the `/smuggle` route of :8088 (safe twin `/safe/smuggle`), not a separate :8090 listener; `Scripts/smuggle-dod.sh`.*
 
 ### M20 — macOS polish, packaging, release
 - [ ] Remaining items of F24 (system proxy toggle, dock and notifications, Sparkle UI, iOS Simulator CA install; the menu bar extra, Services and App Intents are P2 since 2026-11-08).
@@ -296,7 +300,7 @@ M22–M25.
   state/PKCE/nonce protection analysis, and SAML decode (POST + redirect-binding inflate) +
   signed-node-set computation + assertion mutations (signature stripping, XSW, audience/recipient/
   NotOnOrAfter tampering). `SSOWorkbench`/`SAMLWorkbench` (12 tests), VulnLab `SSOLab` (`/authorize`
-  + `/safe/authorize` redirect_uri & PKCE differential, OIDC discovery doc), `gulp sso analyze|probe`,
+  + `/safe/authorize` redirect_uri & PKCE differential, OIDC discovery doc), `gulp-cli sso analyze|probe`,
   `Scripts/sso-dod.sh` **PASS** (acceptance 1 & 4: vulnerable AS over-accepts `redirect_uri` incl. path
   traversal and accepts a PKCE downgrade; the safe twin rejects every variant and enforces S256).
   Remaining: the macOS flow-diagram UI (`GulpFeatures/SSO`), the live SAML-SP accept/reject DoD
@@ -315,7 +319,7 @@ M22–M25.
 - [x] *2026-11-13:* **Scripted WS sequences** (WSX-008) — `WSScript`/`WSScriptMatch` (in `GulpCodec`) model and evaluate a `send / expect / expect-regex` sequence over one connection (for stateful protocols: handshakes, subscribe/ack, login challenges); `gulp-cli ws-script` runs it over one `openWebSocket` connection, matching each frame in order and stopping on a miss. `WSScriptTests` (3) + `Scripts/wsscript-dod.sh` PASS (happy path against VulnLab `/ws`, plus a mismatch that stops the run). The macOS WS workbench UI remains (macOS-gated).
 
 ### M23 — JS Recon Studio (rest)
-- [ ] The F27 requirements not built in M19a (JSR-006…JSR-009). **DoD:** library fingerprinting flags the bundled known-vulnerable library version and the asset diff surfaces a new endpoint between two VulnLab captures (F27 tests 3–4).
+- [ ] The F27 requirements not built in M19a (JSR-006…JSR-009). *Built early (2026-11-13): JSR-006, JSR-008 and JSR-009 (`JSRecon`, `Scripts/jsrecon-diff-dod.sh`). Open: JSR-007, linking library fingerprints to the Scanner's `VulnLibraryCheck` dataset.* **DoD:** library fingerprinting flags the bundled known-vulnerable library version and the asset diff surfaces a new endpoint between two VulnLab captures (F27 tests 3–4).
 
 ### M24 — Web cache poisoning & deception check family (merged from F28)
 *2026-11-17: **P0 family complete.** WCP-002 added to `active.cache-poisoning` — it now probes a list
@@ -337,37 +341,37 @@ asserted in `Scripts/m11c-checks-dod.sh`. The rest of the family (WCP-002…008)
 ### M25 — Issue retest (merged from F30)
 - [x] *2026-11-17:* **Done.** The retest engine (DRF-003/004, re-run the issue's active check at its
   insertion point — SCN-037) and per-issue `scan retest` already existed; added the headless top-level
-  **`gulp retest`** (DRF-009) with Fixed/Still-Vulnerable/Needs-Review verdicts and regression
+  **`gulp-cli retest`** (DRF-009) with Fixed/Still-Vulnerable/Needs-Review verdicts and regression
   detection (a previously-Fixed issue found again is reopened), plus `--fail-on-regression` for CI
   gating, and VulnLab `/lab/unpatch` to toggle a route back to vulnerable. `Scripts/retest-dod.sh`
   **PASS**: scan `/ssti` → retest Still-Vulnerable → `/lab/patch` → retest **Fixed** (status updated)
-  → `/lab/unpatch` → `gulp retest --fail-on-regression` flags the **regression** and exits non-zero.
+  → `/lab/unpatch` → `gulp-cli retest --fail-on-regression` flags the **regression** and exits non-zero.
   Deviation (ADR, docs/07): the retest reuses the stored proving exchange + the SCN-037 check re-run
   rather than a separate `issue_proofs` table; verdict-history `retest_runs` persistence is deferred
   (the verdict is reflected in `issues.status`). **DoD met.**
 
 ### M26 — LLM/AI-feature security testing
-- [x] *2026-11-17:* **P0 core + LLM-009 done.** `LLMInjection` (GulpScanner): LLM-endpoint detection
+- [x] *2026-11-17:* **LLM-001/002 + LLM-009 done; P0 LLM-003/004 still open.** `LLMInjection` (GulpScanner): LLM-endpoint detection
   (LLM-001), a prompt-injection/jailbreak payload library + reply classifier (refusal/compliance/leak,
   LLM-002), and MCP tool-poisoning detection (LLM-009). VulnLab `LLMLab`: `/chat` (vulnerable obeys +
   leaks its system prompt; `/safe/chat` refuses) and `/mcp` (unauthenticated, a poisoned tool
-  description; `/safe/mcp` requires a bearer token, clean tools). `gulp llm inject|mcp`,
+  description; `/safe/mcp` requires a bearer token, clean tools). `gulp-cli llm inject|mcp`,
   `LLMInjectionTests`, `Scripts/llm-dod.sh` **PASS** (acceptance 1 & 4: the vulnerable chat flagged
   for direct injection + system-prompt leak, the guarded twin clean; the `/mcp` server reported
   unauthenticated with the poisoned `notes` tool, the authenticated twin clean). Remaining: indirect
   injection via stored content (LLM-003, acceptance 2 — needs the crawler store-then-read path),
   OAST-correlated exfil (LLM-004), insecure-output-handling via DOM Probe (LLM-005, acceptance 3), and
-  the macOS LLM-test UI. **DoD (acceptance 1 & 4) met.**
+  the macOS LLM-test UI. **DoD acceptance 1 & 4 met; 2 and 3 open.**
 
 ### Post-1.0 backlog (specified, not scheduled)
 
 Specified requirements that the 2026-11-08 feature review moved out of v1 without a milestone yet.
 Schedule them here (as a new Phase F milestone) when the owner decides; nothing below is built
-before 1.0.
+before 1.0, except the Sequencer (built 2026-11-13, doc 07).
 
 | Item | Requirements | Why it waits | DoD when scheduled |
 |---|---|---|---|
-| Sequencer (F11) | SEQ-001…SEQ-010 | Rarely finds bugs against modern frameworks and JWT sessions; a whole milestone | The VulnLab weak-token endpoint is rated "poor" and the strong-token endpoint "excellent" |
+| Sequencer (F11) — **built 2026-11-13** (`GulpSequencer`, `gulp-cli sequencer`, `Scripts/sequencer-dod.sh`; the Swift Charts UI and saved runs remain) | SEQ-001…SEQ-010 | Rarely finds bugs against modern frameworks and JWT sessions; a whole milestone | The VulnLab weak-token endpoint is rated "poor" and the strong-token endpoint "excellent" |
 | Deployable Beacon server (F10 §2.2) | BCN-020…BCN-023, BCN-025 | interactsh support (BCN-005) covers v1 users | A Gulp client correlates DNS + HTTPS interactions through a self-hosted `gulp-beacon` on a real domain |
 | Extension Gallery (F18 §3.3) | EXT-020, EXT-021 | No extension community yet | An extension installs from the signed catalog after its permissions are shown |
 | Per-app transparent proxy (F24) | MAC-011 (the post-1.0 P1 part) | Needs a Network Extension and its entitlement | An app that ignores the system proxy is captured |

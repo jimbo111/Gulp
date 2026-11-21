@@ -75,7 +75,7 @@ public struct OASTHealth: Sendable, Hashable {
     /// Interactions received this session.
     public var interactions = 0
 
-    /// Health with the registration fields set (all defaults: not registered).
+    /// A fresh health record; the defaults are the not-yet-registered state.
     public init(registered: Bool = false, server: String = "", domain: String = "") {
         self.registered = registered
         self.server = server
