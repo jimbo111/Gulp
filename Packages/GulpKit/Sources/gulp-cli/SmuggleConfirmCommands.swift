@@ -1,8 +1,8 @@
-// gulp-cli — Smuggling confirmation workbench (F23 ADV-032). Constructs a non-destructive,
-// self-poisoning desync confirmation (the attack that poisons the tester's own connection plus an
-// innocuous follow-up whose poisoned response proves the desync), with prominent warnings and scope
-// gating. It is a DRY RUN by default and NEVER sends automatically: an actual send needs both an
-// in-scope target and an explicit authorization flag.
+// gulp-cli — Smuggling confirmation workbench (F23 ADV-032). Constructs a desync confirmation (an
+// attack that poisons the next request on its back-end connection — the tester's follow-up, or
+// another user's on a shared connection — plus an innocuous follow-up whose poisoned response proves
+// the desync), with prominent warnings and scope gating. It is a DRY RUN by default and NEVER sends
+// automatically: an actual send needs both an in-scope target and an explicit authorization flag.
 
 import ArgumentParser
 import Foundation
@@ -43,7 +43,8 @@ struct SmuggleConfirm: AsyncParsableCommand {
         print("================ SMUGGLING CONFIRMATION (ADV-032) ================")
         print("!! WARNING: request smuggling can corrupt live traffic and break sites.")
         print("!! Only run against systems you are explicitly authorized to test.")
-        print("!! This confirmation poisons ONLY this tester's own connection (self-poison).")
+        print("!! The smuggled prefix poisons the NEXT request on that back-end connection, which can be")
+        print("!! another user's when the front-end shares back-end connections between clients.")
         print("vector: \(vector.rawValue)")
         print("expected signal: \(confirmation.expectedSignal)")
         print("--- attack request (smuggles a \(SmugglingProbe.confirmationMethod) request-start) ---")
