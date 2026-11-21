@@ -5,8 +5,11 @@
 
 /// An immutable-by-default buffer of bytes with random access and cheap sub-ranges.
 public struct Bytes: Sendable, Hashable, RandomAccessCollection {
+    /// A single byte.
     public typealias Element = UInt8
+    /// An offset into the buffer, from 0.
     public typealias Index = Int
+    /// Slices are `Bytes` too, re-based to start at 0.
     public typealias SubSequence = Bytes
 
     @usableFromInline var storage: [UInt8]
@@ -18,12 +21,18 @@ public struct Bytes: Sendable, Hashable, RandomAccessCollection {
     /// Create from a string's UTF-8 encoding.
     @inlinable public init(_ string: String) { self.storage = Array(string.utf8) }
 
+    /// Always 0, including for a slice.
     public var startIndex: Int { 0 }
+    /// The byte count.
     public var endIndex: Int { storage.count }
+    /// The next offset.
     @inlinable public func index(after i: Int) -> Int { i + 1 }
+    /// The previous offset.
     @inlinable public func index(before i: Int) -> Int { i - 1 }
 
+    /// The byte at `position`.
     @inlinable public subscript(position: Int) -> UInt8 { storage[position] }
+    /// A copy of the bytes in `bounds`, as a new buffer starting at index 0.
     @inlinable public subscript(bounds: Range<Int>) -> Bytes { Bytes(Array(storage[bounds])) }
 
     /// The underlying array (copy).

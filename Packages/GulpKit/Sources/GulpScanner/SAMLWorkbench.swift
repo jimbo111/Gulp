@@ -17,13 +17,16 @@ public enum SAMLBinding: String, Sendable {
 
 /// A decoded SAML message's structure (F25 SSO-002).
 public struct SAMLMessage: Sendable, Equatable {
+    /// The SAML message type, judged from the element names in the document.
     public enum Kind: String, Sendable {
         case authnRequest = "AuthnRequest"
         case response = "Response"
         case logoutRequest = "LogoutRequest"
         case unknown
     }
+    /// The message type.
     public let kind: Kind
+    /// The decoded XML.
     public let xml: String
     /// Every element `ID`/`AssertionID`/`ResponseID` present in the document.
     public let elementIDs: [String]
@@ -33,8 +36,10 @@ public struct SAMLMessage: Sendable, Equatable {
     public var unsignedAssertionIDs: [String] {
         assertionIDs.filter { !signedIDs.contains($0) }
     }
+    /// The IDs of every `Assertion` element in the document.
     public let assertionIDs: [String]
 
+    /// A decoded message's structure.
     public init(kind: Kind, xml: String, elementIDs: [String], signedIDs: [String], assertionIDs: [String]) {
         self.kind = kind
         self.xml = xml
@@ -46,6 +51,7 @@ public struct SAMLMessage: Sendable, Equatable {
 
 /// A SAML assertion attack (F25 SSO-005): a mutated message and the attack class it tests.
 public struct SAMLMutation: Sendable, Equatable {
+    /// The attack class a mutation tests.
     public enum Kind: String, Sendable, CaseIterable {
         case signatureStripped = "signature-stripped"
         case signatureWrapping = "xml-signature-wrapping"
@@ -53,9 +59,13 @@ public struct SAMLMutation: Sendable, Equatable {
         case recipientTampered = "recipient-tampered"
         case notOnOrAfterExtended = "notonorafter-extended"
     }
+    /// The attack class this mutation tests.
     public let kind: Kind
+    /// The mutated XML (constructed only, never auto-sent).
     public let xml: String
+    /// A one-line explanation of what was changed.
     public let note: String
+    /// A mutation.
     public init(kind: Kind, xml: String, note: String) {
         self.kind = kind
         self.xml = xml

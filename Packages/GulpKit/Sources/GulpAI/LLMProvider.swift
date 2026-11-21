@@ -35,11 +35,14 @@ public struct LLMMessage: Sendable, Codable, Equatable {
 
 /// A tool the assistant may call (the F21 agent surface: list/get exchanges, search, send, scan, …).
 public struct LLMTool: Sendable, Codable, Equatable {
+    /// The name the model calls the tool by.
     public var name: String
+    /// What the tool does, as shown to the model.
     public var description: String
     /// A JSON-schema object (as a JSON string) describing the arguments.
     public var schema: String
 
+    /// A tool; `schema` defaults to an empty JSON object.
     public init(name: String, description: String, schema: String = "{}") {
         self.name = name
         self.description = description
@@ -49,11 +52,14 @@ public struct LLMTool: Sendable, Codable, Equatable {
 
 /// A tool call the model asked for.
 public struct LLMToolCall: Sendable, Codable, Equatable {
+    /// The provider's id for the call; the `tool` message that answers it carries the same id.
     public var id: String
+    /// The name of the tool to run.
     public var name: String
     /// The arguments as a JSON object string.
     public var arguments: String
 
+    /// A tool call.
     public init(id: String, name: String, arguments: String) {
         self.id = id
         self.name = name
@@ -68,13 +74,18 @@ public enum LLMStopReason: String, Sendable, Codable {
 
 /// A provider's response: a final text, or tool calls to run, or both.
 public struct LLMResponse: Sendable, Codable, Equatable {
+    /// The model's text, if it produced any.
     public var text: String?
+    /// The tool calls the model asked for, in order.
     public var toolCalls: [LLMToolCall]
+    /// Why the model stopped.
     public var stopReason: LLMStopReason
     /// Tokens used (for the budget/usage display, AI-010), if the provider reports them.
     public var inputTokens: Int
+    /// Output tokens used, if the provider reports them.
     public var outputTokens: Int
 
+    /// A response; by default an empty end-of-turn with no usage.
     public init(
         text: String? = nil, toolCalls: [LLMToolCall] = [], stopReason: LLMStopReason = .endTurn,
         inputTokens: Int = 0, outputTokens: Int = 0

@@ -18,6 +18,7 @@ public enum JSONRPCFraming {
 public struct JSONRPCFramer: Sendable {
     private var buffer: [UInt8] = []
 
+    /// A framer with an empty buffer.
     public init() {}
 
     /// Feed bytes; returns every complete message body (the JSON `Data`) they completed.

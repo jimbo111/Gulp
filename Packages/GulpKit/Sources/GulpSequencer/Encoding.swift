@@ -28,16 +28,19 @@ public enum TokenEncoding: String, Sendable, Codable {
 
 /// The varying region of a token set and how to read it as symbols and bits.
 public struct BitModel: Sendable {
+    /// The detected character encoding of the varying region.
     public let encoding: TokenEncoding
     /// The sorted alphabet actually used in the varying region.
     public let alphabet: [Character]
-    /// Constant characters stripped from the front / back of every token (SEQ-007).
+    /// Constant characters stripped from the front of every token (SEQ-007).
     public let strippedPrefix: String
+    /// Constant characters stripped from the back of every token (SEQ-007).
     public let strippedSuffix: String
     /// The varying region of each input token, in order.
     public let regions: [String]
 
     private let index: [Character: Int]
+    /// Bits each symbol carries under `encoding`.
     public var bitsPerSymbol: Int { encoding.bitsPerSymbol }
 
     init(tokens: [String]) {

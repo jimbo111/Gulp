@@ -8,7 +8,9 @@ import Foundation
 
 /// A file reconstructed from a source map's `sourcesContent`.
 public struct ReconstructedSource: Sendable, Equatable {
+    /// The source path, cleaned of bundler prefixes (`webpack://app/./src/a.js` becomes `src/a.js`).
     public let path: String
+    /// The original source text from `sourcesContent`.
     public let content: String
 }
 
@@ -16,6 +18,7 @@ public struct ReconstructedSource: Sendable, Equatable {
 public struct ReconLiteral: Sendable, Equatable {
     /// `cloud-storage`, `internal-host`, `api-base`, `source-map`.
     public let kind: String
+    /// The literal as it appears in the JavaScript.
     public let value: String
 }
 

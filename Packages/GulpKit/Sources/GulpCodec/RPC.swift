@@ -89,6 +89,7 @@ public struct RPCCall: Sendable, Hashable {
     /// `OK`, `INVALID_ARGUMENT`…
     public var statusName: String? { status.map(RPC.statusName) }
 
+    /// Field-by-field equality; trailers compare as `name=value` strings (tuples aren't `Equatable`).
     public static func == (a: RPCCall, b: RPCCall) -> Bool {
         a.rpcProtocol == b.rpcProtocol && a.path == b.path && a.requests == b.requests
             && a.responses == b.responses
@@ -96,6 +97,7 @@ public struct RPCCall: Sendable, Hashable {
             && a.status == b.status && a.statusMessage == b.statusMessage && a.warnings == b.warnings
     }
 
+    /// Hashes the path, status and requests, a subset of what `==` compares.
     public func hash(into hasher: inout Hasher) {
         hasher.combine(path)
         hasher.combine(status)
