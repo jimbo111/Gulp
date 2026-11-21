@@ -123,12 +123,13 @@ struct IssueStoreTests {
         let store = try ProjectStore.open(at: temporaryProject())
         let id = await exchange(store)
         let issue = try await store.record(finding(exchange: id))
-        // A streaming response completing replaces the row (same id): still fine with evidence.
+        // A streaming response completing rewrites the row (same id): still fine with evidence.
         var updated = try #require(try await store.exchange(id: id))
-        updated.annotation.comment = "completed"
+        updated.response = RawResponse(Bytes("HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n"))
         await store.writer.update(updated)
         await store.writer.flush()
-        #expect(try await store.exchange(id: id)?.annotation.comment == "completed")
+        #expect(try await store.exchange(id: id)?.derived.status == 201)
+        #expect(try await store.issue(issue.id)?.evidence.first?.exchangeID == id)
         try await store.delete([id])
         #expect(try await store.exchange(id: id) == nil)
         let kept = try #require(try await store.issue(issue.id))

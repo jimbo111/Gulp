@@ -105,6 +105,21 @@ struct QueryStoreTests {
         try await store.close()
     }
 
+    @Test("HIS-022: matches_scope reads the stored scope flag whether it pushes down or not")
+    func test_HIS022_matchesScopeResidual() async throws {
+        let (store, ids) = try await seeded()
+        let inScope = [ids[0], ids[1], ids[6], ids[7]]
+        for text in ["matches_scope", #"matches_scope or resp.body contains "no such text""#] {
+            var filter = HistoryFilter()
+            filter.query = try GulpQL.parse(text)
+            #expect(try await store.matchingIDs(filter: filter) == inScope, "\(text)")
+            #expect(try await store.count(filter: filter) == inScope.count, "\(text)")
+            let rows = try await store.summaries(filter: filter, offset: 0, limit: 100)
+            #expect(rows.map(\.id) == inScope, "\(text)")
+        }
+        try await store.close()
+    }
+
     @Test("F05 acceptance 1: status ≥ 500 and host ~ api uses the status index and loads no bodies")
     func test_HIS024_acceptance() async throws {
         let (store, ids) = try await seeded()
@@ -198,6 +213,27 @@ struct QueryStoreTests {
             !short.usedIndex && short.hits.map(\.id) == [ids[3]] && short.hint?.contains("3 or more") == true)
         #expect(try await store.rebuildSearchIndex() == ids.count)
         #expect(try await store.search(SearchQuery("deflatedneedle")).hits.map(\.id) == [ids[7]])
+        try await store.close()
+    }
+
+    @Test("HIS-050: an index rebuild covers the rows present when it started; newer rows are the writer's")
+    func test_HIS050_rebuildWhileRecording() async throws {
+        let store = try ProjectStore.open(at: temporaryProject())
+        let request = { (n: Int) in "GET /p\(n) HTTP/1.1\r\nHost: www.lab.test\r\n\r\n" }
+        for n in 0..<300 { _ = await store.writer.record(make("www.lab.test", request(n), ok("fine"))) }
+        await store.writer.flush()
+        let rebuild = Task { try await store.rebuildSearchIndex(batch: 1) }
+        // Record once the rebuild has emptied the index and is part-way through it.
+        var indexed = 300
+        for _ in 0..<10_000 where indexed == 0 || indexed == 300 {
+            indexed = try await store.pool.read { db in
+                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM fts_exchanges_docsize") ?? 0
+            }
+        }
+        let late = await store.writer.record(make("www.lab.test", request(1), ok("latecomer")))
+        await store.writer.flush()
+        #expect(try await rebuild.value == 300)
+        #expect(try await store.search(SearchQuery("latecomer")).hits.map(\.id) == [late])
         try await store.close()
     }
 
