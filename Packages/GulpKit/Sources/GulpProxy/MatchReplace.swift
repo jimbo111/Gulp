@@ -368,7 +368,9 @@ enum Latin1 {
 }
 
 /// Match & Replace as an F03 hook (PRX-021): proxy traffic always; other tools only for rules with
-/// `applyToTools`. Rules can be swapped at any time.
+/// `applyToTools`. Proxy *requests* are rewritten by the proxy itself, before Intercept (F01 §4.2),
+/// so the engine hook skips them; proxy responses go through the hook. Rules can be swapped at any
+/// time.
 public final class MatchReplaceHook: RequestHook, ResponseHook, Sendable {
     private let rules: NIOLockedValueBox<[MatchReplaceRule]>
     /// Compiled `when` conditions by rule id; a condition that doesn't compile is absent, and its
@@ -431,15 +433,19 @@ public final class MatchReplaceHook: RequestHook, ResponseHook, Sendable {
         rules.withLockedValue { $0 }.filter { $0.enabled && (source == .proxy || $0.applyToTools) }
     }
 
-    /// Rewrite an outgoing request.
-    public func willSend(_ req: inout OutgoingRequest, context: HookContext) async throws {
-        let target = req.target
+    /// `request` with the request rules active for `source` applied.
+    func rewrite(_ request: RawRequest, target: HTTPTarget, source: ToolSource) -> RawRequest {
         let scope = scope.withLockedValue { $0 }
-        req.request = MatchReplace.apply(active(for: context.source), to: req.request) { rule, current in
+        return MatchReplace.apply(active(for: source), to: request) { rule, current in
             guard let predicate = self.condition(rule) else { return false }
-            return ProxyQuery.holds(
-                predicate, request: current, target: target, source: context.source, scope: scope)
+            return ProxyQuery.holds(predicate, request: current, target: target, source: source, scope: scope)
         }
+    }
+
+    /// Rewrite an outgoing tool request (proxy requests were already rewritten by the proxy).
+    public func willSend(_ req: inout OutgoingRequest, context: HookContext) async throws {
+        guard context.source != .proxy else { return }
+        req.request = rewrite(req.request, target: req.target, source: context.source)
     }
 
     /// Rewrite a received response.

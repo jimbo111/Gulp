@@ -72,9 +72,17 @@ struct ProxyUpstream: Sendable {
         case dropped
     }
 
-    /// Forward `request` to `target` through the engine, with intercept (PRX-010…PRX-014) on both
-    /// legs: a held request may come back edited (sent with an updated Content-Length, PRX-018, and
-    /// recorded with its original, PRX-012) or dropped; a held response may be edited or dropped.
+    /// `request` after the request Match & Replace rules (proxy traffic, F01 §4.2 step 2). The
+    /// engine's Match & Replace hook leaves proxy requests alone, so this is the only rewrite.
+    func rewritten(_ request: RawRequest, to target: HTTPTarget) -> RawRequest {
+        matchReplace?.rewrite(request, target: target, source: .proxy) ?? request
+    }
+
+    /// Forward `request` to `target` through the engine, in the F01 §4.2 order: request Match &
+    /// Replace, then Intercept (PRX-010…PRX-014), so the user edits exactly the bytes that go on the
+    /// wire. A held request may come back edited (sent with an updated Content-Length — always, the
+    /// PRX-018 toggle is not built yet) or dropped; a held response may be edited or dropped. A
+    /// changed request is recorded with the client's original (PRX-012).
     func send(
         _ request: RawRequest, to target: HTTPTarget, streamTo client: (any Channel)? = nil
     ) async -> Reply {
@@ -86,21 +94,21 @@ struct ProxyUpstream: Sendable {
                 client.writeAndFlush(client.allocator.buffer(bytes: bytes), promise: nil)
             }
         }
-        var outgoing = request
+        var outgoing = rewritten(request, to: target)
         var requestWasHeld = false
         if let intercept {
-            let (decision, held) = await intercept.holdRequest(request, target: target)
+            let (decision, held) = await intercept.holdRequest(outgoing, target: target)
             requestWasHeld = held
             switch decision {
             case .drop:
                 return .dropped
             case .forward(let edited?):
                 outgoing = RawRequest(edited).updatingContentLength()
-                if outgoing != request { options.originalRequest = request }
             case .forward(nil):
                 break
             }
         }
+        if outgoing != request { options.originalRequest = request }
         let result = await engine.send(outgoing, to: target, options: options)
         if streamed.isSet { return .streamed(result.exchange.response, complete: result.error == nil) }
         guard let response = result.exchange.response, result.error == nil else {
@@ -155,7 +163,6 @@ final class TunnelSniffer: ChannelInboundHandler, RemovableChannelHandler {
     private enum State {
         case sniffing
         case preparing
-        case relaying(any Channel)
         case done
     }
 
@@ -181,8 +188,6 @@ final class TunnelSniffer: ChannelInboundHandler, RemovableChannelHandler {
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let bytes = unwrapInboundIn(data)
         switch state {
-        case .relaying(let upstream):
-            upstream.writeAndFlush(bytes, promise: nil)
         case .sniffing:
             pending += bytes.readableBytesView
             sniff(context: context)
@@ -191,11 +196,6 @@ final class TunnelSniffer: ChannelInboundHandler, RemovableChannelHandler {
         case .done:
             context.fireChannelRead(data)
         }
-    }
-
-    func channelInactive(context: ChannelHandlerContext) {
-        if case .relaying(let upstream) = state { upstream.close(promise: nil) }
-        context.fireChannelInactive()
     }
 
     private func sniff(context: ChannelHandlerContext) {
@@ -274,7 +274,8 @@ final class TunnelSniffer: ChannelInboundHandler, RemovableChannelHandler {
         context.pipeline.removeHandler(context: context, promise: nil)
     }
 
-    /// PRX-007: splice the bytes to the real server without decrypting.
+    /// PRX-007: splice the bytes to the real server without decrypting: a `RelayHandler` on each
+    /// side, the buffered ClientHello first.
     private func startRelay(context: ChannelHandlerContext) {
         let client = context.channel
         let bound = NIOLoopBound((self, context), eventLoop: context.eventLoop)
@@ -289,11 +290,21 @@ final class TunnelSniffer: ChannelInboundHandler, RemovableChannelHandler {
                 let (sniffer, context) = bound.value
                 switch result {
                 case .success(let upstream):
-                    sniffer.state = .relaying(upstream)
-                    var buffer = upstream.allocator.buffer(capacity: sniffer.pending.count)
-                    buffer.writeBytes(sniffer.pending)
+                    guard client.isActive else {
+                        upstream.close(promise: nil)  // the client left while we connected
+                        return
+                    }
+                    sniffer.state = .done
+                    upstream.writeAndFlush(upstream.allocator.buffer(bytes: sniffer.pending), promise: nil)
                     sniffer.pending = []
-                    upstream.writeAndFlush(buffer, promise: nil)
+                    do {
+                        let relay = RelayHandler(peer: upstream)
+                        try context.pipeline.syncOperations.addHandler(relay, position: .after(sniffer))
+                        context.pipeline.removeHandler(context: context, promise: nil)
+                    } catch {
+                        upstream.close(promise: nil)
+                        context.close(promise: nil)
+                    }
                 case .failure:
                     context.close(promise: nil)
                 }
@@ -301,7 +312,10 @@ final class TunnelSniffer: ChannelInboundHandler, RemovableChannelHandler {
     }
 }
 
-/// Copies bytes from an upstream connection to the client and closes the client when it ends.
+/// One side of a pass-through splice (PRX-007): copies the bytes read here to `peer`, closes `peer`
+/// when this side ends, and stops `peer` reading while this side can't take more writes — so a fast
+/// sender and a slow receiver can't grow the proxy's buffers without bound. Both channels share an
+/// event loop.
 final class RelayHandler: ChannelInboundHandler {
     typealias InboundIn = ByteBuffer
     private let peer: any Channel
@@ -312,6 +326,11 @@ final class RelayHandler: ChannelInboundHandler {
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         peer.writeAndFlush(unwrapInboundIn(data), promise: nil)
+    }
+
+    func channelWritabilityChanged(context: ChannelHandlerContext) {
+        peer.setOption(ChannelOptions.autoRead, value: context.channel.isWritable).whenComplete { _ in }
+        context.fireChannelWritabilityChanged()
     }
 
     func channelInactive(context: ChannelHandlerContext) {

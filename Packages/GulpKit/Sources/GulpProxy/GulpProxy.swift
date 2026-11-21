@@ -1,13 +1,8 @@
-// GulpProxy — NIO proxy server, intercept pipeline, match and replace, WebSockets.
-// Placeholder for M0 scaffolding. Real types land in later milestones
-// (see docs/03-roadmap.md and the feature specs in docs/features).
+// GulpProxy — the intercepting proxy (F01): listeners, TLS interception, HTTP/1 and HTTP/2 to the
+// client, Intercept, Match & Replace and WebSockets.
 
 /// Namespace and module marker for the `GulpProxy` module.
-///
-/// This is a scaffolding stand-in so the package graph builds on macOS and
-/// Linux from milestone M0 onward. It is replaced by real types as features
-/// are implemented; do not rely on it at runtime.
 public enum GulpProxy {
-    /// The module's name, used only in diagnostics until real types exist.
+    /// The module's name, for diagnostics.
     public static let moduleName = "GulpProxy"
 }

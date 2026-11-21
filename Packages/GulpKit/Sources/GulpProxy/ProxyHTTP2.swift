@@ -32,6 +32,8 @@ final class H2ProxyStreamHandler: ChannelInboundHandler {
     private var head: HPACKHeaders?
     private var body: [UInt8] = []
     private var dispatched = false
+    /// The forwarding task; cancelled when the stream goes away (a held request is then dropped).
+    private var forwarding: Task<Void, Never>?
 
     init(target: HTTPTarget, upstream: ProxyUpstream) {
         self.target = target
@@ -71,7 +73,7 @@ final class H2ProxyStreamHandler: ChannelInboundHandler {
         let bound = NIOLoopBound((self, context), eventLoop: loop)
         let upstream = self.upstream
         let target = self.target
-        Task {
+        forwarding = Task {
             let reply: H2ResponseParts
             switch await upstream.send(request, to: target) {
             case .response(let response), .streamed(let response?, _):
@@ -91,6 +93,11 @@ final class H2ProxyStreamHandler: ChannelInboundHandler {
                 handler.write(reply, context: context)
             }
         }
+    }
+
+    func channelInactive(context: ChannelHandlerContext) {
+        forwarding?.cancel()
+        context.fireChannelInactive()
     }
 
     private func write(_ reply: H2ResponseParts, context: ChannelHandlerContext) {
