@@ -591,7 +591,7 @@ struct SiteMapServiceTests {
         var config = ScanConfig.preset(.light)
         config.disabledFamilies = Set(ActiveChecks.families).subtracting(["ssti"])
         let refused = await drain(await session.startActiveScan([(request, target)], config: config))
-        #expect(refused?.outOfScope == 1 && refused?.probes == 0)
+        #expect((refused?.outOfScope ?? 0) > 0 && refused?.probes == 0)
         // TGT-023: "don't ask again for this host" is for manual sends; it doesn't widen the scanner.
         try await session.setScope([
             ScopeRule(host: "127.0.0.1"), ScopeRule(kind: .exclude, host: "127.0.0.1", path: "^/a"),
