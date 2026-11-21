@@ -19,7 +19,7 @@ Verdict legend: **=** parity · **▲** Gulp ahead · **▼** Gulp behind · **�
 | Intercepting proxy, HTTP/1+2, WebSocket | Full HTTP/1, HTTP/2, WebSocket; match-and-replace on WS messages | Full HTTP/1, HTTP/2 (incl. raw h2, h2c, trailers), WebSocket interception + repeater + fuzzer; match-and-replace on HTTP and WS | **=** |
 | Raw-bytes fidelity | Repeater can desync-test; but many flows normalize via its HTTP model | **Hard rule: raw bytes are the truth** — never round-trips user-edited requests through a normalizing parser (`GulpHTTP`); single-packet/pipelining/desync are first-class | **▲** |
 | TLS interception / CA | Per-host certs, CA export | Keychain-backed CA, SNI leaf minting, ALPN mirroring | **=** |
-| HTTP/2 exotic request smuggling | Strong (request smuggler, HTTP/2 downgrade) | Smuggling probe **with self-poisoning confirmation** (ADV-032) that constructs and warns but never auto-sends | **=** |
+| HTTP/2 exotic request smuggling | Strong (request smuggler, HTTP/2 downgrade) | Smuggling probe **with a desync confirmation** (ADV-032) that constructs and warns but never auto-sends | **=** |
 
 ## B. Repeater / manual tooling
 

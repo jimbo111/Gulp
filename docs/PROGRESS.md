@@ -257,9 +257,9 @@ entry at the top is later than the 2026-11-21 entry below it. Within a day the o
   `JSReconDiffTests` (3) + `Scripts/jsrecon-diff-dod.sh` PASS (added surface surfaces, nothing falsely
   removed). 503 tests.
 - 2026-11-13 — **Smuggling confirmation workbench (F23 ADV-032)**: `SmugglingProbe.confirmation` builds
-  a non-destructive **self-poisoning** desync proof — an attack that smuggles an invalid `GPOST`
-  request-start onto the tester's **own** connection, plus an innocuous follow-up whose poisoned 4xx
-  proves the desync (poisons only the tester's connection, not other users). `gulp-cli smuggle-confirm`
+  a desync proof — an attack that smuggles an invalid `GPOST` request-start, plus an innocuous
+  follow-up whose 4xx proves the desync. (Corrected 2026-11-20: this can affect other users when the
+  front end reuses back-end connections across users, so it is never auto-sent.) `gulp-cli smuggle-confirm`
   is the guided workbench: **dry run by default** (prints the request pair with prominent warnings,
   sends nothing), **scope-gated** (refuses an out-of-scope host even when authorized), and it **never
   auto-sends** — a live send needs the explicit `--i-am-authorized` flag. `SmugglingConfirmTests` (3,
