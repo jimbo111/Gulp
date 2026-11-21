@@ -51,7 +51,7 @@ twin under `/safe/` with the same shape and the bug fixed: `/sqli/error` and `/s
 Each check has to find the bug on one and stay quiet on the other. Catching the bug proves the check
 works. Staying quiet on the fixed twin proves it isn't just flagging every response.
 
-The test suite is built around it: 640 unit tests and 41 end-to-end scripts that start VulnLab,
+The test suite is built around it: over 640 unit tests and 41 end-to-end scripts that start VulnLab,
 drive the real CLI against it, and fail if a finding lands on a `/safe/` route.
 
 ## What's in it
@@ -86,6 +86,34 @@ If you've used Burp Suite you already know the layout. The names differ in a few
 - **Cache poisoning & deception**: unkeyed headers, confirmed by a clean follow-up request.
 - **LLM testing**: prompt-injection payloads against a chat endpoint; MCP tool-poisoning and missing-auth checks.
 - **Retest**: re-runs the request behind an issue and tells you whether it's fixed, still there, or back again.
+
+## The app
+
+<p>
+  <img src="docs/assets/screens/tour.gif" width="880" alt="A tour of the Gulp app: HTTP History, the Target site map, the issue list, Repeater and Scanner, on a project recorded against VulnLab.">
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screens/proxy-history.png" alt="HTTP History: proxied requests to VulnLab with a selected POST /login and its 403 response."></td>
+    <td width="50%"><img src="docs/assets/screens/repeater.png" alt="Repeater: a GET /api/orders/2 with alice's session cookie returns bob's order."></td>
+  </tr>
+  <tr>
+    <td><b>HTTP History.</b> Every request the proxy sees, filterable by GulpQL.</td>
+    <td><b>Repeater.</b> Alice's session reads bob's order: an IDOR, found by hand.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/screens/dashboard-issues.png" alt="Dashboard: issues grouped by severity after a crawl-and-audit of VulnLab."></td>
+    <td><img src="docs/assets/screens/target-site-map.png" alt="Target: the site map of the recorded hosts, with inferred hosts dimmed."></td>
+  </tr>
+  <tr>
+    <td><b>Dashboard.</b> What one crawl-and-audit of VulnLab turned up.</td>
+    <td><b>Target.</b> The site map; hosts only linked to, never requested, are dimmed.</td>
+  </tr>
+</table>
+
+The screenshots come from the real app on a project recorded against VulnLab.
+`Scripts/readme-screenshots.sh` records that project and retakes them.
 
 ## Try it
 

@@ -4,7 +4,7 @@ The live state of the build. Read top-down: **Current state** is the truth today
 checklist** says what exists per milestone, **carry-overs** list known gaps, and the **log** (newest
 first) is history. Task-level detail and Definitions of Done live in `docs/03-roadmap.md`.
 
-## Current state (2026-11-20)
+## Current state (2026-11-21)
 
 Replace this block when the state changes; do not append to it.
 
@@ -18,11 +18,13 @@ Replace this block when the state changes; do not append to it.
   `EVP_PKEY` when RSA public-key DER parsing fails, which crashed `GulpCodecTests` on macOS), and
   4.5.x needs Swift tools 6.1. Linux reference image: `swift:6.1-noble`. macOS: Xcode 27.2 / Swift 6.4.
   `make lint` uses the toolchain's `swift format`; no separate swift-format install is needed.
-- **Verified on macOS (2026-11-20, Xcode 27.2 / Swift 6.4).** `swift test`: 640 GulpKit tests pass.
-  `make lint` (strict format + both rule scripts) is clean. All 41 `Scripts/*-dod.sh` pass against
-  VulnLab. `Gulp.app` builds and `xcodebuild test` passes its 4 UI tests: launch, Proxy history,
-  `test_UI_everyToolOpens` (every sidebar tool opens) and `test_REP002_repeaterSendsToVulnLab`. By
-  hand: the app's proxy recorded HTTP GET/POST and HTTPS (through its CA) to VulnLab.
+- **Verified on macOS (2026-11-21, Xcode 27.2 / Swift 6.4).** `make test`: every GulpKit test
+  (`swift test list` counts 647) and the 5 app/UI tests pass (launch, Proxy history, every tool
+  opens, Repeater sends to VulnLab, and the opt-in `ReadmeTour`, which skips unless
+  `Scripts/readme-screenshots.sh` runs it). `make lint` (strict format + both rule
+  scripts) is clean. All 41 `Scripts/*-dod.sh` passed against VulnLab on 2026-11-20. By hand: the
+  app's proxy recorded HTTP GET/POST and HTTPS (through its CA) to VulnLab, and the README
+  screenshots were checked screen by screen.
 - **Verified on Linux (Swift 6.1)** by CI and a local `swift:6.1-noble` container: core tests, rule
   gates and all 41 DoD scripts.
 - **Reviewed 2026-11-20.** Five role-specific reviews (services, engines, orchestration, UI,
@@ -30,15 +32,11 @@ Replace this block when the state changes; do not append to it.
   entry below). Identity credentials and macro steps now live in the secret store, not the `.gulp`
   file.
 - **Next, in order.**
-  1. UI defects seen in real screenshots (`Scripts/readme-screenshots.sh`, branch `readme-screens`): Repeater editor text
-     unreadable in dark mode, Dashboard/Notebook panes not filling the window, clipped filter bars
-     and sidebar on Target, a stray floating button, an empty toolbar circle. A partial fix exists
-     on an unmerged branch (`e9ab9ca`).
-  2. The daily-driver beta gate: signed build, `Scripts/beta-dod.sh`, real use of every screen.
-  3. UI gaps found by the review and left open: an identities editor (the Authz Matrix needs it),
+  1. The daily-driver beta gate: signed build, `Scripts/beta-dod.sh`, real use of every screen.
+  2. UI gaps found by the review and left open: an identities editor (the Authz Matrix needs it),
      the Assistant chat (the engine and `APIGate` exist; the view only previews redaction),
      Extensions manager, DOM Probe run from the app.
-  4. The "partial" rows of the checklist and the carry-overs below.
+  3. The "partial" rows of the checklist and the carry-overs below.
 - **Conventions enforced by `Scripts/rules-check.sh`** (AGENTS.md §4): active CLI probes send
   through `ScopedSender`; GulpWorkspace store writes go through `persisting(…)`; registry lookups use
   `require` (`IssueDefinitions`, `Transforms`), never `named(…)!`; test randomness uses
@@ -156,6 +154,15 @@ milestone are listed there instead.
 Newest first. Dates up to `40c513b` were written by Linux sessions in UTC, so the 2026-11-20 macOS
 entry at the top is later than the 2026-11-21 entry below it. Within a day the order is approximate.
 
+- 2026-11-21 — **Site map and UI tests after the screenshot review.** The site map took inferred
+  nodes from Scanner and Fuzzer responses, which echo their own payloads: probe hosts such as
+  `*.gulp-canary.test` showed as sites, and after a crawl-and-audit the 2,000 newest textual
+  responses it reads on rebuild were all probes. `ToolSource.payloadInjecting` now excludes them in
+  the store query and the live path (TGT-003 test). Item counts use grammar agreement ("1 item").
+  `test_REP002` cleared the target field with ⌘A, which an input method such as Korean 2-Set takes
+  over (it failed on `main` too); it now clears with ⌘→ and Delete. README gained a screenshots
+  section and the tour GIF. Not reproduced: one tour run stalled 60 s in XCUITest's event synthesis
+  on a Dashboard → Repeater click; three later runs did not.
 - 2026-11-21 — **UI defects from the README screenshots**, fixed at the shared cause and checked
   by eye in regenerated `docs/assets/screens/`: editor plain text drew black in dark mode (the
   highlighter removed the color attribute; now `NSColor.textColor`); split views sized to their
