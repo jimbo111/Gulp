@@ -287,6 +287,7 @@ public struct BeaconView: View {
         model = models.beacon
     }
 
+    /// The screen.
     public var body: some View {
         VSplitView {
             Form {

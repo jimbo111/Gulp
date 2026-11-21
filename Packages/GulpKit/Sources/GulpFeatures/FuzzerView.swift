@@ -439,6 +439,7 @@ public struct FuzzerView: View {
         model = models.fuzzer
     }
 
+    /// The screen.
     public var body: some View {
         FuzzerPanel(model: model)
             .task { await model.followInbox() }

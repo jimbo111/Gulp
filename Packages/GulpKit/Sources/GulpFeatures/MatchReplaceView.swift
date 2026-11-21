@@ -19,6 +19,7 @@ public struct MatchReplaceView: View {
         _rules = State(initialValue: session.settings.get(MatchReplaceSettings.self).rules)
     }
 
+    /// The screen.
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -126,6 +127,7 @@ public struct ProxyToolView: View {
 
     private var session: ProjectSession { models.session }
 
+    /// The screen.
     public var body: some View {
         TabView(selection: $tab) {
             SessionHistoryView(session: session, generation: generation)

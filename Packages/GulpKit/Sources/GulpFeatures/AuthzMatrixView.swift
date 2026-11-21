@@ -66,6 +66,7 @@ public struct AuthzMatrixView: View {
         model = models.authzMatrix
     }
 
+    /// The screen.
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {

@@ -450,6 +450,7 @@ public struct TargetView: View {
         self.models = models
     }
 
+    /// The screen.
     public var body: some View {
         VStack(spacing: 0) {
             Picker("", selection: $tab) {

@@ -133,6 +133,7 @@ public struct InterceptToolbarToggle: View {
         model = models.intercept
     }
 
+    /// The screen.
     public var body: some View {
         Toggle(
             isOn: Binding(get: { model.interceptRequests }, set: { model.setIntercepting(requests: $0) })

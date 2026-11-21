@@ -64,6 +64,7 @@ public struct SequencerView: View {
     /// A Sequencer view.
     public init() {}
 
+    /// The screen.
     public var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: 6) {

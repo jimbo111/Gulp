@@ -23,6 +23,7 @@ public struct TLSSettingsView: View {
         self.environment = environment
     }
 
+    /// The screen.
     public var body: some View {
         Form {
             Section("Gulp certificate authority") {

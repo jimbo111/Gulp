@@ -47,13 +47,14 @@ public final class AssistantModel {
     }
 }
 
-/// The Assistant: compose a prompt, see the pre-send redaction, and configure the provider.
+/// The Assistant: compose a prompt and see what the pre-send redaction would mask.
 public struct AssistantView: View {
     @State private var model = AssistantModel()
 
     /// An Assistant view.
     public init() {}
 
+    /// The screen.
     public var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: 6) {
@@ -70,7 +71,7 @@ public struct AssistantView: View {
                 .font(.callout)
                 Button("Preview redaction") { model.previewRedaction() }
                     .keyboardShortcut(.return, modifiers: .command)
-                Text("The live ask needs a provider API key in the Keychain; the prompt is redacted first.")
+                Text("Preview only: this screen sends nothing to a provider yet.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding(6)

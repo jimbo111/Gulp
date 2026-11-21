@@ -57,6 +57,7 @@ public struct GraphQLWorkbenchView: View {
     /// A workbench.
     public init() {}
 
+    /// The screen.
     public var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: 6) {

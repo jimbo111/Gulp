@@ -33,6 +33,7 @@ public struct MessageEditor: View {
         self.editable = editable
     }
 
+    /// The screen.
     public var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {

@@ -174,6 +174,7 @@ public struct IssuesDashboard: View {
         self.session = session
     }
 
+    /// The screen.
     public var body: some View {
         if let model {
             IssuesPanel(model: model)

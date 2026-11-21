@@ -68,6 +68,7 @@ public struct JSReconView: View {
     /// A JS Recon view.
     public init() {}
 
+    /// The screen.
     public var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: 6) {

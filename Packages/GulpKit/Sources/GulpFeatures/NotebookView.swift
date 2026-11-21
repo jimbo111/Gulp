@@ -140,6 +140,7 @@ public struct NotebookView: View {
         self.session = session
     }
 
+    /// The screen.
     public var body: some View {
         if let model {
             NotebookPanel(model: model)

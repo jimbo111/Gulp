@@ -43,6 +43,7 @@ public struct GulpQLFilterField: View {
         self.library = library
     }
 
+    /// The screen.
     public var body: some View {
         HStack(spacing: 4) {
             TextField(#"GulpQL, e.g. resp.status >= 500 and req.host ~ "api""#, text: $text)
@@ -161,6 +162,7 @@ public struct LoggerView: View {
         self.generation = generation
     }
 
+    /// The screen.
     public var body: some View {
         content.task(id: generation) { await start() }
     }
@@ -268,6 +270,7 @@ public struct SearchView: View {
         self.session = session
     }
 
+    /// The screen.
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {

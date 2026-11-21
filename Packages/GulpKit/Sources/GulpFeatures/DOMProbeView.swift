@@ -46,6 +46,7 @@ public struct DOMProbeView: View {
     /// A DOM Probe view.
     public init() {}
 
+    /// The screen.
     public var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: 6) {

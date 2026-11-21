@@ -128,6 +128,7 @@ public struct ScannerView: View {
     /// The Scanner of the project whose tool models are `models`.
     public init(models: ToolModels) { self.models = models }
 
+    /// The screen.
     public var body: some View {
         VStack(spacing: 0) {
             Picker("", selection: $pane) {
