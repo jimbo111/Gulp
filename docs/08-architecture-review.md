@@ -1,5 +1,10 @@
 # 08 — Architecture review (2026-11-13, refreshed at feature-complete)
 
+> **Snapshot, not current status.** `docs/PROGRESS.md` is authoritative for what is built; it
+> describes the code as of 2026-11-13. "Every milestone implemented" overstates it: several
+> milestones are partial, and the macOS code was first compiled on 2026-11-20, not by a macOS CI
+> run.
+
 A higher-level, architectural review of the Gulp codebase as it stands **with every milestone and the
 post-1.0 phases implemented** (the full WebSocket workbench WSX-002…008, AI/redaction, the extension
 hosts, Sequencer, JS Recon, smuggling confirmation, param discovery/pollution, and all the macOS tool

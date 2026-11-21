@@ -1,7 +1,7 @@
 // gulp-cli — top-level issue retest (F30 DRF-009, merged into F21 §2.4). Re-tests a project's active
 // issues by re-running their check at the same insertion point (the `session.retestIssue` engine,
 // SCN-037): Still-Present stays open, Not-Found flips to Fixed. A previously-Fixed issue that is found
-// again is a **regression** — it is reopened, and `--fail-on regression` makes the run exit non-zero
+// again is a **regression** — it is reopened, and `--fail-on-regression` makes the run exit non-zero
 // (for CI gating). This is the headless surface; the per-issue `gulp scan retest` remains.
 
 import ArgumentParser

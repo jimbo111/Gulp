@@ -1,5 +1,8 @@
 # Feature review (2026-11-07)
 
+> **Snapshot, not current status.** `docs/PROGRESS.md` is authoritative for what is built; it
+> records the 2026-11-07 spec review; what was adopted is in the specs and the roadmap.
+
 An independent review of all 32 feature specs against how web apps and their testing look in 2026,
 and against the goal in `00-vision.md`: a credible, daily-usable macOS alternative for pentesters and
 bug-bounty hunters, built by a small team. This file records the verdicts, what was **adopted**, and

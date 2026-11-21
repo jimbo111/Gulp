@@ -52,9 +52,9 @@ If you've used Burp Suite you already know the layout. The names differ in a few
 | **Repeater** | Sends the bytes you wrote, exactly. Raw HTTP/2, pipelining, and race-condition groups (single-packet, parallel, sequential). |
 | **Fuzzer** | Sniper / battering ram / pitchfork / cluster bomb, payload processing, grep and extract, rate caps, content discovery. |
 | **Scanner** | Passive and active checks: SQLi (error, boolean, time), XSS, SSTI, command injection, XXE, SSRF, path traversal, NoSQL, LDAP, XPath, prototype pollution, file upload, CORS, host header, JWT. |
-| **Check Recipes** | Write your own checks in YAML, no code needed. |
+| **Check Recipes** | Write your own passive checks in JSON, no code needed. |
 | **Crawler** | Static crawl, crawl-and-audit, OpenAPI import. |
-| **Beacon** | Out-of-band (OAST) detection, compatible with interactsh, plus a self-hostable server. |
+| **Beacon** | Out-of-band (OAST) detection, compatible with interactsh, plus a local dev server for tests (a deployable server is planned). |
 | **GulpQL** | A query language over your traffic: `resp.status >= 500 and req.host ~ "api"`. Tested on a million-row project. |
 | **Sessions** | Cookie jar, identities, login macros, and request signing (AWS SigV4, DPoP, RFC 9421). |
 | **Decoder / Comparer / Sequencer** | Transform chains and inline transform tags, byte and word diffs, token randomness analysis. |
@@ -76,7 +76,7 @@ If you've used Burp Suite you already know the layout. The names differ in a few
 
 ## Try it
 
-You need Swift 6. The engines and CLI build on macOS 14+ and on Linux.
+You need Swift 6.1 or later. The engines and CLI build on macOS 14+ and on Linux.
 
 ```bash
 make vulnlab          # terminal 1: VulnLab on http://127.0.0.1:8088 (binds localhost only)
@@ -122,10 +122,11 @@ Leave out `--approval in-scope` and the agent can read but not send.
 ## Status
 
 Honest version: **the engines and the CLI are the finished part.** Everything above runs headless
-and is tested in CI on Linux.
+and is tested on Linux and macOS (563 tests). GitHub Actions can't run right now, so the local
+`make test` + `make lint` is the gate.
 
-The macOS app (SwiftUI) is written, but its screens haven't been built and run on a Mac in CI yet,
-so treat the GUI as pre-alpha. Brotli/zstd decoding, an extension gallery and some polish are
+The macOS app (SwiftUI) is written and, as of 2026-11-20, builds on macOS, but its screens haven't
+been tested in use yet, so treat the GUI as pre-alpha. Brotli/zstd decoding, an extension gallery and some polish are
 still on the list. [`docs/PROGRESS.md`](docs/PROGRESS.md) has the unvarnished details.
 
 ## How it's built
