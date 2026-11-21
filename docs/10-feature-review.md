@@ -1,5 +1,10 @@
 # 10 — Per-feature review, with the tests that prove each feature (2026-11-13)
 
+> **Snapshot, not current status.** `docs/PROGRESS.md` is authoritative for what is built; it
+> reflects the code as of 2026-11-13 (451 tests then; 563 now). `Scripts/localci.sh` does not exist;
+> the local gate is `make test` + `make lint`. The §5 table marks Extensions ✅, but EXT-005, EXT-010
+> and EXT-011 are not built.
+
 This is the feature-level counterpart to `08-architecture-review.md` (structure and invariants) and
 `09-burpsuite-comparison.md` (competitive position). For every shipped feature area it states: what is
 built, which module holds it, the **tests and the executable Definition-of-Done (DoD) that prove it**,

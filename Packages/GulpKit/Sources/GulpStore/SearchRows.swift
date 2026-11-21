@@ -160,12 +160,15 @@ extension ProjectStore {
     /// Rebuild the search index from the stored exchanges (derived data, doc 04 §1), e.g. after an
     /// upgrade changed what is indexed. Reads only the message blobs, and remembers each blob's text
     /// within a batch (blobs are content-addressed, so repeated messages share one). Returns the
-    /// number of rows indexed.
+    /// number of rows indexed. `batch` rows are indexed per write transaction; rows written after
+    /// the index is cleared are indexed by their writer, so the rebuild stops at the newest row
+    /// that existed then.
     @discardableResult
-    public func rebuildSearchIndex() async throws -> Int {
+    public func rebuildSearchIndex(batch: Int = 2_000) async throws -> Int {
         await writer.flush()
-        try await pool.write { db in
+        let newest = try await pool.write { db -> ExchangeID in
             try db.execute(sql: "INSERT INTO fts_exchanges(fts_exchanges) VALUES('delete-all')")
+            return try ExchangeID.fetchOne(db, sql: "SELECT COALESCE(MAX(id), 0) FROM exchanges") ?? 0
         }
         var last: ExchangeID = 0
         var total = 0
@@ -175,10 +178,10 @@ extension ProjectStore {
                 let rows = try Row.fetchAll(
                     db,
                     sql: """
-                        SELECT id, method, request_blob, response_blob FROM exchanges WHERE id > ? \
-                        ORDER BY id LIMIT 2000
+                        SELECT id, method, request_blob, response_blob FROM exchanges \
+                        WHERE id > ? AND id <= ? ORDER BY id LIMIT ?
                         """,
-                    arguments: [after])
+                    arguments: [after, newest, batch])
                 guard let tail: ExchangeID = rows.last?["id"] else { return nil }
                 var requestText: [Int64: String] = [:]
                 var responseText: [String: String] = [:]  // keyed by blob id and HEAD-ness

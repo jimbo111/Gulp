@@ -52,8 +52,9 @@ public actor StoreWriter {
         return first..<nextID
     }
 
-    /// Replace an exchange recorded earlier (same id) — a streaming response that has finished
-    /// (HIS-007). Published as `exchangeUpdated`.
+    /// Rewrite an exchange recorded earlier (same id) in place — a streaming response that has
+    /// finished (HIS-007). The highlight, comment and tags the user gave the row meanwhile are kept
+    /// (`exchange.annotation` is ignored). Published as `exchangeUpdated`.
     public func update(_ exchange: Exchange) async {
         pending.append((exchange, true))
         scheduleFlush()
@@ -105,14 +106,13 @@ public actor StoreWriter {
         let scope = self.scope
         do {
             try await pool.write { db in
-                // A replacement deletes and re-inserts the same id: rows that reference it (issue
-                // evidence, Repeater history, WebSocket upgrades) are checked at commit, when the
-                // parent exists again, instead of failing at the delete.
-                if batch.contains(where: \.replace) { try db.execute(sql: "PRAGMA defer_foreign_keys = ON") }
                 for (exchange, replace) in batch {
-                    if replace { try ExchangeRows.delete(exchange.id, in: db) }
                     let inScope = scope.isInScope(exchange.target, path: ScopePath.of(exchange))
-                    try ExchangeRows.insert(exchange, inScope: inScope, in: db)
+                    if replace {
+                        try ExchangeRows.update(exchange, inScope: inScope, in: db)
+                    } else {
+                        try ExchangeRows.insert(exchange, inScope: inScope, in: db)
+                    }
                 }
             }
             if let eventBus {
