@@ -3,8 +3,8 @@
 // per open project — payloads minted in an earlier session are not reported to a later one), arms
 // the `beacon()` Transform Tag, watches recorded requests for its payloads (linking each to the
 // exchange that carried it, so Fuzzer, Repeater and Scanner traffic are all correlated), polls in
-// the background, and stores interactions. The server token lives in the Keychain on macOS and only
-// in memory elsewhere (CLAUDE.md §4).
+// the background, and stores interactions. The server token lives in the environment's secret
+// store (the Keychain on macOS, a 0600 file elsewhere), never in the project (CLAUDE.md §4).
 
 import Foundation
 import GulpCodec
@@ -309,76 +309,44 @@ public actor OASTService {
     }
 }
 
-/// Secrets that must not sit in project or settings files (the OAST server token): the Keychain on
-/// macOS, process memory elsewhere (headless runs pass it on the command line or environment).
-enum OASTTokenStore {
-    static let service = "com.gulp.oast"
-    // nonisolated(unsafe): `memory` is only read or written while holding `lock`.
-    nonisolated(unsafe) static var memory: [String: String] = [:]
-    static let lock = NSLock()
-
-    static func get(_ account: String) -> String? {
-        #if canImport(Security)
-        if let value = keychainGet(account) { return value }
-        #endif
-        return lock.withLock { memory[account] }
-    }
-
-    static func set(_ account: String, _ value: String?) {
-        lock.withLock { memory[account] = value }
-        #if canImport(Security)
-        keychainSet(account, value)
-        #endif
+extension OASTSettings {
+    /// The secret-store name of `serverURL`'s token: one per server, shared by every project on
+    /// this machine (only hex digits, so it is a valid file and Keychain item name).
+    static func tokenSecretName(_ serverURL: String) -> String {
+        "oast-token-" + serverURL.utf8.map { String(format: "%02x", $0) }.joined()
     }
 }
-
-#if canImport(Security)
-import Security
-
-extension OASTTokenStore {
-    static func keychainGet(_ account: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-            kSecAttrAccount as String: account, kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data
-        else {
-            return nil
-        }
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    static func keychainSet(_ account: String, _ value: String?) {
-        let base: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        SecItemDelete(base as CFDictionary)
-        guard let value else { return }
-        var item = base
-        item[kSecValueData as String] = Data(value.utf8)
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        SecItemAdd(item as CFDictionary, nil)
-    }
-}
-#endif
 
 extension ProjectSession {
-    /// Configure OAST (BCN-004): store the settings (and the token in the secret store), then
-    /// register and start polling when enabled.
+    /// Configure OAST (BCN-004): store the settings (and the token in the environment's secret
+    /// store, never the project; an empty token removes it), then register and start polling when
+    /// enabled.
     public func configureOAST(_ value: OASTSettings, token: String? = nil) async throws {
         try await settings.set(value, scope: .project)
-        if let token { OASTTokenStore.set(value.serverURL, token.isEmpty ? nil : token) }
+        if let token {
+            let name = OASTSettings.tokenSecretName(value.serverURL)
+            if token.isEmpty {
+                try environment.secretStore.delete(name)
+            } else {
+                try environment.secretStore.write(Data(token.utf8), name: name)
+            }
+        }
         if value.enabled { try await startOAST() } else { await stopOAST() }
     }
 
-    /// Register and watch for payloads with the stored settings.
+    /// The token stored for `serverURL` by `configureOAST`, if any.
+    func storedOASTToken(_ serverURL: String) throws -> String? {
+        try environment.secretStore.read(OASTSettings.tokenSecretName(serverURL)).map {
+            String(decoding: $0, as: UTF8.self)
+        }
+    }
+
+    /// Register and watch for payloads with the stored settings. The token is `token`, else the
+    /// stored one, else `GULP_OAST_TOKEN`.
     public func startOAST(token: String? = nil) async throws {
         let value = settings.get(OASTSettings.self)
         let secret =
-            token ?? OASTTokenStore.get(value.serverURL)
+            try token ?? storedOASTToken(value.serverURL)
             ?? ProcessInfo.processInfo.environment["GULP_OAST_TOKEN"]
         try await oast.start(value, token: secret)
         let oast = self.oast

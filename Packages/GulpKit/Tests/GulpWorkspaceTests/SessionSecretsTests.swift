@@ -136,6 +136,27 @@ struct SessionSecretsTests {
         try await session.close()
     }
 
+    @Test("BCN-004: the OAST token lives in the environment's secret store, shared by later runs")
+    func oastTokenUsesTheSecretStore() async throws {
+        let environment = isolatedEnvironment()
+        let server = "https://oast.example:8443"
+        let name = OASTSettings.tokenSecretName(server)
+        let session = try await open(environment, "oast-token")
+        try await session.configureOAST(OASTSettings(serverURL: server), token: "TOKEN-123")
+        #expect(try environment.secretStore.read(name) == Data("TOKEN-123".utf8))
+        try await session.close()
+        #expect(
+            try Data(contentsOf: projectURL(environment, "oast-token")).range(of: Data("TOKEN-123".utf8))
+                == nil)
+
+        // The next run on this machine (another project, another CLI process) finds it.
+        let next = try await open(environment, "oast-token-next")
+        #expect(try await next.storedOASTToken(server) == "TOKEN-123")
+        try await next.configureOAST(OASTSettings(serverURL: server), token: "")  // empty clears it
+        #expect(try environment.secretStore.read(name) == nil)
+        try await next.close()
+    }
+
     @Test func fileStoreRejectsNamesThatEscapeItsDirectory() throws {
         let store = FileSecretStore(
             directory: FileManager.default.temporaryDirectory.appendingPathComponent("s"))
