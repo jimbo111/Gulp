@@ -44,7 +44,10 @@ struct RPCPositionTests {
         #expect(message.fields.map(\.number) == [1, 2, 3, 9])
         let body = Array(raw.bytes.rawBytes[raw.parsed.body])
         #expect(raw.headerValue("content-length")?.string() == String(body.count))
-        #expect(Int(body[1]) << 24 | Int(body[2]) << 16 | Int(body[3]) << 8 | Int(body[4]) == body.count - 5)
+        // gRPC framing: 1 flag byte, then the big-endian message length (typed, or Swift 6.1 on
+        // Linux times out type-checking it inside #expect).
+        let framedLength: Int = Int(body[1]) << 24 | Int(body[2]) << 16 | Int(body[3]) << 8 | Int(body[4])
+        #expect(framedLength == body.count - 5)
         // No payloads: the base message.
         #expect(try decoded(template.base).0 == (try decoded(request()).0))
     }
