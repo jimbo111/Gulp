@@ -56,7 +56,17 @@ public actor StoreWriter {
     /// finished (HIS-007). The highlight, comment and tags the user gave the row meanwhile are kept
     /// (`exchange.annotation` is ignored). Published as `exchangeUpdated`.
     public func update(_ exchange: Exchange) async {
-        pending.append((exchange, true))
+        // The proxy streams every response, so each exchange is recorded pending at its first bytes
+        // and updated when it completes. For a short response both land in the same batch: write the
+        // complete row once (one insert, one `exchangeRecorded`) instead of an insert plus an update,
+        // which halved the proxy's recording throughput (doc 01 §9).
+        if let index = pending.lastIndex(where: { $0.exchange.id == exchange.id }), !pending[index].replace {
+            var complete = exchange
+            complete.annotation = pending[index].exchange.annotation
+            pending[index].exchange = complete
+        } else {
+            pending.append((exchange, true))
+        }
         scheduleFlush()
         if durable { await tail?.value }
     }

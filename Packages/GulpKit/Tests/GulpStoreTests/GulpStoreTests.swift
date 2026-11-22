@@ -74,6 +74,7 @@ struct StoreTests {
         var exchange = sampleExchange(path: "/stream")
         exchange.state = .pending
         exchange.id = await store.writer.record(exchange)
+        await store.writer.flush()  // the pending row is written (a stream that runs a while)
         exchange.state = .complete
         exchange.response = RawResponse(Bytes("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"))
         await store.writer.update(exchange)
@@ -88,6 +89,46 @@ struct StoreTests {
             if sawUpdate { break }
         }
         #expect(sawUpdate)
+        try await store.close()
+    }
+
+    @Test("HIS-007: a stream that completes before its pending row is written is written once, complete")
+    func test_HIS007_shortStreamWrittenOnce() async throws {
+        let bus = EventBus()
+        let events = await bus.subscribe()
+        let store = try ProjectStore.open(at: temporaryProject(), eventBus: bus)
+        var exchange = sampleExchange(path: "/short")  // tagged t1, t2
+        exchange.state = .pending
+        exchange.response = nil
+        exchange.id = await store.writer.record(exchange)
+        var completed = sampleExchange(path: "/short", body: "done")
+        completed.id = exchange.id
+        completed.annotation = Annotation()  // the engine's completed exchange carries none
+        await store.writer.update(completed)
+        let next = await store.writer.record(sampleExchange(path: "/after"))
+        await store.writer.flush()
+        let loaded = try #require(try await store.exchange(id: exchange.id))
+        #expect(loaded.state == .complete)
+        #expect(loaded.response?.bytes.string().hasSuffix("done") == true)
+        #expect(loaded.annotation.tags == ["t1", "t2"])
+        // One insert: announced once as recorded, never as updated.
+        var seen: [GulpEvent] = []
+        for await delivery in events {
+            guard let event = delivery.event else { continue }
+            seen.append(event)
+            if case .exchangeRecorded(let id, _) = event, id == next { break }
+        }
+        let forShort = seen.filter {
+            switch $0 {
+            case .exchangeRecorded(let id, _), .exchangeUpdated(let id): return id == exchange.id
+            default: return false
+            }
+        }
+        #expect(forShort.count == 1)
+        if case .exchangeRecorded = forShort.first {
+        } else {
+            Issue.record("expected exchangeRecorded, got \(forShort)")
+        }
         try await store.close()
     }
 
