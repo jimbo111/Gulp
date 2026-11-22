@@ -1,6 +1,6 @@
 name: Gulp
 options:
-  bundleIdPrefix: com.gulp
+  bundleIdPrefix: io.github.jimbo111
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
@@ -14,7 +14,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
-    MARKETING_VERSION: "0.0.0"
+    MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: ""           # set your Apple Developer team id for signed builds
     CODE_SIGN_STYLE: Automatic
@@ -27,7 +27,7 @@ targets:
       - App
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.gulp.app
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.jimbo111.gulp
         INFOPLIST_FILE: App/Info.plist
         CODE_SIGN_ENTITLEMENTS: App/Gulp.entitlements
         ENABLE_HARDENED_RUNTIME: YES
@@ -68,7 +68,7 @@ targets:
         # The UI-test bundle has no checked-in Info.plist, so let Xcode synthesize one
         # (without this, code signing fails: "target does not have an Info.plist file").
         GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: com.gulp.app.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.jimbo111.gulp.uitests
     dependencies:
       - target: Gulp
       # The end-to-end test starts VulnLab from the built products (not linked).

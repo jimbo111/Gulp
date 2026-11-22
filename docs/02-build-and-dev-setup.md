@@ -56,9 +56,9 @@ The Makefile is the single entry point. Every target must work from a clean chec
     `GulpFeatures`, `GulpWorkspace`).
   - Sparkle as a package dependency — **not yet**: it is added together with its updater UI (F24
     MAC-026, M20); until then `project.yml` does not link it.
-  - `Info.plist` keys: `CFBundleIdentifier = com.gulp.app` (change it if the user picks a different
-    reverse-DNS ID), `LSMinimumSystemVersion`, `NSHumanReadableCopyright`, a document type for
-    `*.gulp` (UTI `com.gulp.project`, conforms to `public.database` / `public.data`), and (with
+  - `Info.plist` keys: `CFBundleIdentifier = io.github.jimbo111.gulp` (product decision #1;
+    `PRODUCT_BUNDLE_IDENTIFIER` in `project.yml`), `LSMinimumSystemVersion`, `NSHumanReadableCopyright`, a document type for
+    `*.gulp` (UTI `io.github.jimbo111.gulp.project`, conforms to `public.database` / `public.data`), and (with
     Sparkle, M20) `SUFeedURL`.
   - Entitlements (`App/Gulp.entitlements`): **no App Sandbox**; Hardened Runtime on;
     `com.apple.security.cs.allow-jit` only if JavaScriptCore JIT is needed (measure first; without
@@ -187,6 +187,6 @@ Release script steps (`Scripts/release.sh`):
 
 - `make vulnlab`, then in Gulp set the browser to proxy through 127.0.0.1:8080 and browse
   `http://localhost:8088`. VulnLab is the reference target for every feature (doc 06).
-- `defaults delete com.gulp.app` resets user settings during development.
+- `defaults delete io.github.jimbo111.gulp` resets user settings during development.
 - To test the TLS path without touching the system trust store, use the Gulp Browser (F16). It
   trusts the Gulp CA through the `--ignore-certificate-errors-spki-list` flag.

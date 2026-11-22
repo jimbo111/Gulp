@@ -141,7 +141,7 @@ accepted ones; supersede them.
 
 | Date | Decision | Where |
 |---|---|---|
-| — | Bundle identifier `com.gulp.app` (placeholder) | doc 02 §4 |
+| — | Bundle identifier `com.gulp.app` (placeholder; replaced 2026-11-21, product decision #1) | doc 02 §4 |
 | — | Default proxy listener `127.0.0.1:8080` | F01 |
 | — | Payload position marker `§` (U+00A7) | F07 |
 | — | Transform Tag delimiters `«…»` (⌥\ and ⌥⇧\ on a US keyboard) | F12 |
@@ -260,6 +260,7 @@ accepted ones; supersede them.
 | 2026-11-20 | **Window size, split panes, filter bars, Writing Tools** (doc 05 §2, §6, UI-002; from the README screenshots). (1) A project window opens at **1280×820 pt** and can shrink to **1000×640 pt** (doc 05 named none). At the default, the whole toolbar and the window title fit; below it, toolbar items move to the overflow menu. (2) Tool screens split with GulpUI's `HSplit`/`VSplit`, never SwiftUI's `HSplitView`/`VSplitView` directly: those size to their panes' ideal size, so a `List` or empty-state pane left the Dashboard and Notebook as a band mid-window. The wrappers stretch every pane along the cross axis (`Scripts/rules-check.sh` rule 7). (3) Filter-chip bars (History, Site map, Dashboard) lay out with GulpUI's `FlowLayout`: chips keep their full labels and wrap onto a second line when the detail area is narrow, instead of truncating to "…" or widening the detail past the window (which clipped the bar and squeezed the sidebar). (4) Writing Tools is off in every Gulp text view: the text is traffic under test, and its floating button lingered over the sidebar edge. (5) The window title defaults to the selected tool's sidebar name; a tool may refine it (HTTP History). (6) Proxy's sub-tabs (HTTP History, Intercept, Match & Replace, WebSockets History) are a segmented control in the content, like Target's and Scanner's: a `TabView` puts its tabs in the window toolbar on current macOS, where they pushed out the title. | `App/GulpApp.swift`, `App/ProjectWindow.swift`, `GulpUI/Layouts.swift`, `GulpUI/WritingTools.swift` |
 | 2026-11-21 | **Sequencer significance is family-wise** (F11 SEQ-005/009): `alpha` (default 0.01) is split across the battery, each of the k tests judged at alpha / k (Bonferroni). Per-test alpha failed one of 8 tests on a true CSPRNG about 8% of the time, and because the entropy estimate is scaled by the pass rate that downgraded a perfect token from Excellent to Good (seen on Linux CI). Now a random source fails anything with probability at most alpha. | Tests.swift, `Battery.all` |
 | 2026-11-21 | **Inferred site-map nodes ignore probe responses** (F04 TGT-003): links are inferred only from responses to requests that carried no injected payload. `ToolSource.payloadInjecting` (Scanner, Fuzzer) names the tools whose responses echo their own input; the store's `textualResponseIDs` and the live catch-up both skip them. Their requests still add *visited* nodes. Without this, probe hosts (`*.gulp-canary.test`) showed as sites, and after a crawl-and-audit the 2,000 newest textual responses read on rebuild were all probes. | `GulpCore/Model.swift`, `GulpStore/ScopeRows.swift`, `GulpWorkspace/SiteMapService.swift` |
+| 2026-11-21 | **Beta bundle ID and ad hoc signing** (product decision #1; beta gate). The bundle ID is `io.github.jimbo111.gulp`, version 0.1.0; the `.gulp` UTI, the log subsystem, the Keychain services (`….ca`, `….secrets`) and the UI-test defaults suites moved to the same prefix. A Mac that ran an earlier build keeps its old `com.gulp.app.*` Keychain items unused: Gulp makes a new CA, which browsers must trust again, and stored session secrets must be entered again (no tester had a build yet). With no Developer ID team, the beta is a Release build signed ad hoc with Hardened Runtime, universal (arm64 + x86_64), zipped with its SHA-256 (`Scripts/beta-build.sh`); it is not notarized, so Gatekeeper rejects it until the tester opens it with right-click > Open. This deviates from the roadmap's beta gate ("Developer-ID-signed, notarized"), which stays open. | `project.yml`, `App/Info.plist`, `Scripts/beta-build.sh`, `GulpTLS/CAStore.swift`, `GulpWorkspace/SecretStore.swift` |
 
 ---
 
@@ -268,9 +269,10 @@ accepted ones; supersede them.
 These were open questions; the product owner has answered them. They are binding for v1. To change
 one, ask the owner and update this list plus the "Where it applies" docs.
 
-1. **Bundle ID** — keep the placeholder `com.gulp.app` for now; it must be replaced with the final
-   reverse-DNS ID and an Apple Developer team before the first signed build — since decision #7 that
-   is the **daily-driver beta** after M9, not M20.
+1. **Bundle ID** — `io.github.jimbo111.gulp` (decided 2026-11-21; it replaced the placeholder
+   `com.gulp.app`). Keychain services, the log subsystem, the `.gulp` UTI and test defaults suites
+   share the prefix. The beta ships **ad hoc signed, not notarized** (`Scripts/beta-build.sh`) until
+   there is a Developer ID team; then `Scripts/release.sh` signs and notarizes.
    *Applies: doc 02 §4, `project.yml`.*
 2. **License** — **MIT** (open source). The Extension Gallery and update feeds may be public. See
    ADR-012 and the `LICENSE` file. *Applies: `LICENSE`, README, doc 02 §8.*

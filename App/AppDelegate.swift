@@ -44,7 +44,7 @@ final class OpenProjects {
 
     @ObservationIgnored private var open: [ObjectIdentifier: (session: ProjectSession, models: ToolModels)] =
         [:]
-    @ObservationIgnored private let log = Logger(subsystem: "com.gulp.app", category: "projects")
+    @ObservationIgnored private let log = Logger(subsystem: "io.github.jimbo111.gulp", category: "projects")
 
     var hasOpenProjects: Bool { !open.isEmpty }
 

@@ -20,7 +20,7 @@ final class ReadmeTour: XCTestCase {
             #"{"proxy":{"listeners":[{"id":"\#(UUID().uuidString)","bindAddress":"127.0.0.1","port":0,"enabled":true}]}}"#
             .write(to: root.appendingPathComponent("user-settings.json"), atomically: true, encoding: .utf8)
         app.launchEnvironment["GULP_SUPPORT_DIR"] = root.path
-        app.launchEnvironment["GULP_DEFAULTS_SUITE"] = "com.gulp.app.readme-tour"
+        app.launchEnvironment["GULP_DEFAULTS_SUITE"] = "io.github.jimbo111.gulp.readme-tour"
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
     }
 

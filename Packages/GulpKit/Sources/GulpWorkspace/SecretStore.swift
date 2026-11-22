@@ -79,7 +79,7 @@ public struct KeychainSecretStore: SecretStore {
     public let service: String
 
     /// A store under `service`.
-    public init(service: String = "com.gulp.app.secrets") {
+    public init(service: String = "io.github.jimbo111.gulp.secrets") {
         self.service = service
     }
 

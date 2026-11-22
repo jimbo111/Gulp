@@ -37,7 +37,7 @@ final class GulpAppUITests: XCTestCase {
             to: root.appendingPathComponent("user-settings.json"), atomically: true, encoding: .utf8)
         app = XCUIApplication()
         app.launchEnvironment["GULP_SUPPORT_DIR"] = root.path
-        app.launchEnvironment["GULP_DEFAULTS_SUITE"] = "com.gulp.app.uitests"
+        app.launchEnvironment["GULP_DEFAULTS_SUITE"] = "io.github.jimbo111.gulp.uitests"
         // No window restoration from an earlier run: every test starts from one fresh window.
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
     }

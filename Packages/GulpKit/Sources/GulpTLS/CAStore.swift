@@ -128,7 +128,7 @@ public struct KeychainCAStore: CAStore {
     static let account = "ca-private-key"
 
     /// A store with the certificate in `directory` and the key under `service`.
-    public init(directory: URL, service: String = "com.gulp.app.ca") {
+    public init(directory: URL, service: String = "io.github.jimbo111.gulp.ca") {
         self.directory = directory
         self.service = service
     }
