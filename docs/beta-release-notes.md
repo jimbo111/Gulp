@@ -8,13 +8,15 @@ template asks for the steps, the macOS version and what you expected).
 
 `Gulp-0.1.0-beta.zip` (built by `Scripts/beta-build.sh`; its SHA-256 is published next to it) holds a
 universal `Gulp.app` (Apple silicon and Intel, macOS 14 or later). It is signed ad hoc and **not
-notarized**, so the first launch is blocked: right-click `Gulp.app` and choose **Open**, or open
-**System Settings > Privacy & Security** and choose **Open Anyway**. The command-line tool is inside
+notarized**, so the first launch is blocked: open **System Settings > Privacy & Security** and
+choose **Open Anyway** (on macOS 14, right-clicking `Gulp.app` and choosing **Open** also works).
+macOS may ask once whether Gulp can use its Keychain items; choose **Always Allow**, or HTTPS
+interception stays off (the project window says so). The command-line tool is inside
 the app at `Gulp.app/Contents/Helpers/gulp`.
 
-The bundle ID is `io.github.jimbo111.gulp`. A Mac that ran a development build from before 0.1.0
-(`com.gulp.app`) gets a new certificate authority: trust the new one in your browser, and enter
-request-signing secrets again.
+The bundle ID is `io.github.jimbo111.gulp`. A Mac that ran an earlier development build keeps its
+certificate authority and stored secrets. App preferences (window layout, remembered tabs) start
+fresh.
 
 ## What the beta covers
 

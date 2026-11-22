@@ -425,10 +425,24 @@ struct StoreTests {
         try await empty.close()
     }
 
-    @Test("PRJ-003: a project whose newest exchanges were deleted before v8 keeps old references apart")
-    func test_PRJ003_migrationSkipsIDsStillReferenced() async throws {
-        // A v7 project: exchanges 1…3 remain; 4…9 were deleted, but an OAST payload still names 9
-        // and a Fuzzer result 7 (neither has a foreign key) and the passive scanner's cursor is at 8.
+    /// A reference with no foreign key that can name an exchange deleted before v8.
+    static let dangling: [(name: String, sql: [String])] = [
+        ("OAST payload", ["INSERT INTO oast_payloads (correlation_id, exchange_id) VALUES ('c1', 9)"]),
+        (
+            "Fuzzer result",
+            [
+                "INSERT INTO fuzzer_attacks (id, name) VALUES (1, 'a')",
+                "INSERT INTO fuzzer_results (attack_id, seq, exchange_id) VALUES (1, 0, 9)",
+            ]
+        ),
+        ("passive-scan cursor", ["INSERT INTO meta (key, value) VALUES ('passive_scan_last_id', '9')"]),
+    ]
+
+    @Test(
+        "PRJ-003: a project whose newest exchanges were deleted before v8 keeps old references apart",
+        arguments: dangling.map(\.name))
+    func test_PRJ003_migrationSkipsIDsStillReferenced(reference: String) async throws {
+        // A v7 project: exchanges 1…3 remain; 4…9 were deleted, but `reference` alone still names 9.
         let url = temporaryProject()
         do {
             let pool = try DatabasePool(path: url.path)
@@ -439,18 +453,15 @@ struct StoreTests {
                     exchange.id = ExchangeID(id)
                     try ExchangeRows.insert(exchange, in: db)
                 }
-                try db.execute(
-                    sql: "INSERT INTO oast_payloads (correlation_id, exchange_id) VALUES ('c1', 9)")
-                try db.execute(sql: "INSERT INTO fuzzer_attacks (id, name) VALUES (1, 'a')")
-                try db.execute(
-                    sql: "INSERT INTO fuzzer_results (attack_id, seq, exchange_id) VALUES (1, 0, 7)")
-                try db.execute(sql: "INSERT INTO meta (key, value) VALUES ('passive_scan_last_id', '8')")
+                for sql in Self.dangling.first(where: { $0.name == reference })?.sql ?? [] {
+                    try db.execute(sql: sql)
+                }
             }
             try pool.close()
         }
         let store = try ProjectStore.open(at: url)
         let next = await store.writer.record(sampleExchange())
-        #expect(next == 10)
+        #expect(next == 10, "the migration did not see the \(reference)")
         try await store.close()
     }
 

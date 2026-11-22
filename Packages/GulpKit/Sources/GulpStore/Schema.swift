@@ -68,7 +68,8 @@ enum Schema {
         // `MAX(id)`, which forgets deleted rows, so `meta.exchange_id_high_water` keeps the highest
         // id ever deleted. A file from before v8 starts from the highest id anything still names
         // (Fuzzer results and OAST payloads have no foreign key, the passive scanner keeps a cursor).
-        migrator.registerMigration("v8_exchange_id_high_water") { db in
+        // No table changes, so foreign keys stay on (no whole-database check after it).
+        migrator.registerMigration("v8_exchange_id_high_water", foreignKeyChecks: .immediate) { db in
             try db.execute(
                 sql: """
                     INSERT OR REPLACE INTO meta (key, value) SELECT '\(exchangeIDHighWater)', COALESCE(MAX(id), 0)

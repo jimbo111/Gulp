@@ -75,11 +75,12 @@ public struct FileSecretStore: SecretStore {
 #if canImport(Security)
 /// Secrets as Keychain generic-password items (this device only, readable when unlocked).
 public struct KeychainSecretStore: SecretStore {
-    /// Keychain service name the items are filed under.
+    /// Keychain service name the items are filed under. It names stored data, so it stays
+    /// `com.gulp.app.secrets` when the bundle ID changes (doc 07, 2026-11-21).
     public let service: String
 
     /// A store under `service`.
-    public init(service: String = "io.github.jimbo111.gulp.secrets") {
+    public init(service: String = "com.gulp.app.secrets") {
         self.service = service
     }
 

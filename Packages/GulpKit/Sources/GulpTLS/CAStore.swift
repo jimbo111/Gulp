@@ -123,12 +123,13 @@ enum FileSecrets {
 public struct KeychainCAStore: CAStore {
     /// Directory for the (public) certificate file.
     public let directory: URL
-    /// Keychain service name.
+    /// Keychain service name. It names stored data, so it stays `com.gulp.app.ca` when the bundle ID
+    /// changes (doc 07, 2026-11-21): renaming it would orphan every existing CA key.
     public let service: String
     static let account = "ca-private-key"
 
     /// A store with the certificate in `directory` and the key under `service`.
-    public init(directory: URL, service: String = "io.github.jimbo111.gulp.ca") {
+    public init(directory: URL, service: String = "com.gulp.app.ca") {
         self.directory = directory
         self.service = service
     }

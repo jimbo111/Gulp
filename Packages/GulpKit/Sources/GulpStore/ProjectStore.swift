@@ -71,9 +71,10 @@ public final class ProjectStore: Sendable {
         let nextID = try pool.write { db -> ExchangeID in
             let hasUUID = try String.fetchOne(db, sql: "SELECT value FROM meta WHERE key = 'project_uuid'")
             if hasUUID == nil {
+                // app_version follows MARKETING_VERSION in project.yml.
                 let meta: [(String, String)] = [
                     ("schema_version", String(Schema.version)), ("project_uuid", UUID().uuidString),
-                    ("created_at", String(Date().timeIntervalSince1970)), ("app_version", "0.2.0"),
+                    ("created_at", String(Date().timeIntervalSince1970)), ("app_version", "0.1.0"),
                 ]
                 for (key, value) in meta {
                     try db.execute(

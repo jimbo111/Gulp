@@ -24,7 +24,7 @@ struct ProjectWindow: View {
     @State private var showGRPCSchemas = false
     @State private var grpcRevision = 0
     /// Listener bind failures from opening the project (PRX-001), shown above the tools.
-    @State private var bindErrors: [String] = []
+    @State private var startupWarnings: [String] = []
     /// Gulp Browser (BRW-001…004): offer Chrome for Testing when nothing is installed.
     @State private var offerDownload = false
     @State private var browserStatus: String?
@@ -55,7 +55,7 @@ struct ProjectWindow: View {
                         .navigationTitle(selection?.title ?? "Gulp")
                         .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("tool.\(selection?.rawValue ?? "none")")
-                        .safeAreaInset(edge: .top) { bindErrorBanner }
+                        .safeAreaInset(edge: .top) { startupBanner }
                         .grpcSchemas(from: session, revision: grpcRevision)
                 }
                 .sheet(isPresented: $showListeners) {
@@ -268,7 +268,7 @@ struct ProjectWindow: View {
         }
     }
 
-    @ViewBuilder private var bindErrorBanner: some View {
+    @ViewBuilder private var startupBanner: some View {
         if let browserStatus {
             HStack {
                 Image(systemName: "globe")
@@ -279,13 +279,13 @@ struct ProjectWindow: View {
             .padding(8)
             .background(.bar)
         }
-        if !bindErrors.isEmpty {
+        if !startupWarnings.isEmpty {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
-                Text(bindErrors.joined(separator: "\n"))
+                Text(startupWarnings.joined(separator: "\n"))
                 Spacer()
                 Button("Listeners…") { showListeners = true }
-                Button("Dismiss") { bindErrors = [] }
+                Button("Dismiss") { startupWarnings = [] }
             }
             .padding(8)
             .background(.bar)
@@ -345,10 +345,11 @@ struct ProjectWindow: View {
                 opened = try await ProjectSession.openTemporary()
             }
             let results = await opened.startProxyListeners()
-            bindErrors = results.values.compactMap { result in
-                if case .failure(let error) = result { return error.message }
-                return nil
-            }
+            startupWarnings =
+                results.values.compactMap { result in
+                    if case .failure(let error) = result { return error.message }
+                    return nil
+                } + [opened.certificateAuthorityError].compactMap { $0 }
             listenerPorts = await opened.listenerPorts
             projectName = await opened.url.lastPathComponent
             let created = ToolModels(session: opened)

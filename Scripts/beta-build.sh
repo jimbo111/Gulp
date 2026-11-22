@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Gulp beta build (doc 07, 2026-11-21): a Release Gulp.app signed ad hoc with Hardened Runtime and
-# zipped for a few testers. There is no Developer ID yet, so it is not notarized: a tester opens it
-# the first time with right-click > Open (or System Settings > Privacy & Security > Open Anyway).
+# zipped for a few testers. There is no Developer ID yet, so it is not notarized: a tester allows the
+# first launch in System Settings > Privacy & Security > Open Anyway (macOS 15 dropped right-click > Open).
 # Scripts/release.sh is the Developer ID path (signed, notarized, DMG, appcast) for when there is one.
 # Usage: Scripts/beta-build.sh   (macOS, Xcode) -> .build/beta/Gulp-<version>-beta.zip
 set -euo pipefail

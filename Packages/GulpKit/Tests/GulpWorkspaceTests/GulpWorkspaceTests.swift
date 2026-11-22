@@ -367,6 +367,22 @@ struct RepeaterProjectTests {
     }
 }
 
+@Suite("GulpWorkspace — certificate authority (F02)")
+struct CertificateAuthorityTests {
+    @Test("TLS-002: a CA that cannot be loaded is reported, not silently left out")
+    func test_TLS002_unloadableCAIsReported() async throws {
+        var environment = isolatedEnvironment()
+        let directory = environment.supportDirectory.appendingPathComponent("broken-ca")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("-----BEGIN CERTIFICATE-----\n".utf8).write(to: directory.appendingPathComponent("ca.pem"))
+        environment.caStore = FileCAStore(directory: directory)  // ca.pem without its key
+        let session = try await open(environment, "broken-ca")
+        #expect(session.minter == nil)
+        #expect(session.certificateAuthorityError?.contains("ca.pem") == true)
+        try await session.close()
+    }
+}
+
 @Suite("GulpWorkspace — site map (F04)", .serialized)
 struct SiteMapServiceTests {
     /// Waits (bounded) until `check` holds for the session's site map.

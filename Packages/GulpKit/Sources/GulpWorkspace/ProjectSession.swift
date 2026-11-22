@@ -280,6 +280,8 @@ public actor ProjectSession {
     /// Mints leaves for TLS interception; nil when the CA could not be loaded (CONNECT then fails
     /// with a clear page instead of the project failing to open).
     public nonisolated let minter: LeafMinter?
+    /// Why `minter` is nil, for the window to show: HTTPS interception is off until it is fixed.
+    public nonisolated let certificateAuthorityError: String?
     /// The intercept queue (PRX-010…PRX-014).
     public nonisolated let intercept: InterceptQueue
     /// Match & Replace for proxy traffic and, per rule, every tool (PRX-020…PRX-022).
@@ -308,7 +310,7 @@ public actor ProjectSession {
 
     private init(
         store: ProjectStore, events: EventBus, settings: LayeredSettings, isTemporary: Bool,
-        environment: WorkspaceEnvironment, minter: LeafMinter?
+        environment: WorkspaceEnvironment, minter: Result<LeafMinter, any Error>
     ) {
         self.store = store
         self.events = events
@@ -347,12 +349,18 @@ public actor ProjectSession {
             ],
             responseHooks: [matchReplace, SessionResponseHook(state: sessionState)], recorder: recorder)
         self.http = engine
-        self.minter = minter
+        self.minter = try? minter.get()
+        if case .failure(let error) = minter {
+            certificateAuthorityError = "HTTPS interception is off: \(Self.describe(error))"
+        } else {
+            certificateAuthorityError = nil
+        }
         let intercept = InterceptQueue(events: events)
         self.intercept = intercept
         let proxySettings = settings.get(ProxySettings.self)
         self.proxy = ProxyServer(
-            engine: engine, tls: minter.map { proxySettings.tlsOptions(minter: $0) }, intercept: intercept,
+            engine: engine, tls: self.minter.map { proxySettings.tlsOptions(minter: $0) },
+            intercept: intercept,
             matchReplace: matchReplace, webSockets: recorder)
         let currentStore = CurrentStore(store)
         self.currentStore = currentStore
@@ -440,7 +448,7 @@ public actor ProjectSession {
             try await settings.importProjectSettings(values)
             try await settings.copySessionSecrets(in: environment.secretStore)
         }
-        let minter = (try? environment.certificateAuthority()).flatMap { try? LeafMinter(authority: $0) }
+        let minter = Result { try LeafMinter(authority: environment.certificateAuthority()) }
         let session = ProjectSession(
             store: store, events: events, settings: settings, isTemporary: temporary,
             environment: environment, minter: minter)
