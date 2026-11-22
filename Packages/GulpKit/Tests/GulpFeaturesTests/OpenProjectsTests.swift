@@ -37,5 +37,22 @@ struct OpenProjectsTests {
         await windowClose.value
     }
 
+    /// NB-002: a note typed just before the window closes (or ⌘Q) is saved, though the Notebook
+    /// waits 400 ms after the last keystroke before writing.
+    @Test func test_NB002_closeSavesANoteStillBeingTyped() async throws {
+        let projects = OpenProjects()
+        let session = try await openIsolatedSession()
+        let url = await session.url
+        let models = ToolModels(session: session)
+        projects.add(session, models: models)
+        let item = try await session.addNote(title: "Login")
+        models.notebook.edit(item.id, NotebookEdit(note: "the reset token is reusable"))
+        await projects.close(session)
+
+        let reopened = try ProjectStore.open(at: url)
+        let saved = try await reopened.notebookItems().first { $0.id == item.id }
+        #expect(saved?.note == "the reset token is reusable")
+        try await reopened.close()
+    }
 }
 #endif

@@ -50,6 +50,7 @@ public final class OpenProjects {
         models.stop()
         let log = self.log
         return Task {
+            await models.flushPendingWrites()  // e.g. a Notebook note still in its typing pause
             let path = await session.url.path
             do {
                 try await session.close(keepTemporary: true)

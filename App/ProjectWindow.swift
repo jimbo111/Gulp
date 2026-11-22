@@ -208,7 +208,7 @@ struct ProjectWindow: View {
         case .logger:
             LoggerView(session: session, generation: generation)
         case .notebook:
-            NotebookView(session: session)
+            NotebookView(models: models)
         case .decoder:
             DecoderView(models: models)
         case .comparer:
