@@ -395,7 +395,8 @@ struct StoreTests {
     @Test("BCN-002: an OAST payload is never tied to an exchange that is not on disk yet")
     func test_BCN002_payloadLinkFollowsItsExchange() async throws {
         let store = try ProjectStore.open(at: temporaryProject())
-        try await store.addOASTPayload("abc123", host: "abc123.oast.test", context: OASTContext(tool: "scanner"))
+        try await store.addOASTPayload(
+            "abc123", host: "abc123.oast.test", context: OASTContext(tool: "scanner"))
         let id = await store.writer.record(sampleExchange())  // handed out, its write still coalescing
         try await store.attachOASTPayloads(["abc123"], to: id)
         #expect(try await store.exchange(id: id) != nil)
