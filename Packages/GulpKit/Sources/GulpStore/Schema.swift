@@ -64,11 +64,39 @@ enum Schema {
             try db.execute(sql: "CREATE INDEX ix_oast_payload_exchange ON oast_payloads(exchange_id)")
             try db.execute(sql: "CREATE INDEX ix_oast_interaction_payload ON oast_interactions(payload_id)")
         }
+        // PRJ-003 / doc 04 §4: an exchange id is never handed out twice. The next id is derived from
+        // `MAX(id)`, which forgets deleted rows, so `meta.exchange_id_high_water` keeps the highest
+        // id ever deleted. A file from before v8 starts from the highest id anything still names
+        // (Fuzzer results and OAST payloads have no foreign key, the passive scanner keeps a cursor).
+        migrator.registerMigration("v8_exchange_id_high_water") { db in
+            try db.execute(
+                sql: """
+                    INSERT OR REPLACE INTO meta (key, value) SELECT '\(exchangeIDHighWater)', COALESCE(MAX(id), 0)
+                    FROM (SELECT MAX(id) AS id FROM exchanges
+                    UNION ALL SELECT MAX(exchange_id) FROM issue_evidence
+                    UNION ALL SELECT MAX(exchange_id) FROM notebook_items
+                    UNION ALL SELECT MAX(exchange_id) FROM repeater_history
+                    UNION ALL SELECT MAX(upgrade_exchange_id) FROM ws_connections
+                    UNION ALL SELECT MAX(exchange_id) FROM fuzzer_results
+                    UNION ALL SELECT MAX(exchange_id) FROM oast_payloads
+                    UNION ALL SELECT CAST(value AS INTEGER) FROM meta WHERE key = 'passive_scan_last_id')
+                    """)
+            try db.execute(
+                sql: """
+                    CREATE TRIGGER exchanges_id_high_water AFTER DELETE ON exchanges BEGIN
+                    INSERT INTO meta (key, value) VALUES ('\(exchangeIDHighWater)', OLD.id)
+                    ON CONFLICT(key) DO UPDATE SET value = MAX(CAST(value AS INTEGER), OLD.id);
+                    END
+                    """)
+        }
         return migrator
     }
 
+    /// The `meta` key holding the highest exchange id ever deleted (see `v8_exchange_id_high_water`).
+    static let exchangeIDHighWater = "exchange_id_high_water"
+
     /// The current schema version written to `meta.schema_version`.
-    static let version = 7
+    static let version = 8
 
     /// Schema v1, generated from the SQL block in doc 04 §4 (comments stripped, lines wrapped).
     static let v1 = """

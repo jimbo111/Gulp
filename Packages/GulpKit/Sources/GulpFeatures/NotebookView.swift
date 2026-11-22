@@ -15,7 +15,7 @@ import SwiftUI
 /// State behind the Notebook.
 @MainActor
 @Observable
-final class NotebookModel {
+final class NotebookModel: PendingWrites {
     private(set) var items: [NotebookItem] = []
     private(set) var groups: [(name: String, items: [NotebookItem])] = []
     var filterText = "" {
@@ -112,6 +112,12 @@ final class NotebookModel {
         }
     }
 
+    /// Write the edits still waiting for the typing pause (the project is closing).
+    func flushPendingWrites() async {
+        pendingSave?.cancel()
+        await flushEdits()
+    }
+
     /// Write every pending edit now. An edit that fails stays pending (unless a newer one replaced
     /// it) and the failure is shown.
     func flushEdits() async {
@@ -151,21 +157,16 @@ final class NotebookModel {
 
 /// The Notebook tool.
 public struct NotebookView: View {
-    let session: ProjectSession
-    @State private var model: NotebookModel?
+    let model: NotebookModel
 
-    /// The Notebook of `session`.
-    public init(session: ProjectSession) {
-        self.session = session
+    /// The Notebook of the project whose tool models are `models`.
+    public init(models: ToolModels) {
+        model = models.notebook
     }
 
-    /// The screen.
+    /// The screen; items added from other tools meanwhile show when it appears.
     public var body: some View {
-        if let model {
-            NotebookPanel(model: model)
-        } else {
-            ProgressView().task { model = NotebookModel(session: session) }
-        }
+        NotebookPanel(model: model).onAppear { model.reload() }
     }
 }
 

@@ -197,7 +197,9 @@ let package = Package(
         .testTarget(name: "GulpCodecTests", dependencies: ["GulpCodec", "GulpCore", "GulpTestSupport"]),
         .testTarget(name: "GulpQueryTests", dependencies: ["GulpQuery", "GulpCore"]),
         .testTarget(name: "GulpDiffTests", dependencies: ["GulpDiff", "GulpTestSupport"]),
-        .testTarget(name: "GulpStoreTests", dependencies: ["GulpStore", "GulpQuery"]),
+        .testTarget(
+            name: "GulpStoreTests",
+            dependencies: ["GulpStore", "GulpQuery", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(
             name: "GulpTLSTests",
             dependencies: ["GulpTLS"] + nioCore + [
@@ -253,7 +255,7 @@ let package = Package(
             name: "GulpFeaturesTests",
             dependencies: [
                 "GulpFeatures", "GulpWorkspace", "GulpCore", "GulpRepeater", "GulpFuzzer", "GulpScanner",
-                "GulpProxy",
+                "GulpProxy", "GulpStore",
             ]),
         .testTarget(
             name: "GulpWorkspaceTests",

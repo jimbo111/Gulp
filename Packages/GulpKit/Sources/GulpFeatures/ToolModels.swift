@@ -14,6 +14,13 @@ protocol SessionFollowing: AnyObject {
     func stop()
 }
 
+/// A model that holds edits it has not written yet (a typing debounce).
+@MainActor
+protocol PendingWrites: AnyObject {
+    /// Write what is held now.
+    func flushPendingWrites() async
+}
+
 /// The tool models of one open project, each created on first use and kept until the window closes.
 @MainActor
 public final class ToolModels {
@@ -34,10 +41,16 @@ public final class ToolModels {
     var authzMatrix: AuthzMatrixModel { model(AuthzMatrixModel.init) }
     var siteMap: SiteMapModel { model(SiteMapModel.init) }
     var scope: ScopeModel { model(ScopeModel.init) }
+    var notebook: NotebookModel { model(NotebookModel.init) }
 
     /// Stop every model's subscriptions (the project window is closing).
     public func stop() {
         for case let model as any SessionFollowing in models.values { model.stop() }
+    }
+
+    /// Write what the models still hold (the project is closing).
+    public func flushPendingWrites() async {
+        for case let model as any PendingWrites in models.values { await model.flushPendingWrites() }
     }
 
     private func model<Model: AnyObject>(_ make: (ProjectSession) -> Model) -> Model {

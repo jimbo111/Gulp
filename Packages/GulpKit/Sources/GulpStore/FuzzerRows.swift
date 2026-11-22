@@ -82,6 +82,9 @@ extension ProjectStore {
     /// Append result rows (one transaction; rows already stored are replaced).
     public func appendFuzzerResults(_ id: Int64, _ rows: [FuzzerResultRow]) async throws {
         guard !rows.isEmpty else { return }
+        // A row names an exchange whose id was handed out before its write (coalesced): flush first,
+        // so a result is never stored ahead of its exchange (an id lost in a crash would be reused).
+        await writer.flush()
         try await pool.write { db in
             for row in rows {
                 try db.execute(
