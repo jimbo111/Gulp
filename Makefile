@@ -38,8 +38,8 @@ test-core: ## swift test for GulpKit (works on Linux)
 test: test-core ## Core tests + app/UI tests (macOS)
 	xcodebuild -project Gulp.xcodeproj -scheme $(SCHEME) -configuration $(CONFIG) -destination '$(DEST)' -derivedDataPath $(DD) test
 
-perf: ## Performance budget tests (doc 06 §5; slow, excluded from `test`)
-	swift test --package-path $(KIT) --filter PerformanceTests
+perf: ## Proxy performance budgets on a release build (doc 06 §5; slow, excluded from `test`)
+	SWIFTPM_FLAGS="$(SWIFTPM_FLAGS)" Scripts/perf-dod.sh
 
 lint: rules ## Check formatting (strict) + the rules/architecture gates
 	swift format lint --strict --recursive App Packages Beacon UITests

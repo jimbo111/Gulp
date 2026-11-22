@@ -51,6 +51,17 @@ grep -q "USING INDEX ix_ex_status\|USING COVERING INDEX ix_ex_status" "$WORK/q1.
 grep -qE '^matched 50000 in ' "$WORK/q1b.txt"
 echo "PASS 1: resp.status >= 500 and req.host ~ \"api\" matched 50,000 of 1,000,000 rows in ${MS} ms via ix_ex_status"
 
+# 1b. Doc 01 §9 "Open a 1M-exchange project < 3 s to first paint": open as the app does, count, and
+#     load the newest page (History opens scrolled to it). Scrolling loads pages off the main thread;
+#     the slowest one at any depth must stay well under a second (it was 32 ms on an M4 Pro).
+"$GULP" history --project "$WORK/big.gulp" --timings | tee "$WORK/open.txt"
+grep -qE '^rows 1000000: open [0-9]+ ms, count [0-9]+ ms, newest page [0-9]+ ms; first paint [0-9]+ ms; slowest page [0-9.]+ ms$' "$WORK/open.txt"
+PAINT=$(sed -n 's/.*; first paint \([0-9]*\) ms;.*/\1/p' "$WORK/open.txt")
+PAGE=$(sed -n 's/.*; slowest page \([0-9]*\)\.[0-9]* ms$/\1/p' "$WORK/open.txt")
+[ "$PAINT" -lt 3000 ]
+[ "$PAGE" -lt 250 ]
+echo "PASS 1b: a 1M-row project opens to its first History page in ${PAINT} ms; slowest page ${PAGE} ms"
+
 # 2. Proxy traffic; reflected("q") flags the reflected-XSS row (F05 acceptance 2).
 "$GULP" scope --project "$PROJECT" --add "$LAB/" > /dev/null
 "$GULP" proxy --project "$PROJECT" --port "$PROXY_PORT" > "$WORK/proxy.log" 2>&1 &
