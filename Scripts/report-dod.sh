@@ -22,6 +22,7 @@ PROJECT="$WORK/report.gulp"
 
 fail() {
   echo "FAIL: $*" >&2
+  echo "--- vulnlab.log" >&2 && cat "$WORK/vulnlab.log" >&2
   exit 1
 }
 wait_port() {
@@ -43,7 +44,7 @@ for route in /recon/config /recon/app.js; do
   printf 'GET %s HTTP/1.1\r\nHost: 127.0.0.1:8088\r\n\r\n' "$route" > "$WORK/req.txt"
   "$GULP" repeater --project "$PROJECT" --raw "$WORK/req.txt" --target "$LAB" > /dev/null
 done
-"$GULP" scan passive --project "$PROJECT" --all --recon --tools repeater > /dev/null
+"$GULP" scan passive --project "$PROJECT" --all --recon --tools repeater
 issues=$("$GULP" issues --project "$PROJECT" | sed -n '1p')
 echo "$issues"
 
