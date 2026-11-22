@@ -125,7 +125,7 @@ struct ProjectCommand: AsyncParsableCommand {
     /// `gulp-cli project info --project p.gulp`.
     struct Info: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Print a project's name, schema and counts.")
+            abstract: "Print a project's name, schema and counts (exchanges, scope, Repeater, Notebook).")
 
         @Option(help: "Project file.")
         var project: String
@@ -143,6 +143,13 @@ struct ProjectCommand: AsyncParsableCommand {
             inScope.inScopeOnly = true
             print("in scope: \(try await store.count(filter: inScope))")
             print("scope rules: \(try await store.scopeRules().count)")
+            let tabs = try await store.repeaterTabs()
+            print("repeater tabs: \(tabs.count)")
+            for group in try await store.repeaterGroups() {
+                let members = tabs.filter { $0.groupID == group.id }.count
+                print("repeater group \(group.id) '\(group.name)' (\(group.mode)): \(members) tab(s)")
+            }
+            print("notebook items: \(try await store.notebookItems().count)")
             try await store.close()
         }
     }

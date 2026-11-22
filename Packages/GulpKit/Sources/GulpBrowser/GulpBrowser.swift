@@ -105,6 +105,16 @@ public struct BrowserLaunchOptions: Sendable, Hashable {
         self.dumpDOM = dumpDOM
     }
 
+    /// Chromium features that send background requests a test session must not record (BRW-003):
+    /// translation, optimization hints, cast discovery, autofill server queries, the network-time
+    /// ping (`clients2.google.com/time`), Safe Browsing's real-time key fetch
+    /// (`gstatic.com/ohttp_gateway`) and the AI-mode eligibility check (`google.com/async/folae`).
+    static let disabledFeatures = [
+        "Translate", "OptimizationHints", "MediaRouter", "AutofillServerCommunication",
+        "NetworkTimeServiceQuerying", "SafeBrowsingHashPrefixRealTimeLookups", "AimEnabled",
+        "AimServerEligibilityEnabled", "AimServerRequestOnStartupEnabled",
+    ]
+
     /// The command-line arguments.
     public var arguments: [String] {
         var args = [
@@ -127,7 +137,7 @@ public struct BrowserLaunchOptions: Sendable, Hashable {
             "--disable-domain-reliability",
             "--disable-client-side-phishing-detection",
             "--metrics-recording-only",
-            "--disable-features=Translate,OptimizationHints,MediaRouter,AutofillServerCommunication",
+            "--disable-features=" + Self.disabledFeatures.joined(separator: ","),
         ]
         if headless {
             args.append("--headless=new")

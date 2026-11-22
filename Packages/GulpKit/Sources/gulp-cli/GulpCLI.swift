@@ -587,7 +587,9 @@ struct Browser: AsyncParsableCommand {
 
 /// `gulp-cli group --raw req.txt --target https://localhost:8443 --count 20 --mode single-packet`
 /// sends the request `count` times as one group (F03 HTTP-030…HTTP-035) and prints each result
-/// with its final-write offset, then the status counts and the spread.
+/// with its final-write offset, then the status counts and the spread. With `--project` it is the
+/// Repeater's "Send group" (REP-010): `count` tabs in one group, each send recorded in its tab's
+/// history, so the race and its responses are kept in the project.
 struct Group: AsyncParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Send a request as a group (race testing).")
 
@@ -603,11 +605,20 @@ struct Group: AsyncParsableCommand {
     @Option(help: "single-packet, parallel, sequential (one connection) or separate (a connection each).")
     var mode = "single-packet"
 
-    @Option(help: "Single-packet warm-up in milliseconds.")
+    @Option(help: "Single-packet warm-up in milliseconds (not with --project: the Repeater's is 100).")
     var warmUp = 100
 
     @Flag(help: "Use HTTP/1.1 even if the server offers HTTP/2.")
     var http1 = false
+
+    @Option(help: "Send as a Repeater group in this project (created if missing): one tab per copy.")
+    var project: String?
+
+    @Option(help: "With --project: the group's name; its tabs are titled \"<name> 1\", \"<name> 2\"…")
+    var title = "race"
+
+    @Flag(help: "With --project: send even if the target is outside the project's scope.")
+    var allowOutOfScope = false
 
     func run() async throws {
         guard let data = FileManager.default.contents(atPath: raw) else {
@@ -616,25 +627,32 @@ struct Group: AsyncParsableCommand {
         guard let destination = HTTPTarget(url: target) else {
             throw ValidationError("Invalid --target \(target)")
         }
-        let groupMode: GroupSendMode
+        let groupMode: RepeaterGroup.Mode
         switch mode {
         case "single-packet": groupMode = .singlePacket
         case "parallel": groupMode = .parallel
-        case "sequential": groupMode = .sequentialSingleConnection
-        case "separate": groupMode = .sequentialSeparateConnections
+        case "sequential": groupMode = .sequential
+        case "separate": groupMode = .separate
         default: throw ValidationError("Unknown --mode \(mode)")
         }
-        var options = SendOptions(recordAs: .automation)
-        options.singlePacketWarmUp = .milliseconds(warmUp)
-        options.httpVersion = http1 ? .http1_1 : .auto
-        options.tls.validateCertificates = false
-        options.timeouts.total = .seconds(30)
         let request = RawRequest(Bytes([UInt8](data)))
-        let items = (0..<max(1, count)).map { _ in GroupItem(request: request, target: destination) }
-        // rules-check: manual send — the operator typed this exact request (like Repeater), not an active tool.
-        let engine = NIOHTTPEngine()
-        defer { Task { await engine.shutdown() } }
-        let results = await engine.sendGroup(items, mode: groupMode, options: options)
+        let results: [(exchange: Exchange, error: GulpNetworkError?)]
+        if let project {
+            guard warmUp == 100 else { throw ValidationError("--warm-up cannot be changed with --project") }
+            results = try await sendInProject(project, request: request, to: destination, mode: groupMode)
+        } else {
+            var options = SendOptions(recordAs: .automation)
+            options.singlePacketWarmUp = .milliseconds(warmUp)
+            options.httpVersion = http1 ? .http1_1 : .auto
+            options.tls.validateCertificates = false
+            options.timeouts.total = .seconds(30)
+            let items = (0..<max(1, count)).map { _ in GroupItem(request: request, target: destination) }
+            // rules-check: manual send — the operator typed this exact request (like Repeater), not an active tool.
+            let engine = NIOHTTPEngine()
+            defer { Task { await engine.shutdown() } }
+            results = await engine.sendGroup(items, mode: groupMode.engineMode, options: options)
+                .map { ($0.exchange, $0.error) }
+        }
         var statuses: [String: Int] = [:]
         for (index, result) in results.enumerated() {
             let status =
@@ -649,6 +667,37 @@ struct Group: AsyncParsableCommand {
                 + statuses.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))
         let offsets = results.compactMap(\.exchange.timing.finalWriteOffsetMs)
         if let spread = offsets.max() { print(String(format: "final-write spread: %.2f ms", spread)) }
+    }
+
+    /// The Repeater's "Send group": `count` tabs in a new group, sent together and recorded.
+    private func sendInProject(
+        _ project: String, request: RawRequest, to destination: HTTPTarget, mode: RepeaterGroup.Mode
+    ) async throws -> [(exchange: Exchange, error: GulpNetworkError?)] {
+        let session = try await ProjectSession.open(at: URL(fileURLWithPath: project))
+        // TGT-023: a manual send to an out-of-scope target asks first; headless, the answer is the flag.
+        if !allowOutOfScope,
+            await session.scopeDecision(for: destination, request: request.bytes.rawBytes) == .confirm
+        {
+            try await session.close()
+            FileHandle.standardError.write(
+                Data(
+                    "gulp-cli: Target is out of scope. Send anyway? Re-run with --allow-out-of-scope.\n".utf8)
+            )
+            throw ExitCode(3)
+        }
+        var options = RepeaterOptions()
+        options.version = http1 ? .http1_1 : .auto
+        var tabs: [Int64] = []
+        for index in 1...max(1, count) {
+            let tab = await session.repeater.openTab(
+                request: request, target: destination, title: "\(title) \(index)", options: options)
+            tabs.append(tab.id)
+        }
+        let group = await session.repeater.createGroup(name: title, tabs: tabs, mode: mode)
+        let rows = await session.repeater.sendGroup(group.id)
+        print("group \(group.id) '\(group.name)' (\(group.mode.rawValue)): \(rows.count) tab(s) sent")
+        try await session.close()
+        return rows.map { ($0.exchange, $0.error) }
     }
 }
 

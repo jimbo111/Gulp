@@ -262,13 +262,26 @@ struct NotebookCommand: AsyncParsableCommand {
         @Option(help: "Project file.") var project: String
         @Option(help: "Filter, e.g. 'status:confirmed tag:xss login'.") var filter = ""
         @Option(help: "Group by status or host.") var group: String?
+        @Flag(help: "Also print each item's note and, for a saved exchange, its snapshot's request line.")
+        var notes = false
 
         func run() async throws {
             let session = try await openSession(project)
             let parsed = NotebookFilter(filter)
             func line(_ item: NotebookItem) -> String {
-                "\(item.id)\t\(item.status.rawValue)\t\(item.kind.rawValue)\t\(item.location ?? "-")\t\(item.title)"
+                var text =
+                    "\(item.id)\t\(item.status.rawValue)\t\(item.kind.rawValue)\t\(item.location ?? "-")\t\(item.title)"
                     + (item.tags.isEmpty ? "" : "\t[\(item.tags.joined(separator: ","))]")
+                guard notes else { return text }
+                if let request = item.request {
+                    let requestLine = String(
+                        decoding: request.prefix { $0 != 0x0D && $0 != 0x0A }, as: UTF8.self)
+                    text += "\n    snapshot of #\(item.exchangeID.map(String.init) ?? "-"): \(requestLine)"
+                }
+                for noteLine in item.note.split(separator: "\n", omittingEmptySubsequences: false) {
+                    text += "\n    note: \(noteLine)"
+                }
+                return text
             }
             if let group {
                 guard let grouping = NotebookGrouping(rawValue: group) else {
