@@ -67,7 +67,7 @@ started** = no code. "macOS UI verified" says what was actually exercised in the
 | M7 Decoder, Comparer, JWT Workbench | **done** — `Transforms`, `SmartDecode`, `JWT`, `GulpDiff`; `m7-dod.sh` | Decoder, Comparer, JWT Workbench open |
 | M8 Fuzzer + content discovery | **done** except Turbo mode (FUZ-032, P1) — `FuzzAttack`, `ContentDiscovery`; `m8-dod.sh` | Fuzzer opens |
 | M9 Logger, GulpQL, search, Notebook, coverage | **done** — `GulpQuery`, `SearchRows`, `NotebookService`, `CoverageService`; `m9-dod.sh` | Logger, Notebook open |
-| Daily-driver beta (gate) | **not started** — no `Scripts/beta-dod.sh`, no signed build; the data-loss carry-overs (M2) are open | not started |
+| Daily-driver beta (gate) | **not started** — no `Scripts/beta-dod.sh`, no signed build; the M2 data-loss carry-overs are fixed | not started |
 | M10a Passive scanner + issue model | **done** — `PassiveChecks`, `IssueService`, `IssueExport`; `m10a-dod.sh` | Dashboard (issues) opens |
 | M10b gRPC & protobuf | **done** — `Protobuf`, `RPC`, `GRPCReflection`, `RPCService`; `m10b-dod.sh` | gRPC schemas sheet not exercised |
 | M11a Static crawler, Beacon client, limiter, panic stop | **done** — `GulpCrawler`, `Interactsh`, `ResourcePool`, `GovernorService`; `m11a-dod.sh` | Scanner (Crawl), Beacon open |
@@ -106,9 +106,7 @@ milestone are listed there instead.
 - **M2**: PRJ-001 save/discard prompt when closing a temporary project; History "add to scope"
   (HIS-004) and the in-scope/MIME/method chips (HIS-006); inline comment editing (HIS-005);
   PRJ-005 "Use settings from…" UI and settings-file import; PRJ-006 Project Info panel;
-  `settingsChanged` is never published; **data loss**: no app-terminate flush hook (⌘Q can lose the
-  last ~50 ms of queued writes) and exchange ids can be reused after deleting the newest rows and
-  reopening.
+  `settingsChanged` is never published.
 - **M3a**: TLS-017 ECH; MAC-003 simulator CA install; TLS-007 PKCS#12 import; pass-through tunnels
   not logged; `TLSInfo.cipherSuite` empty; PRX-046 `http://gulp/cert.pem` landing page.
 - **M3b**: HTTP-025 raw HTTP/2 from an `H2RequestSpec`; HTTP-026 connection events in the Logger;
@@ -154,6 +152,21 @@ milestone are listed there instead.
 Newest first. Dates up to `40c513b` were written by Linux sessions in UTC, so the 2026-11-20 macOS
 entry at the top is later than the 2026-11-21 entry below it. Within a day the order is approximate.
 
+- 2026-11-21 — **The two M2 data-loss carry-overs, fixed at their cause** (beta gate "no known
+  data-loss bug"). **Exchange ids**: open derived the next id from `MAX(id)`, so deleting the newest
+  rows and reopening reused their ids, and Fuzzer results, OAST payloads and the passive-scan cursor
+  that still named them pointed at new traffic (the cursor also skipped the new rows). Schema v8
+  keeps the highest deleted id in `meta` through an `AFTER DELETE` trigger and seeds old files from
+  the highest id still referenced (`test_PRJ003_idsNotReusedAfterDeletingNewest`,
+  `test_PRJ003_migrationSkipsIDsStillReferenced`; both returned 4 before). **Quit flush**: the
+  `.terminateLater` hook existed, but `OpenProjects` dropped a project when its close began, so
+  closing the last window (which makes AppKit quit) answered `.terminateNow` while the store was
+  still flushing. A project now counts as open until its close finishes, and every caller awaits
+  the same close (`test_PRJ003_quitWaitsForAProjectStillClosing`; before: `hasOpenProjects` false
+  and the file still locked). Same path: Notebook note edits wait 400 ms before saving and were
+  never flushed on close; the Notebook model moved into `ToolModels`, which flushes before the
+  session closes (`test_NB002_closeSavesANoteStillBeingTyped`). `OpenProjects` moved from the app
+  target to GulpFeatures so these run under `swift test`. Doc 04 §4 lists v8; doc 07 records both.
 - 2026-11-21 — **Two flaky tests, fixed at their cause.** AI-003's scaling test compared a doubling
   of the input against a 3x bound, and a busy Linux runner measured 3.1x; it now compares 1/16 of
   the input with all of it (about 16x when linear, 256x when backtracking) against 64x

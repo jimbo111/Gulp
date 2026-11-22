@@ -255,7 +255,7 @@ A project is **one SQLite file** with the extension `.gulp`, opened in WAL mode
 (`PRAGMA journal_mode=WAL; synchronous=NORMAL; foreign_keys=ON`).
 
 The listing below is **schema v1** (`v1_initial`). The code (`GulpStore/Schema.swift`) is at
-**v7**; the additive migrations since v1 are:
+**v8**; the additive migrations since v1 are:
 
 | Migration | Change |
 |---|---|
@@ -265,6 +265,7 @@ The listing below is **schema v1** (`v1_initial`). The code (`GulpStore/Schema.s
 | `v5_gulpql` | hosts lowercased; index `ix_nb_exchange`; `notebook_items` + `truncated` |
 | `v6_issue_triage` | `issues` + `severity_user`, `confidence_user`, `notes_md`; indexes `ix_evidence_issue`, `ix_issues_host` (SCN-004) |
 | `v7_oast` | `oast_payloads` + `exchange_id`, `host`; `oast_interactions` + `unique_id`; two indexes (BCN-002) |
+| `v8_exchange_id_high_water` | `meta.exchange_id_high_water` (highest exchange id ever deleted; seeded from the highest id anything still references) kept by trigger `exchanges_id_high_water` AFTER DELETE ON exchanges; the next id is past it and past `MAX(id)`, so ids are never reused (PRJ-003) |
 
 `Schema.swift` is authoritative when this listing and the code differ.
 
