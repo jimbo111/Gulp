@@ -1,7 +1,8 @@
 name: CI
 
 # The gate for every push and pull request: Linux (Swift 6.1: core tests, rule gates, every DoD
-# script) and macOS (Xcode 16.4: lint, core tests, app build, UI tests). Run `make test` + `make lint`
+# script) and macOS (Xcode 16.4: lint, core tests, the browser checks incl. the beta check, app build,
+# UI tests). Run `make test` + `make lint`
 # locally first; CI is what the change has to pass.
 
 on:
@@ -249,6 +250,10 @@ jobs:
         run: make test-core
       - name: M4b browser check (headless Chrome through Gulp, F16 test 1)
         run: Scripts/m4b-browser.sh
+      # macOS, not Linux: its first step browses through the Gulp Browser, which needs the Chrome
+      # this runner ships (the Linux container has none, and the script fails rather than skips in CI).
+      - name: Daily-driver beta check (one project through browser, intercept, race, discovery, JWT, OpenAPI, search, Notebook; quit and reopen)
+        run: Scripts/beta-dod.sh
       - name: Build app
         run: make build
       - name: App + UI tests

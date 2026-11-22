@@ -32,7 +32,8 @@ Replace this block when the state changes; do not append to it.
   entry below). Identity credentials and macro steps now live in the secret store, not the `.gulp`
   file.
 - **Next, in order.**
-  1. The daily-driver beta gate: signed build, `Scripts/beta-dod.sh`, real use of every screen.
+  1. The daily-driver beta gate: signed build, the M2 data-loss carry-overs, real use of every
+     screen (`Scripts/beta-dod.sh` exists and passes).
   2. UI gaps found by the review and left open: an identities editor (the Authz Matrix needs it),
      the Assistant chat (the engine and `APIGate` exist; the view only previews redaction),
      Extensions manager, DOM Probe run from the app.
@@ -67,7 +68,7 @@ started** = no code. "macOS UI verified" says what was actually exercised in the
 | M7 Decoder, Comparer, JWT Workbench | **done** — `Transforms`, `SmartDecode`, `JWT`, `GulpDiff`; `m7-dod.sh` | Decoder, Comparer, JWT Workbench open |
 | M8 Fuzzer + content discovery | **done** except Turbo mode (FUZ-032, P1) — `FuzzAttack`, `ContentDiscovery`; `m8-dod.sh` | Fuzzer opens |
 | M9 Logger, GulpQL, search, Notebook, coverage | **done** — `GulpQuery`, `SearchRows`, `NotebookService`, `CoverageService`; `m9-dod.sh` | Logger, Notebook open |
-| Daily-driver beta (gate) | **not started** — no `Scripts/beta-dod.sh`, no signed build; the data-loss carry-overs (M2) are open | not started |
+| Daily-driver beta (gate) | **partial** — `Scripts/beta-dod.sh` passes on macOS (macOS CI job): one project goes through the Gulp Browser, intercept + edit, a single-packet race as a Repeater group, content discovery, JWT `alg:none`, the `/openapi.json` import, search and the Notebook, then the project file alone is reopened and every artifact checked. Missing: the signed, notarized build; the M2 data-loss carry-overs; a check of the doc 01 §9 budgets; release notes | not started |
 | M10a Passive scanner + issue model | **done** — `PassiveChecks`, `IssueService`, `IssueExport`; `m10a-dod.sh` | Dashboard (issues) opens |
 | M10b gRPC & protobuf | **done** — `Protobuf`, `RPC`, `GRPCReflection`, `RPCService`; `m10b-dod.sh` | gRPC schemas sheet not exercised |
 | M11a Static crawler, Beacon client, limiter, panic stop | **done** — `GulpCrawler`, `Interactsh`, `ResourcePool`, `GovernorService`; `m11a-dod.sh` | Scanner (Crawl), Beacon open |
@@ -121,7 +122,9 @@ milestone are listed there instead.
 - **M4b**: RFC 8441 WebSocket over HTTP/2; permessage-deflate messages not editable; PRX-036 (P2);
   WS History loads a connection whole, no highlight/comment UI; a held WS message stays queued after
   its client leaves; the Chrome-for-Testing download is untested; no WKWebView fallback; HIS-007
-  live partial updates stop past 4 MB; SSE times only for uncompressed HTTP/1 bodies.
+  live partial updates stop past 4 MB; SSE times only for uncompressed HTTP/1 bodies; BRW-003: a
+  headless Chrome 156 launch still records Gaia `ListAccounts` and an on-demand component update
+  ping (two out-of-scope rows), which no launch flag found so far turns off.
 - **M5**: HTTP-012 NTLMv2; REP-009 structured Inspector edits; REP-011 variable capture;
   REP-013…015 (P2); single-packet h2 does not check `SETTINGS_MAX_CONCURRENT_STREAMS`; Repeater WS
   logs are in memory only.
@@ -154,6 +157,21 @@ milestone are listed there instead.
 Newest first. Dates up to `40c513b` were written by Linux sessions in UTC, so the 2026-11-20 macOS
 entry at the top is later than the 2026-11-21 entry below it. Within a day the order is approximate.
 
+- 2026-11-21 — **`Scripts/beta-dod.sh`, the beta gate's end-to-end check.** One project, in
+  order: the Gulp Browser (headless Chrome) browses VulnLab over HTTPS, a POST is intercepted and
+  edited, a 20-tab Repeater group races `/race/redeem` single-packet over HTTP/2, content discovery,
+  an `alg:none` token forged and sent through a «var(token)» tag, the `/openapi.json` import, global
+  search and two Notebook items. Then the project file alone (WAL empty) is copied, reopened and
+  checked value by value: exchange count, the original and edited bytes, the race's 200/409 split,
+  the discovered paths, the forged token, the four imported operations, the search hits, the
+  Notebook notes; a whole-project summary must match the one taken before quitting. It runs in the
+  macOS CI job (the Linux container has no Chrome). Found and fixed on the way: the Gulp Browser
+  recorded Chrome's network-time, Safe Browsing key and AI-mode eligibility pings into the history
+  (BRW-003; `GulpBrowser` now disables those features, unit test, and the script asserts they are
+  absent); two pings remain (M4b carry-over). CLI surface added for the check: `group --project`
+  is the Repeater's "Send group" (tabs, group and results kept in the project), `project info`
+  prints Repeater tabs/groups and the Notebook count, `notebook list --notes` prints notes and
+  snapshots.
 - 2026-11-21 — **Two flaky tests, fixed at their cause.** AI-003's scaling test compared a doubling
   of the input against a 3x bound, and a busy Linux runner measured 3.1x; it now compares 1/16 of
   the input with all of it (about 16x when linear, 256x when backtracking) against 64x
