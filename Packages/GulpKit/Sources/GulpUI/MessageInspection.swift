@@ -18,12 +18,12 @@ public enum MessageText {
     public static func decode(_ bytes: [UInt8]) -> (text: String, encoding: Encoding) {
         let text = String(decoding: bytes, as: UTF8.self)
         if Array(text.utf8) == bytes { return (text, .utf8) }  // valid UTF-8 round-trips exactly
-        // ISO-8859-1 maps byte N to U+00NN. Foundation converts a 5 MB body in a few ms; the
-        // per-scalar loop below took ~340 ms in a debug build (doc 01 §9: < 300 ms to first paint).
-        if let text = String(bytes: bytes, encoding: .isoLatin1) { return (text, .latin1) }
-        var scalars = String.UnicodeScalarView()
-        scalars.append(contentsOf: bytes.map { Unicode.Scalar($0) })
-        return (String(scalars), .latin1)
+        // ISO-8859-1 maps byte N to U+00NN, so every byte sequence converts. Foundation does 5 MB in
+        // a few ms; a per-scalar loop took ~340 ms in a debug build (doc 01 §9: < 300 ms first paint).
+        guard let latin1 = String(bytes: bytes, encoding: .isoLatin1) else {
+            preconditionFailure("ISO-8859-1 decodes every byte sequence")
+        }
+        return (latin1, .latin1)
     }
 
     /// The bytes for edited `text` in `encoding` (Latin-1 characters above U+00FF become UTF-8).
