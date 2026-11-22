@@ -18,6 +18,12 @@ struct MessageInspectionTests {
         #expect(latinEncoding == .latin1)
         #expect(MessageText.encode(latin, latinEncoding) == binary)
         #expect(MessageText.encode(latin + "é", latinEncoding) == binary + [0xE9])
+        // Every byte value is one character U+0000…U+00FF, so offsets and edits stay exact.
+        let every = (0...255).map(UInt8.init)
+        let (all, allEncoding) = MessageText.decode(every)
+        #expect(allEncoding == .latin1)
+        #expect(all.unicodeScalars.map(\.value) == every.map(UInt32.init))
+        #expect(MessageText.encode(all, allEncoding) == every)
     }
 
     @Test("Request sections: line, query, body params, cookies, headers")

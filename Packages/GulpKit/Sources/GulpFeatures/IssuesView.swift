@@ -415,7 +415,9 @@ struct IssueDetail: View {
 }
 
 /// Bytes as text with the marker ranges highlighted (SCN-002). One character per byte (Latin-1), so
-/// byte offsets index the text exactly.
+/// byte offsets index the text exactly. An `NSTextView` draws it and lays out only what is visible;
+/// a SwiftUI `Text` laid out all of it on the main thread (~350 ms per 256 KB pane in a debug build,
+/// and an issue shows up to ten panes).
 struct HighlightedBytes: View {
     let title: String
     let bytes: [UInt8]
@@ -425,35 +427,23 @@ struct HighlightedBytes: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.caption).foregroundStyle(.secondary)
-            ScrollView([.vertical, .horizontal]) {
-                Text(attributed).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            RawTextView(
+                text: Self.text(bytes), highlights: Self.ranges(markers, length: min(bytes.count, Self.limit))
+            )
         }
     }
 
-    private var attributed: AttributedString {
-        let shown = Array(bytes.prefix(Self.limit))
-        func text(_ range: Range<Int>) -> AttributedString {
-            var scalars = String.UnicodeScalarView()
-            scalars.append(contentsOf: shown[range].map { Unicode.Scalar($0) })
-            return AttributedString(String(scalars))
+    static func text(_ bytes: [UInt8]) -> String {
+        String(bytes: bytes.prefix(limit), encoding: .isoLatin1) ?? ""
+    }
+
+    /// The markers inside the shown text, as text ranges.
+    static func ranges(_ markers: [MarkerRange], length: Int) -> [NSRange] {
+        markers.compactMap { marker in
+            let start = max(0, marker.start)
+            let end = min(marker.end, length)
+            return start < end ? NSRange(location: start, length: end - start) : nil
         }
-        var result = AttributedString()
-        var position = 0
-        for marker in markers.sorted(by: { $0.start < $1.start }) {
-            let start = min(max(marker.start, position), shown.count)
-            let end = min(marker.end, shown.count)
-            guard start < end else { continue }
-            result += text(position..<start)
-            var highlighted = text(start..<end)
-            highlighted.backgroundColor = .yellow.opacity(0.45)
-            highlighted.foregroundColor = .primary
-            result += highlighted
-            position = end
-        }
-        result += text(position..<shown.count)
-        return result
     }
 }
 #endif

@@ -105,6 +105,10 @@ struct MessageTextView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(bytes: $bytes) }
 
     func makeNSView(context: Context) -> NSScrollView {
+        Self.makeScrollView(delegate: context.coordinator)
+    }
+
+    static func makeScrollView(delegate: NSTextViewDelegate?) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
         guard let view = scroll.documentView as? NSTextView else { return scroll }
         view.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
@@ -119,7 +123,7 @@ struct MessageTextView: NSViewRepresentable {
         view.disableWritingTools()
         view.textContainerInset = NSSize(width: 4, height: 4)
         view.layoutManager?.allowsNonContiguousLayout = true
-        view.delegate = context.coordinator
+        view.delegate = delegate
         return scroll
     }
 
@@ -128,13 +132,7 @@ struct MessageTextView: NSViewRepresentable {
         view.isEditable = editable
         view.layoutManager?.showsInvisibleCharacters = showInvisibles
         context.coordinator.binding = $bytes
-        if bytes != context.coordinator.shownBytes {
-            let (text, encoding) = MessageText.decode(bytes)
-            context.coordinator.encoding = encoding
-            context.coordinator.shownBytes = bytes
-            view.string = text
-            Highlighter.highlight(view)
-        }
+        context.coordinator.show(bytes, in: view)
     }
 
     @MainActor
@@ -145,6 +143,17 @@ struct MessageTextView: NSViewRepresentable {
 
         init(bytes: Binding<[UInt8]>) {
             binding = bytes
+        }
+
+        /// Put `bytes` in `view` unless they are already shown (the main-thread cost of opening a
+        /// message: doc 01 §9 gives a 5 MB response < 300 ms to first paint).
+        func show(_ bytes: [UInt8], in view: NSTextView) {
+            guard bytes != shownBytes else { return }
+            let (text, encoding) = MessageText.decode(bytes)
+            self.encoding = encoding
+            shownBytes = bytes
+            view.string = text
+            Highlighter.highlight(view)
         }
 
         func textDidChange(_ notification: Notification) {

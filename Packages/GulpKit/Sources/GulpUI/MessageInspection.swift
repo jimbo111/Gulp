@@ -2,6 +2,7 @@
 // become editable text and back without losing any, and the Inspector's parsed view of a message.
 // Kept free of AppKit so it is tested on Linux.
 
+import Foundation
 import GulpCore
 
 /// How a message is shown as editable text (UI-010 Raw tab).
@@ -17,6 +18,9 @@ public enum MessageText {
     public static func decode(_ bytes: [UInt8]) -> (text: String, encoding: Encoding) {
         let text = String(decoding: bytes, as: UTF8.self)
         if Array(text.utf8) == bytes { return (text, .utf8) }  // valid UTF-8 round-trips exactly
+        // ISO-8859-1 maps byte N to U+00NN. Foundation converts a 5 MB body in a few ms; the
+        // per-scalar loop below took ~340 ms in a debug build (doc 01 §9: < 300 ms to first paint).
+        if let text = String(bytes: bytes, encoding: .isoLatin1) { return (text, .latin1) }
         var scalars = String.UnicodeScalarView()
         scalars.append(contentsOf: bytes.map { Unicode.Scalar($0) })
         return (String(scalars), .latin1)
