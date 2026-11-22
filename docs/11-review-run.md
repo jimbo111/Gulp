@@ -1,7 +1,7 @@
 # 11 — Executed review run (test-case-backed)
 
 > **Snapshot, not current status.** `docs/PROGRESS.md` is authoritative for what is built; it
-> records a run on 2026-11-13 (523 tests, 37 DoD scripts then; 563 tests and 41 scripts now).
+> records a run on 2026-11-13 (523 tests and 37 DoD scripts then; `docs/PROGRESS.md` has the current counts).
 
 This document is the **executed** counterpart to the written reviews in `08-architecture-review.md`
 (architecture), `09-burpsuite-comparison.md` (per-feature vs. Burp Suite) and `10-feature-review.md`

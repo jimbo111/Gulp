@@ -562,8 +562,11 @@ public final class NIOHTTPEngine: HTTPEngine {
                 channel.close(promise: nil)
             }
             await pool.releaseSlot(key)
+            // A response that completed stays complete when the task is cancelled afterwards (a
+            // proxy client that hung up after reading it): only a cut-short read is "cancelled".
             return Attempt(
-                wire: wire, error: Task.isCancelled ? .cancelled : wire.error, connectionID: connectionID,
+                wire: wire, error: wire.error.map { Task.isCancelled ? .cancelled : $0 },
+                connectionID: connectionID,
                 writeStart: result.writeStart, writeEnd: result.writeEnd, tls: tls)
         }
         await pool.releaseSlot(key)
@@ -689,7 +692,8 @@ public final class NIOHTTPEngine: HTTPEngine {
                 lastByteAt: received.lastByteAt, reusable: false, receivedAny: true)
         }
         return Attempt(
-            wire: wire, error: Task.isCancelled ? .cancelled : result.error, connectionID: connection.id,
+            wire: wire, error: result.error.map { Task.isCancelled ? .cancelled : $0 },
+            connectionID: connection.id,
             writeStart: writeStart, writeEnd: result.writeEnd, tls: connection.tls, httpVersion: .http2)
     }
 

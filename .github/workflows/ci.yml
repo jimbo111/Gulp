@@ -98,10 +98,14 @@ jobs:
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/m8-dod.sh
-      - name: M9 Definition of Done (GulpQL over 1M rows < 2 s via the status index, reflected(), coverage, Notebook, search < 200 ms)
+      - name: M9 Definition of Done (GulpQL over 1M rows < 2 s via the status index, 1M-row open < 3 s, reflected(), coverage, Notebook, search < 200 ms)
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
         run: Scripts/m9-dod.sh
+      - name: Proxy performance budgets (doc 01 §9, release build; added latency < 5 ms, ≥ 2,000 req/s, nothing lost)
+        env:
+          SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib
+        run: Scripts/perf-dod.sh
       - name: M10a Definition of Done (browsing VulnLab yields exactly the manifest's passive issues, none on /safe/*, no duplicates)
         env:
           SWIFTPM_FLAGS: -Xcc -I/usr/local/include -Xlinker -L/usr/local/lib

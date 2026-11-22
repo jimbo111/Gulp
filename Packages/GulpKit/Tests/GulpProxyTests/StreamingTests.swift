@@ -126,4 +126,49 @@ struct StreamingTests {
         await proxy.stopAll()
         await origin.stop()
     }
+
+    @Test("PRX-050: stopping the proxy waits until a response the client already has is recorded")
+    func test_PRX050_stopRecordsWhatWasForwarded() async throws {
+        let origin = try await Origin.start(reply: okReply)
+        let recorded = SlowUpdates()
+        let proxy = ProxyServer(engine: NIOHTTPEngine(recorder: recorded))
+        let port = try await proxy.start(ProxyListenerConfig(port: 0))
+        let reader = ArrivalRecorder()
+        let client = try await ClientBootstrap(group: MultiThreadedEventLoopGroup.singleton)
+            .channelInitializer { channel in
+                channel.eventLoop.makeCompletedFuture {
+                    try channel.pipeline.syncOperations.addHandler(reader)
+                }
+            }
+            .connect(host: "127.0.0.1", port: port).get()
+        let request = "GET http://127.0.0.1:\(origin.port)/ HTTP/1.1\r\nHost: x\r\n\r\n"
+        try await client.writeAndFlush(client.allocator.buffer(string: request))
+        for _ in 0..<200 where !reader.text.hasSuffix("ok") { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(reader.text.hasSuffix("ok"))  // the client has the whole response…
+        try await client.close()  // …and hangs up, as a load tool or a browser tab does
+        await proxy.stopAll()  // what closing the project or quitting does next
+        let rows = await recorded.exchanges
+        #expect(rows.count == 1)
+        // Not .pending (the completing write came after the stop) and not .failed(.cancelled) (the
+        // client's hang-up cancelled a send whose response had already completed).
+        #expect(rows.first?.state == .complete)
+        await origin.stop()
+    }
+}
+
+/// A recorder whose completing write lands well after the client has the response, as under load.
+actor SlowUpdates: ExchangeRecorder {
+    var exchanges: [Exchange] = []
+
+    func record(_ exchange: Exchange) -> ExchangeID {
+        var stored = exchange
+        stored.id = ExchangeID(exchanges.count + 1)
+        exchanges.append(stored)
+        return stored.id
+    }
+
+    func update(_ exchange: Exchange) async {
+        try? await Task.sleep(for: .milliseconds(300))
+        if let index = exchanges.firstIndex(where: { $0.id == exchange.id }) { exchanges[index] = exchange }
+    }
 }

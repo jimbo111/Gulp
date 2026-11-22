@@ -336,8 +336,14 @@ struct MessageViewer: View {
 /// message lays out only what is on screen instead of blocking the main thread.
 struct RawTextView: NSViewRepresentable {
     let text: String
+    /// Ranges of `text` (UTF-16 offsets) drawn highlighted, e.g. an issue's proof (SCN-002).
+    var highlights: [NSRange] = []
 
     func makeNSView(context: Context) -> NSScrollView {
+        Self.makeScrollView()
+    }
+
+    static func makeScrollView() -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
         if let view = scroll.documentView as? NSTextView {
             view.isEditable = false
@@ -350,9 +356,31 @@ struct RawTextView: NSViewRepresentable {
         return scroll
     }
 
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        guard let view = scroll.documentView as? NSTextView, view.string != text else { return }
-        view.string = text
+        guard let view = scroll.documentView as? NSTextView else { return }
+        context.coordinator.show(text, highlights: highlights, in: view)
+    }
+
+    /// Remembers what it put in the view: reading `view.string` back to compare bridges the whole
+    /// text (~30 ms for 1 MB in a debug build) on every SwiftUI update.
+    @MainActor
+    final class Coordinator {
+        private var shown: String?
+        private var shownHighlights: [NSRange] = []
+
+        func show(_ text: String, highlights: [NSRange] = [], in view: NSTextView) {
+            guard text != shown || highlights != shownHighlights else { return }
+            shown = text
+            shownHighlights = highlights
+            view.string = text
+            guard let storage = view.textStorage else { return }
+            let color = NSColor.systemYellow.withAlphaComponent(0.45)
+            for range in highlights where range.length > 0 && NSMaxRange(range) <= storage.length {
+                storage.addAttribute(.backgroundColor, value: color, range: range)
+            }
+        }
     }
 }
 
