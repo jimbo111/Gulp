@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import GulpCore
 import Testing
 
@@ -46,7 +47,7 @@ struct StoreTests {
         for table in expected { #expect(tables.contains(table), "missing table \(table)") }
         let version = try await store.meta("schema_version")
         let uuid = try await store.meta("project_uuid")
-        #expect(version == "7" && uuid != nil)
+        #expect(version == "8" && uuid != nil)
     }
 
     @Test("PRJ-003: an exchange round-trips byte-for-byte with its metadata")
@@ -335,6 +336,55 @@ struct StoreTests {
         #expect(count == 10)
         let next = await reopened.writer.record(sampleExchange())
         #expect(next == 11)
+    }
+
+    @Test("PRJ-003: deleting the newest exchanges and reopening never hands their ids out again")
+    func test_PRJ003_idsNotReusedAfterDeletingNewest() async throws {
+        let url = temporaryProject()
+        do {
+            let store = try ProjectStore.open(at: url)
+            for i in 0..<5 { _ = await store.writer.record(sampleExchange(path: "/\(i)")) }
+            try await store.delete([4, 5])
+            try await store.close()
+        }
+        do {
+            let reopened = try ProjectStore.open(at: url)
+            let afterDelete = await reopened.writer.record(sampleExchange())
+            #expect(afterDelete == 6)
+            try await reopened.delete([1, 2, 3, 6])  // every row gone
+            try await reopened.close()
+        }
+        let empty = try ProjectStore.open(at: url)
+        let afterDeletingAll = await empty.writer.record(sampleExchange())
+        #expect(afterDeletingAll == 7)
+        try await empty.close()
+    }
+
+    @Test("PRJ-003: a project whose newest exchanges were deleted before v8 keeps old references apart")
+    func test_PRJ003_migrationSkipsIDsStillReferenced() async throws {
+        // A v7 project: exchanges 1…3 remain; 4…9 were deleted, but an OAST payload still names 9
+        // and a Fuzzer result 7 (neither has a foreign key) and the passive scanner's cursor is at 8.
+        let url = temporaryProject()
+        do {
+            let pool = try DatabasePool(path: url.path)
+            try Schema.migrator().migrate(pool, upTo: "v7_oast")
+            try await pool.write { db in
+                for id in 1...3 {
+                    var exchange = sampleExchange(path: "/\(id)")
+                    exchange.id = ExchangeID(id)
+                    try ExchangeRows.insert(exchange, in: db)
+                }
+                try db.execute(sql: "INSERT INTO oast_payloads (correlation_id, exchange_id) VALUES ('c1', 9)")
+                try db.execute(sql: "INSERT INTO fuzzer_attacks (id, name) VALUES (1, 'a')")
+                try db.execute(sql: "INSERT INTO fuzzer_results (attack_id, seq, exchange_id) VALUES (1, 0, 7)")
+                try db.execute(sql: "INSERT INTO meta (key, value) VALUES ('passive_scan_last_id', '8')")
+            }
+            try pool.close()
+        }
+        let store = try ProjectStore.open(at: url)
+        let next = await store.writer.record(sampleExchange())
+        #expect(next == 10)
+        try await store.close()
     }
 
     @Test("F20 §5: a project open in one session cannot be opened again until it is closed")

@@ -81,8 +81,12 @@ public final class ProjectStore: Sendable {
                         arguments: [key, value])
                 }
             }
-            let next = "SELECT COALESCE(MAX(id), 0) + 1 FROM exchanges"
-            return try ExchangeID.fetchOne(db, sql: next) ?? 1
+            // Past every row, and past every row ever deleted: ids are never reused (PRJ-003).
+            let next = """
+                SELECT MAX(COALESCE((SELECT MAX(id) FROM exchanges), 0),
+                COALESCE((SELECT CAST(value AS INTEGER) FROM meta WHERE key = ?), 0)) + 1
+                """
+            return try ExchangeID.fetchOne(db, sql: next, arguments: [Schema.exchangeIDHighWater]) ?? 1
         }
         let writer = StoreWriter(pool: pool, nextID: nextID, eventBus: eventBus, durable: durable)
         return ProjectStore(url: url, pool: pool, writer: writer, lock: lock, eventBus: eventBus)
