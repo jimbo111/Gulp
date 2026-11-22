@@ -11,7 +11,7 @@ Replace this block when the state changes; do not append to it.
 - **Repository.** Public at github.com/jimbo111/Gulp since 2026-11-21 (recreated fresh; history
   rewritten so every commit is authored by the owner). `main` is the only long-lived branch; work
   happens on short-lived branches, rebased on `main` before handing back.
-- **Gate.** CI runs on every push and is green on `main` (`5da698a`: Linux Swift 6.1 core tests, rule
+- **Gate.** CI runs on every push and is green on `main` (`5637e68`: Linux Swift 6.1 core tests, rule
   gates and all DoD scripts; macOS Xcode 16.4 lint, core tests, app build, UI tests). Locally run
   `make test` (macOS) or `make test-core` (Linux) and `make lint` (it runs `make rules`) first.
 - **Toolchain.** Swift 6.1 or later. `swift-crypto` must be ≥ 4.5.1 (older versions double-free an
@@ -154,6 +154,12 @@ milestone are listed there instead.
 Newest first. Dates up to `40c513b` were written by Linux sessions in UTC, so the 2026-11-20 macOS
 entry at the top is later than the 2026-11-21 entry below it. Within a day the order is approximate.
 
+- 2026-11-21 — **Two flaky tests, fixed at their cause.** AI-003's scaling test compared a doubling
+  of the input against a 3x bound, and a busy Linux runner measured 3.1x; it now compares 1/16 of
+  the input with all of it (about 16x when linear, 256x when backtracking) against 64x
+  (`4a478a5`). SCN-012's send-time scope test had a stub that checked and then recorded under two
+  separate locks, so two concurrent probes both passed; it now does both in one step (`5637e68`).
+  CI green on both jobs at `5637e68`.
 - 2026-11-21 — **Site map and UI tests after the screenshot review.** The site map took inferred
   nodes from Scanner and Fuzzer responses, which echo their own payloads: probe hosts such as
   `*.gulp-canary.test` showed as sites, and after a crawl-and-audit the 2,000 newest textual
