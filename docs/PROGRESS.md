@@ -11,15 +11,42 @@ Replace this block when the state changes; do not append to it.
 - **Repository.** Public at github.com/jimbo111/Gulp since 2026-11-21 (recreated fresh; history
   rewritten so every commit is authored by the owner). `main` is the only long-lived branch; work
   happens on short-lived branches, rebased on `main` before handing back.
-- **Gate.** CI runs on every push and is green on `main` (`5637e68`: Linux Swift 6.1 core tests, rule
-  gates and all DoD scripts; macOS Xcode 16.4 lint, core tests, app build, UI tests). Locally run
-  `make test` (macOS) or `make test-core` (Linux) and `make lint` (it runs `make rules`) first.
+- **Gate.** CI runs on every push. `main` is green at `9d2ec75` (Linux Swift 6.1 core tests, rule
+  gates and the DoD scripts; macOS Xcode 16.4 lint, core tests, browser and beta checks, app build,
+  UI tests). Locally run `make test` (macOS) or `make test-core` (Linux) and `make lint` (it runs
+  `make rules`) first. **Lint gotcha:** never chain `make lint | tail` or `make lint; git commit`;
+  the pipe or `;` hides lint's exit code and the commit lands unformatted. Use `make lint && …`.
+- **Open branch: `beta-bundle` (pushed, not merged).** It holds the daily-driver beta gate work
+  (log entries of 2026-11-21 below): bundle ID `io.github.jimbo111.gulp` 0.1.0 and
+  `Scripts/beta-build.sh`; schema v8 (exchange ids never reused); quit waits for closing projects;
+  Notebook edits saved on close; Fuzzer results and OAST links flush their exchange first;
+  `Scripts/beta-dod.sh` and `Scripts/perf-dod.sh`; the proxy-recording, stop-loss, false-cancel and
+  Latin-1 fixes; a CA that fails to load is shown in the window; `docs/beta-release-notes.md`.
+  Locally on macOS at `53b5e6f`: `make test` (661 GulpKit tests by `swift test list`, 5 app/UI
+  tests), `make lint`, `beta-dod`, `perf-dod`, `m2-dod`, `m9-dod` and `report-dod` all pass. CI run
+  `44985028576` (at `306cf27`) failed twice, and both are being chased:
+  1. macOS `MessageFirstPaintTests` binary case took 349 ms against 300 ms (26 ms here). Fixed in
+     `08b1c6f` (TextKit warmed up once, suite serialized); needs a green CI to confirm.
+  2. Linux `Scripts/report-dod.sh` printed `issues: 0`: the passive scan found nothing in two
+     Repeater exchanges. **Not explained.** It passes on macOS and 8 of 8 times in a local
+     `swift:6.1-noble` (arm64) container; CI is x86_64. `53b5e6f` makes the script print the scan's
+     result and VulnLab's log on failure, so a repeat says why. Ruled out: the StoreWriter fold
+     (the batch is taken out before it is written), a leftover VulnLab on 8088 (9 s between steps).
+  **To finish it:** read CI for `53b5e6f` (run list: `curl -H "Authorization: Bearer $(gh auth
+  token)" https://api.github.com/repos/jimbo111/Gulp/actions/runs?branch=beta-bundle`; `gh` hangs
+  on this network). If green, rebuild `Scripts/beta-build.sh`, unzip it and launch it once, then
+  fast-forward `main` to `beta-bundle` and push. If `report-dod` fails again, its new output
+  names the cause.
+- **macOS UI tests on this machine** need an unlocked screen with the display awake (`caffeinate
+  -d` while they run; a sleeping display fails every test with "Failed to activate application …
+  Running Background"). They clear text fields with ⌘→ and Delete, not ⌘A, which the Korean 2-Set
+  input method takes.
 - **Toolchain.** Swift 6.1 or later. `swift-crypto` must be ≥ 4.5.1 (older versions double-free an
   `EVP_PKEY` when RSA public-key DER parsing fails, which crashed `GulpCodecTests` on macOS), and
   4.5.x needs Swift tools 6.1. Linux reference image: `swift:6.1-noble`. macOS: Xcode 27.2 / Swift 6.4.
   `make lint` uses the toolchain's `swift format`; no separate swift-format install is needed.
-- **Verified on macOS (2026-11-21, Xcode 27.2 / Swift 6.4).** `make test`: every GulpKit test
-  (`swift test list` counts 647) and the 5 app/UI tests pass (launch, Proxy history, every tool
+- **Verified on macOS (2026-11-21, Xcode 27.2 / Swift 6.4), on `main`.** `make test`: every GulpKit
+  test (`swift test list` counts 647 on `main`) and the 5 app/UI tests pass (launch, Proxy history, every tool
   opens, Repeater sends to VulnLab, and the opt-in `ReadmeTour`, which skips unless
   `Scripts/readme-screenshots.sh` runs it). `make lint` (strict format + both rule
   scripts) is clean. All 41 `Scripts/*-dod.sh` passed against VulnLab on 2026-11-20. By hand: the
@@ -32,9 +59,9 @@ Replace this block when the state changes; do not append to it.
   entry below). Identity credentials and macro steps now live in the secret store, not the `.gulp`
   file.
 - **Next, in order.**
-  1. The daily-driver beta gate's open items: a Developer-ID-signed, notarized build (needs a
-     Developer ID team; the beta ships ad hoc signed), cold start and scrolling frame times (need
-     the screen), real use of every screen by testers.
+  1. Land `beta-bundle` (above). Then the beta gate's open items: a Developer-ID-signed, notarized
+     build (needs a Developer ID team; the owner chose an ad hoc signed beta for now), cold start
+     and scrolling frame times (need the screen), testers using every screen.
   2. UI gaps found by the review and left open: an identities editor (the Authz Matrix needs it),
      the Assistant chat (the engine and `APIGate` exist; the view only previews redaction),
      Extensions manager, DOM Probe run from the app.
