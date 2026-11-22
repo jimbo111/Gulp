@@ -10,8 +10,8 @@ gulp.js build tool.)
   </picture>
 </p>
 
-> **Pre-release.** The engines and CLI are tested on macOS and Linux. The macOS app runs, but there
-> is no signed build yet ([status](#status)).
+> **Pre-release.** The engines and CLI are tested on macOS and Linux. The macOS app is in its 0.1.0
+> beta: signed ad hoc, not notarized ([status](#status)).
 
 Repeater, Fuzzer, Scanner, Crawler, out-of-band testing, and a set of specialist tools that other
 suites leave to plugins, all around one proxy.
@@ -172,8 +172,9 @@ Pre-release. **The engines and the CLI are the finished part:** everything above
 is tested on macOS and Linux.
 
 The macOS app builds, and its UI tests open every tool and send a request from Repeater to VulnLab.
-It hasn't had a daily-driver beta yet, there are no signed downloads, and a few screens (Assistant,
-Extensions, DOM Probe) are still previews of engines the CLI already drives. Brotli/zstd decoding
+The 0.1.0 beta covers the manual-testing core ([release notes](docs/beta-release-notes.md)). It is
+signed ad hoc, not notarized, and a few screens (Assistant, Extensions, DOM Probe) are still
+previews of engines the CLI already drives. Brotli/zstd decoding
 and an extension gallery are still on the list. [`docs/PROGRESS.md`](docs/PROGRESS.md) tracks every
 milestone as it stands.
 

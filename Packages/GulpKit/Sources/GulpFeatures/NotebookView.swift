@@ -114,7 +114,13 @@ final class NotebookModel: PendingWrites {
 
     /// Write the edits still waiting for the typing pause (the project is closing).
     func flushPendingWrites() async {
-        pendingSave?.cancel()
+        // Cancelling ends a save still in its pause; one already writing runs on, so wait for it
+        // (it may have taken the edits) before the store closes. A cancelled write puts its edits
+        // back, and the flush below writes them.
+        let inFlight = pendingSave
+        pendingSave = nil
+        inFlight?.cancel()
+        await inFlight?.value
         await flushEdits()
     }
 

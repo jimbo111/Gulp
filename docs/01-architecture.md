@@ -71,7 +71,7 @@ Gulp/
 │       │   ├── GulpAutomation/      # MCP server over stdio (built); REST API (Hummingbird) not built yet
 │       │   ├── GulpWorkspace/       # ProjectSession: wires engines + store + event bus for one project
 │       │   ├── GulpUI/              # reusable AppKit/SwiftUI components (macOS only)
-│       │   ├── GulpFeatures/        # feature screens + view models (macOS only)
+│       │   ├── GulpFeatures/        # feature screens + view models, OpenProjects (macOS only)
 │       │   ├── gulp-cli/            # headless executable
 │       │   └── gulp-vulnlab/        # intentionally vulnerable test server (executable)
 │       └── Tests/  (one test target per library module, GulpVulnLabTests, IntegrationTests,
@@ -88,7 +88,7 @@ Gulp/
 ├── UITests/                         # GulpAppUITests (XCUITest)
 ├── Wordlists/                       # repo-level lists used by DoD scripts (jwt-secrets.txt)
 ├── Scripts/                         # *-dod.sh acceptance scripts, arch-check.sh, rules-check.sh,
-│                                    # jsc-host-typecheck.sh, release.sh
+│                                    # jsc-host-typecheck.sh, beta-build.sh, release.sh
 └── docs/
 ```
 

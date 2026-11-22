@@ -92,7 +92,8 @@ enum Schema {
         return migrator
     }
 
-    /// The `meta` key holding the highest exchange id ever deleted (see `v8_exchange_id_high_water`).
+    /// The `meta` key holding a floor for the next exchange id: raised to every deleted id, and seeded
+    /// at v8 from the highest id anything referenced (see `v8_exchange_id_high_water`).
     static let exchangeIDHighWater = "exchange_id_high_water"
 
     /// The current schema version written to `meta.schema_version`.

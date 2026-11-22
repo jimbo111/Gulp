@@ -163,7 +163,7 @@ Repeater (incl. race sends and paste-to-request), site map and scope, import (HA
 other proxies) and the MCP read surface, Decoder + JWT Workbench, Comparer, Fuzzer with content
 discovery, Logger, GulpQL, search and Notebook.
 - [ ] Every P0 of M3b–M9 is implemented and tested; `make test` and `make lint` pass; the core builds on Linux.
-- [ ] A scripted end-to-end beta check (`Scripts/beta-dod.sh`, run in CI on macOS) against VulnLab passes: browse via the Gulp Browser, intercept and edit, Repeater single-packet race, Fuzzer content discovery, JWT forgery, import of `/openapi.json`, global search, and a Notebook entry — then quit and reopen the project with everything intact. (Written 2026-11-21; passes on macOS. It browses with headless Chrome, so it runs in the macOS CI job.)
+- [ ] A scripted end-to-end beta check (`Scripts/beta-dod.sh`, run in CI on macOS) against VulnLab passes: browse via the Gulp Browser, intercept and edit, Repeater single-packet race, Fuzzer content discovery, JWT forgery, import of `/openapi.json`, global search, and a Notebook entry — then quit and reopen the project with everything intact.
 - [ ] The performance budgets of doc 01 §9 that apply to the shipped tools hold (history scrolling at 1M rows, proxy overhead, GulpQL, Comparer).
 - [ ] No known data-loss bug: the PROGRESS carry-overs that can lose data (the app-terminate flush hook, exchange-id reuse after delete) are fixed; every other open carry-over is listed in the beta release notes.
 - [ ] A Developer-ID-signed, notarized build (doc 02 §8 signing and notarization; Sparkle auto-update stays M20) installs on a clean macOS 14 machine. This needs the final bundle id and team (doc 07 product decision #1).

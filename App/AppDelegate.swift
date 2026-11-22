@@ -9,8 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
-    /// ⌘Q: close every project (debounced Repeater drafts, the store's write coalescer and the
-    /// passive scan queue are flushed) before the process exits.
+    /// ⌘Q: close every project (Notebook edits and Repeater drafts still in their typing pause, the
+    /// store's write coalescer and the passive scan queue are flushed) before the process exits.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard OpenProjects.shared.hasOpenProjects else { return .terminateNow }
         Task {

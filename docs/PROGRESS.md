@@ -32,8 +32,9 @@ Replace this block when the state changes; do not append to it.
   entry below). Identity credentials and macro steps now live in the secret store, not the `.gulp`
   file.
 - **Next, in order.**
-  1. The daily-driver beta gate: signed build, the M2 data-loss carry-overs, real use of every
-     screen (`Scripts/beta-dod.sh` exists and passes).
+  1. The daily-driver beta gate's open items: a Developer-ID-signed, notarized build (needs a
+     Developer ID team; the beta ships ad hoc signed), cold start and scrolling frame times (need
+     the screen), real use of every screen by testers.
   2. UI gaps found by the review and left open: an identities editor (the Authz Matrix needs it),
      the Assistant chat (the engine and `APIGate` exist; the view only previews redaction),
      Extensions manager, DOM Probe run from the app.
@@ -68,7 +69,7 @@ started** = no code. "macOS UI verified" says what was actually exercised in the
 | M7 Decoder, Comparer, JWT Workbench | **done** — `Transforms`, `SmartDecode`, `JWT`, `GulpDiff`; `m7-dod.sh` | Decoder, Comparer, JWT Workbench open |
 | M8 Fuzzer + content discovery | **done** except Turbo mode (FUZ-032, P1) — `FuzzAttack`, `ContentDiscovery`; `m8-dod.sh` | Fuzzer opens |
 | M9 Logger, GulpQL, search, Notebook, coverage | **done** — `GulpQuery`, `SearchRows`, `NotebookService`, `CoverageService`; `m9-dod.sh` | Logger, Notebook open |
-| Daily-driver beta (gate) | **partial** — `Scripts/beta-dod.sh` passes on macOS (macOS CI job): one project goes through the Gulp Browser, intercept + edit, a single-packet race as a Repeater group, content discovery, JWT `alg:none`, the `/openapi.json` import, search and the Notebook, then the project file alone is reopened and every artifact checked. The M2 data-loss carry-overs are fixed. The doc 01 §9 budgets that run headless hold and are checked (`perf-dod.sh`, `m9-dod.sh` 1b, two unit suites; log 2026-11-21). An ad hoc signed universal build (`Scripts/beta-build.sh`, bundle ID `io.github.jimbo111.gulp`, 0.1.0). Missing: the Developer-ID-signed, notarized build (no Developer ID team yet; doc 07); cold start and 60 fps scrolling are unmeasured (they need the screen); release notes | not started |
+| Daily-driver beta (gate) | **partial** — `Scripts/beta-dod.sh` passes on macOS (macOS CI job): one project goes through the Gulp Browser, intercept + edit, a single-packet race as a Repeater group, content discovery, JWT `alg:none`, the `/openapi.json` import, search and the Notebook, then the project file alone is reopened and every artifact checked. The M2 data-loss carry-overs are fixed. The doc 01 §9 budgets that run headless hold and are checked (`perf-dod.sh`, `m9-dod.sh` 1b, two unit suites; log 2026-11-21). An ad hoc signed universal build (`Scripts/beta-build.sh`, bundle ID `io.github.jimbo111.gulp`, 0.1.0). Missing: the Developer-ID-signed, notarized build (no Developer ID team yet; doc 07); cold start and 60 fps scrolling are unmeasured (they need the screen). Release notes: `docs/beta-release-notes.md` | the ad hoc build, unzipped and launched by hand, opens its window and proxy |
 | M10a Passive scanner + issue model | **done** — `PassiveChecks`, `IssueService`, `IssueExport`; `m10a-dod.sh` | Dashboard (issues) opens |
 | M10b gRPC & protobuf | **done** — `Protobuf`, `RPC`, `GRPCReflection`, `RPCService`; `m10b-dod.sh` | gRPC schemas sheet not exercised |
 | M11a Static crawler, Beacon client, limiter, panic stop | **done** — `GulpCrawler`, `Interactsh`, `ResourcePool`, `GovernorService`; `m11a-dod.sh` | Scanner (Crawl), Beacon open |
@@ -136,7 +137,8 @@ milestone are listed there instead.
   running-task list; F07 acceptance 1–3 are unit-tested, not in a DoD script.
 - **M9**: GulpQL syntax coloring (HIS-025); custom-column and connection-view UI (HIS-042/043);
   "Find references" menu entry (HIS-053); GulpQL for scanner insertion points and Fuzzer results;
-  HIS-028/045/054, NB-008/009 (P2); Compact must treat Notebook blobs as live; the Logger keeps the
+  HIS-028/045/054, NB-008/009 (P2); Compact (blob reclamation) is not built, and when it is it must
+  treat Notebook blobs as live; the Logger keeps the
   store it opened with across Save As.
 - **M10a**: SCN-006 known-issues browser UI; TLS certificate-expiry observations; WS passive checks
   (post-1.0); Notebook ↔ issue promotion in the macOS views.
@@ -147,7 +149,7 @@ milestone are listed there instead.
   points; OAST session persistence across restarts; a manual interop check against public interactsh.
 - **M11b**: per-check configuration in the UI; the Audit pane takes History rows only; scan tasks
   are not persisted across restarts.
-- **M12a**: GulpQL rule scope; identity credentials in the project file (Current state, item 3).
+- **M12a**: GulpQL rule scope.
 - **M12b**: the `/admin` self-granted-role case.
 
 ## Log

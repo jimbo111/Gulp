@@ -75,6 +75,9 @@ extension ProjectStore {
     /// Tie payloads to the exchange that carried them.
     public func attachOASTPayloads(_ correlationIDs: [String], to exchange: ExchangeID) async throws {
         guard !correlationIDs.isEmpty else { return }
+        // The exchange id is handed out before its row is written (coalesced): flush first, so a
+        // payload never names an exchange that a crash could lose and a later one reuse.
+        await writer.flush()
         try await pool.write { db in
             for id in correlationIDs {
                 try db.execute(

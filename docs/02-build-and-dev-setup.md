@@ -152,8 +152,8 @@ is the gate: run `make test` + `make lint` locally first, then the change must p
 
 | Job | Runner | Steps |
 |---|---|---|
-| `core-linux` | `ubuntu-latest` + `swift:6.1-noble` container | builds SQLite with snapshot + FTS5, `swift build` + `swift test` for GulpKit, `arch-check.sh`, `rules-check.sh`, every `Scripts/*-dod.sh`, `jsc-host-typecheck.sh`, then build + test Beacon |
-| `macos` | `macos-15` | `brew install xcodegen`, then `make lint`, `make generate`, `make test-core`, `Scripts/m4b-browser.sh`, `make build`, `make test`. It still selects `Xcode_16`, which ships Swift 6.0; it needs Xcode 16.3+ (Swift 6.1) before it can pass |
+| `core-linux` | `ubuntu-latest` + `swift:6.1-noble` container | builds SQLite with snapshot + FTS5, `swift build` + `swift test` for GulpKit, `arch-check.sh`, `rules-check.sh`, every `Scripts/*-dod.sh` but `beta-dod.sh` (`perf-dod.sh` on a release build), `jsc-host-typecheck.sh`, then build + test Beacon |
+| `macos` | `macos-15` | `brew install xcodegen`, then `make lint`, `make generate`, `make test-core`, `Scripts/m4b-browser.sh`, `Scripts/beta-dod.sh` (both drive the Chrome the runner ships), `make build`, `make test`, on Xcode 16.4 (Swift 6.1) |
 | `release` (on tag `v*`) | `macos-15` | placeholder step; `make release` with signing secrets is not wired yet |
 
 Cache `.build` and SwiftPM checkouts keyed on `Package.resolved`.

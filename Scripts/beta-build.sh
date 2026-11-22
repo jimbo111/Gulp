@@ -26,5 +26,8 @@ VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/C
 rm -rf "$OUT" && mkdir -p "$OUT"
 ditto -c -k --keepParent "$APP" "$OUT/Gulp-$VERSION-beta.zip"
 (cd "$OUT" && shasum -a 256 "Gulp-$VERSION-beta.zip" | tee "Gulp-$VERSION-beta.zip.sha256")
-lipo -archs "$APP/Contents/MacOS/Gulp"
+for binary in "$APP/Contents/MacOS/Gulp" "$APP/Contents/Helpers/gulp"; do
+  archs=$(lipo -archs "$binary")
+  [[ "$archs" == *arm64* && "$archs" == *x86_64* ]] || { echo "not universal: $binary ($archs)" >&2; exit 1; }
+done
 echo "beta-build: $OUT/Gulp-$VERSION-beta.zip (ad hoc signed, not notarized)"
