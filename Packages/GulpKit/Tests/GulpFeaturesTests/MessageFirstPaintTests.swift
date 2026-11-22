@@ -9,8 +9,10 @@ import Testing
 /// Doc 01 §9: "Message editor: open a 5 MB response < 300 ms to first paint". Everything here runs
 /// on the main thread when a message opens: decode the bytes, fill the text view, lay out and draw
 /// the visible part (offscreen, into a bitmap, so no window or screen is needed). The text view is
-/// created inside the timed part, as it is the first time a message opens.
-@Suite("Opening a 5 MB message (doc 01 §9)")
+/// created inside the timed part, as it is the first time a message opens. TextKit itself is warmed
+/// up first: in the app it already drew the window's other text, and its one-time start-up is not
+/// part of opening a message. Serialized, so parallel tests do not share the CPU being measured.
+@Suite("Opening a 5 MB message (doc 01 §9)", .serialized)
 @MainActor
 struct MessageFirstPaintTests {
     static let budget = Duration.milliseconds(300)
@@ -33,6 +35,14 @@ struct MessageFirstPaintTests {
         return bytes
     }()
 
+    /// Start TextKit and its fonts once, as the app has by the time a message opens.
+    static let warmUp: Void = {
+        let scroll = MessageTextView.makeScrollView(
+            delegate: MessageTextView.Coordinator(bytes: .constant([])))
+        (scroll.documentView as? NSTextView)?.string = "HTTP/1.1 200 OK\r\n\r\n{}"
+        paint(scroll)
+    }()
+
     /// Lay out and draw what a 700×600 pane shows, as the first paint does.
     static func paint(_ scroll: NSScrollView) {
         scroll.frame = NSRect(x: 0, y: 0, width: 700, height: 600)
@@ -48,6 +58,7 @@ struct MessageFirstPaintTests {
     )
     func test_HIS003_responseViewerFirstPaint() throws {
         let bytes = Bytes(Self.json)
+        Self.warmUp
         let clock = ContinuousClock()
         let started = clock.now
         let shown = bytes.count > MessageViewer.displayLimit ? bytes[0..<MessageViewer.displayLimit] : bytes
@@ -70,6 +81,7 @@ struct MessageFirstPaintTests {
         arguments: ["utf8", "binary"])
     func test_UI010_editorFirstPaint(kind: String) throws {
         let bytes = kind == "utf8" ? Self.json : Self.binary  // (not an argument: a failure would print 5 MB)
+        Self.warmUp
         let clock = ContinuousClock()
         let started = clock.now
         let coordinator = MessageTextView.Coordinator(bytes: .constant(bytes))
