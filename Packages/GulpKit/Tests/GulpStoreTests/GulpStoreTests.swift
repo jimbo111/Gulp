@@ -341,7 +341,8 @@ struct StoreTests {
     @Test("FUZ-026: a stored Fuzzer result never names an exchange that is not on disk yet")
     func test_FUZ026_resultsFollowTheirExchange() async throws {
         let store = try ProjectStore.open(at: temporaryProject())
-        let attack = try await store.createFuzzerAttack(name: "a", configJSON: "{}", baseRequest: [], state: "running")
+        let attack = try await store.createFuzzerAttack(
+            name: "a", configJSON: "{}", baseRequest: [], state: "running")
         let id = await store.writer.record(sampleExchange())  // handed out, its write still coalescing
         let row = FuzzerResultRow(
             seq: 0, payloadsJSON: "[]", exchangeID: id, status: 200, length: 0, timeMs: 1, grepJSON: "{}")
