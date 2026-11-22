@@ -305,7 +305,13 @@ final class SentPaths: @unchecked Sendable {
     // @unchecked: `paths` is only touched while holding `lock`.
     private let lock = NSLock()
     private var paths: [String] = []
-    func add(_ path: String) { lock.withLock { paths.append(path) } }
+    /// Appends `path` and returns how many paths there are now, in one step under the lock.
+    @discardableResult func add(_ path: String) -> Int {
+        lock.withLock {
+            paths.append(path)
+            return paths.count
+        }
+    }
     var all: [String] { lock.withLock { paths } }
 }
 
@@ -572,13 +578,10 @@ struct ActiveScanTests {
     @Test("SCN-012 / TGT-023: scope is checked per probe at send time — a narrowed scope stops the scan")
     func test_SCN012_scopeCheckedAtSendTime() async {
         let sent = SentPaths()
-        let open = SentPaths()  // non-empty once the scope is "narrowed"
+        let checks = SentPaths()  // only the first scope check passes; the scope then "narrows"
         let (_, summary) = await scan(
             [get("/tpl?name=bob")], app: FakeApp(), sent: sent,
-            inScope: { _, _ in
-                defer { open.add("narrowed") }
-                return open.all.isEmpty
-            })
+            inScope: { _, _ in checks.add("check") == 1 })
         #expect(sent.all.count == 1, "only the probe sent before the scope narrowed went out")
         #expect((summary?.outOfScope ?? 0) > 0)
     }
