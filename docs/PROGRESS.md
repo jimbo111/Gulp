@@ -67,7 +67,7 @@ started** = no code. "macOS UI verified" says what was actually exercised in the
 | M7 Decoder, Comparer, JWT Workbench | **done** — `Transforms`, `SmartDecode`, `JWT`, `GulpDiff`; `m7-dod.sh` | Decoder, Comparer, JWT Workbench open |
 | M8 Fuzzer + content discovery | **done** except Turbo mode (FUZ-032, P1) — `FuzzAttack`, `ContentDiscovery`; `m8-dod.sh` | Fuzzer opens |
 | M9 Logger, GulpQL, search, Notebook, coverage | **done** — `GulpQuery`, `SearchRows`, `NotebookService`, `CoverageService`; `m9-dod.sh` | Logger, Notebook open |
-| Daily-driver beta (gate) | **not started** — no `Scripts/beta-dod.sh`, no signed build; the data-loss carry-overs (M2) are open | not started |
+| Daily-driver beta (gate) | **partial** — the doc 01 §9 budgets that can run headless hold and are checked (`perf-dod.sh`, `m9-dod.sh` 1b, two unit suites; log 2026-11-21); cold start and 60 fps scrolling are unmeasured (need the screen). No `Scripts/beta-dod.sh`, no signed build; the data-loss carry-overs (M2) are open | not started |
 | M10a Passive scanner + issue model | **done** — `PassiveChecks`, `IssueService`, `IssueExport`; `m10a-dod.sh` | Dashboard (issues) opens |
 | M10b gRPC & protobuf | **done** — `Protobuf`, `RPC`, `GRPCReflection`, `RPCService`; `m10b-dod.sh` | gRPC schemas sheet not exercised |
 | M11a Static crawler, Beacon client, limiter, panic stop | **done** — `GulpCrawler`, `Interactsh`, `ResourcePool`, `GovernorService`; `m11a-dod.sh` | Scanner (Crawl), Beacon open |
@@ -153,6 +153,57 @@ milestone are listed there instead.
 
 Newest first. Dates up to `40c513b` were written by Linux sessions in UTC, so the 2026-11-20 macOS
 entry at the top is later than the 2026-11-21 entry below it. Within a day the order is approximate.
+
+- 2026-11-21 — **Doc 01 §9 performance budgets measured for the beta gate (M4 Pro, macOS 27).**
+  Proxy numbers use release builds (`Scripts/perf-dod.sh`); the others use debug.
+
+  | Budget | Measured | Enforced by |
+  |---|---|---|
+  | Proxy added latency p50 < 5 ms | 0.06 ms (0.14 ms proxied vs 0.08 ms direct); debug 0.31 ms | `perf-dod.sh` 1 (new) |
+  | Proxy throughput ≥ 2,000 req/s | about 13,000 req/s with 32 clients; all 22,200 recorded after an immediate stop | `perf-dod.sh` 2–3 (new) |
+  | Open a 1M-row project < 3 s to first paint | 49 ms warm, 0.8 s with a cold page cache (open 7 ms, count 8 ms, newest page 33 ms) | `m9-dod.sh` 1b (new) |
+  | History scroll at 1M rows, no hitch > 50 ms | page loads off-main take 30–34 ms at any depth; frame time not measured | `m9-dod.sh` 1b (page < 250 ms) |
+  | 5 MB response < 300 ms to first paint | viewer 60 ms; MessageEditor 76–82 ms UTF-8, 26 ms binary (was over 340 ms) | `MessageFirstPaintTests` (new) |
+  | Comparer, 1 MB word/byte diff < 1 s | 3 changes: 68/69 ms debug, 4 ms release; 1,000 changes: 135/181 ms; 10,000: 491/773 ms debug | `m7-dod.sh` 3, `GulpDiffTests` |
+  | Fuzzer ≥ 1,000 req/s (Turbo ≥ 5,000) | 3,412 req/s debug, 26,756 release; Turbo (FUZ-032) not built | `m8-dod.sh` 1 |
+  | Cold start < 1 s | not measured (needs the screen) | none |
+
+  The measurements found and fixed four problems:
+  1. **Recording throughput.** The proxy streams every response, so each exchange was written
+     twice: a pending insert, then an update. Recording ran at about 4,000/s while forwarding ran
+     at 12,000/s, so the backlog grew without bound. `StoreWriter.update` now folds the completion
+     into a pending insert from the same batch, and 20,000 exchanges are written 0.5 s after the
+     load ends (it was 5 s).
+  2. **Data loss on stop.** Stopping the proxy (closing or quitting) right after a burst lost the
+     exchanges still waiting to be recorded: 43,700 of 80,000 at first, still 1,046 of 40,000
+     after fix 1. `ProxyServer.stop` now waits for its connections' serving tasks.
+  3. **Completed exchanges recorded as cancelled.** 0.8% of proxied 200s were recorded as failed
+     `cancelled` because the client hung up after reading. A completed read now stays complete.
+  4. **Slow decode of non-UTF-8 messages.** The MessageEditor decoded them one scalar at a time,
+     340 ms for 5 MB in debug. It now uses Foundation's ISO-8859-1 conversion.
+
+  New tooling: `gulp-cli send --repeat` prints p50/p99 latency and req/s, `gulp-cli history
+  --timings` times a project open as the app does it, and `make perf` runs `perf-dod.sh`. CI's
+  Linux job runs `perf-dod.sh` too, which is unverified on CI until the next push.
+
+  **Main-thread audit of Dashboard → Repeater** (the 60 s XCUITest stall in a README run).
+  - No main-thread wait on the database or the network was found on that path: every store read
+    is an async `pool.read` and runs off the main actor.
+  - One size-dependent main-thread cost was real and is fixed. Issue evidence panes built a
+    SwiftUI `Text` of up to 256 KB each, up to ten per issue, at about 350 ms per 256 KB pane in
+    debug. They now use the History viewer's `NSTextView`: ten 256 KB panes take about 100 ms
+    (`IssueEvidenceTests`).
+  - The History viewer no longer reads the whole text back from its `NSTextView` on every SwiftUI
+    update (30 ms for 1 MB).
+  - The stall itself is not explained and was not reproduced (no UI run here). One test-side
+    candidate is unverified: if `ReadmeTour`'s `window.outlines.firstMatch` matches the Dashboard's
+    issues outline instead of the sidebar, `select()` runs ten scroll rounds, each with
+    whole-window snapshots. That would be deterministic, though, and three later runs were fine.
+
+  Left as is: the Dashboard rebuilds `IssuesModel` on every visit, and its listener ends only at
+  the next event; the Pretty tab re-renders JSON in `body` (97 ms for 5 MB) on each update.
+  Decisions are in doc 07 (three 2026-11-21 small decisions). Deviation: the doc 06 §5 test names
+  (`ProxyThroughputTests` and the rest) were never built; the table now lists the real checks.
 
 - 2026-11-21 — **Two flaky tests, fixed at their cause.** AI-003's scaling test compared a doubling
   of the input against a 3x bound, and a busy Linux runner measured 3.1x; it now compares 1/16 of

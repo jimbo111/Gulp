@@ -6,9 +6,9 @@
 |---|---|---|---|
 | Unit | `Packages/GulpKit/Tests/<Module>Tests` | Swift Testing (`import Testing`, `@Test`, `#expect`) — XCTest is acceptable where Swift Testing lacks something | Parsers, codecs, GulpQL, diff, payload generators, statistics, cert minting, scope matching |
 | Integration | `Tests/IntegrationTests` | Swift Testing + an in-process VulnLab + an in-process proxy | Proxy ↔ engine ↔ store end-to-end; scanner against VulnLab; Beacon client ↔ dev Beacon server. *As built: one capture → store → passive scan → report test; the other end-to-end paths are covered by the `Scripts/*-dod.sh` acceptance scripts* |
-| Acceptance (DoD) | `Scripts/*-dod.sh` (41 scripts) | bash: start `gulp-vulnlab` (and the dev Beacon where needed), drive the real `gulp-cli`, assert exact outcomes | One per milestone or feature; the scanner precision/recall check lives here (below) |
+| Acceptance (DoD) | `Scripts/*-dod.sh` (42 scripts) | bash: start `gulp-vulnlab` (and the dev Beacon where needed), drive the real `gulp-cli`, assert exact outcomes | One per milestone or feature; the scanner precision/recall check lives here (below) |
 | UI | `GulpAppUITests` (XCUITest) | Xcode | Smoke flows: create a project, see proxied traffic, send to Repeater, run an attack. *As built: 2 tests (launch shows the sidebar; launch shows History)* |
-| Performance | `Tests/PerformanceTests` (run with `make perf`, not in the default `make test`) — **not created yet**; the M8 and M9 DoD scripts measure the Fuzzer and GulpQL budgets | `ContinuousClock` measurements with budgets from doc 01 §9 | Throughput, latency, table paging, project open |
+| Performance | `Scripts/perf-dod.sh` (proxy, release build), the M7/M8/M9 DoD scripts, and two unit suites (`MessageFirstPaintTests`, `IssueEvidenceTests`); see §5. `Tests/PerformanceTests` / `make perf` were never created | `ContinuousClock` measurements with budgets from doc 01 §9 | Throughput, latency, table paging, project open, first paint |
 | Fuzz | `Tests/FuzzTests` (Linux, libFuzzer via `-sanitize=fuzzer`; **not created yet**) plus a deterministic random-input test in the unit suite (seeded with `SplitMix64`) | | HTTP/1 parser, HTTP/2 frame handling, GulpQL parser, decoders |
 
 Rules:
@@ -165,13 +165,18 @@ only (**not created yet**). These are not part of automated tests.
 
 ## 5. Performance tests
 
-| Test | Budget (doc 01 §9) |
+Where each doc 01 §9 budget is enforced (thresholds and their margins: doc 07, 2026-11-21 small
+decision; the latest measured numbers are in the PROGRESS log):
+
+| Check | Budget (doc 01 §9) |
 |---|---|
-| `ProxyThroughputTests` | ≥ 2,000 req/s, p50 added latency < 5 ms |
-| `StoreInsertTests` | 1M exchange inserts (small bodies) in < 60 s; paged fetch of 200 rows < 10 ms |
-| `GulpQLPerfTests` | Filter 1M rows < 2 s |
-| `FuzzerThroughputTests` | ≥ 1,000 req/s (normal), ≥ 5,000 req/s (Turbo) |
-| `ProjectOpenTests` | 1M-exchange project opens to first page < 3 s |
+| `Scripts/perf-dod.sh` (release build) | Proxy p50 added latency < 5 ms; ≥ 2,000 req/s with 32 keep-alive clients; every proxied exchange recorded after an immediate stop |
+| `Scripts/m9-dod.sh` 1 and 1b | GulpQL filter over 1M rows < 2 s; a 1M-row project opens to its first History page < 3 s, slowest page < 250 ms |
+| `Scripts/m7-dod.sh` 3 + `GulpDiffTests` | Comparer word diff of two 1 MB responses < 1 s (both diffs < 2 s in the unit test) |
+| `Scripts/m8-dod.sh` 1 | Fuzzer ≥ 1,000 req/s (normal mode; Turbo mode, FUZ-032, is not built) |
+| `MessageFirstPaintTests` (macOS unit) | Open a 5 MB response < 300 ms to first paint: the response viewer and the MessageEditor (UTF-8 and binary), drawn offscreen |
+| `IssueEvidenceTests` (macOS unit) | An issue with ten 256 KB evidence panes opens < 300 ms |
+| none (needs the screen) | Cold start < 1 s; History scroll at 60 fps with no hitch > 50 ms |
 
 Fixture generator: `gulp-cli seed` inserts synthetic exchanges into a project (used by
 `Scripts/m9-dod.sh` for its 1M-row GulpQL budget; see `gulp-cli seed --help`). The planned
