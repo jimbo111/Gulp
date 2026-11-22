@@ -35,6 +35,25 @@ struct GulpBrowserTests {
         #expect(headless.arguments.contains("--headless=new") && headless.arguments.contains("--dump-dom"))
     }
 
+    @Test("BRW-003: background pings that polluted the history are switched off")
+    func test_BRW003_quietSessionFeatures() {
+        let args = BrowserLaunchOptions(
+            proxyPort: 8080, spkiPins: [], profile: URL(fileURLWithPath: "/tmp/p")
+        )
+        .arguments
+        let disabled = args.filter { $0.hasPrefix("--disable-features=") }
+        #expect(disabled.count == 1)  // Chromium honours only the last --disable-features
+        let features = Set(disabled.first?.dropFirst("--disable-features=".count).split(separator: ",") ?? [])
+        // Recorded by a headless Chrome 156 through the proxy before these were disabled (beta-dod.sh):
+        // clients2.google.com/time, gstatic.com/ohttp_gateway, google.com/async/folae.
+        for feature in [
+            "NetworkTimeServiceQuerying", "SafeBrowsingHashPrefixRealTimeLookups", "AimEnabled",
+            "AimServerEligibilityEnabled", "AimServerRequestOnStartupEnabled", "Translate",
+        ] {
+            #expect(features.contains(Substring(feature)), "\(feature)")
+        }
+    }
+
     @Test("BRW-001: discovery keeps existing executables, Chrome for Testing first, no duplicates")
     func test_BRW001_discovery() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
