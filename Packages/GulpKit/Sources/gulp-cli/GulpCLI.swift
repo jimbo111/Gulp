@@ -113,25 +113,39 @@ struct Send: AsyncParsableCommand {
         // `{n}` in the file becomes each send's number; without it the bytes go out unchanged.
         let template = request.bytes.string()
         let numbered = template.contains("{n}")
-        let succeeded = await withTaskGroup(of: Int.self) { group in
+        let started = ContinuousClock.now
+        let (succeeded, latencies) = await withTaskGroup(of: (Int, [Double]).self) { group in
             for lane in 0..<lanes {
                 group.addTask {
                     var ok = 0
+                    var times: [Double] = []
                     for index in stride(from: lane, to: total, by: lanes) {
                         let outgoing =
                             numbered
                             ? RawRequest(
                                 Bytes(template.replacingOccurrences(of: "{n}", with: String(index + 1))))
                             : request
+                        let sentAt = ContinuousClock.now
                         let result = await engine.send(outgoing, to: destination, options: options)
+                        times.append(milliseconds(since: sentAt))
                         if result.error == nil { ok += 1 }
                     }
-                    return ok
+                    return (ok, times)
                 }
             }
-            return await group.reduce(0, +)
+            return await group.reduce((0, [Double]())) { ($0.0 + $1.0, $0.1 + $1.1) }
         }
+        let seconds = milliseconds(since: started) / 1000
         print("\(succeeded)/\(total) succeeded")
+        // Per-request latency and the overall rate (doc 01 §9 proxy budgets; Scripts/perf-dod.sh).
+        let sorted = latencies.sorted()
+        func percentile(_ p: Double) -> Double {
+            sorted[min(sorted.count - 1, Int(Double(sorted.count) * p))]
+        }
+        print(
+            String(
+                format: "latency p50 %.3f ms, p99 %.3f ms; %.0f req/s over %.2f s", percentile(0.5),
+                percentile(0.99), Double(total) / max(seconds, 0.001), seconds))
         if succeeded != total { throw ExitCode(2) }
     }
 }
@@ -264,10 +278,20 @@ struct History: AsyncParsableCommand {
         help: "List connections and how many exchanges each carried (HIS-042).")
     var connectionView = false
 
+    @Flag(
+        help:
+            "Time what the History view does when the project opens: open it as the app does, count the rows, load pages (doc 01 §9)."
+    )
+    var timings = false
+
     func run() async throws {
         let url = URL(fileURLWithPath: project)
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw ValidationError("No project at \(project)")
+        }
+        if timings {
+            try await printTimings(url)
+            return
         }
         let store = try ProjectStore.open(at: url)
         let count = try await store.count()
@@ -303,6 +327,36 @@ struct History: AsyncParsableCommand {
         }
         if websockets { try await printWebSockets(store) }
         try await store.close()
+    }
+
+    /// Open → row count → the newest page is what History needs for its first paint (it scrolls
+    /// to the newest row); pages at other depths are what scrolling loads (HIS-002).
+    private func printTimings(_ url: URL) async throws {
+        let started = ContinuousClock.now
+        let session = try await ProjectSession.open(at: url)
+        let opened = milliseconds(since: started)
+        let source = HistorySource(store: await session.store)
+        let counting = ContinuousClock.now
+        let count = try await source.count()
+        let counted = milliseconds(since: counting)
+        let pageSize = HistoryPageCache().pageSize
+        let lastPage = max(0, (count - 1) / pageSize)
+        func timed(_ page: Int) async throws -> Double {
+            let start = ContinuousClock.now
+            _ = try await source.load(page: page, pageSize: pageSize)
+            return milliseconds(since: start)
+        }
+        let newest = try await timed(lastPage)
+        var slowest = 0.0
+        for page in [0, lastPage / 4, lastPage / 2, lastPage * 3 / 4, lastPage] {
+            slowest = max(slowest, try await timed(page))
+        }
+        print(
+            String(
+                format:
+                    "rows %d: open %.0f ms, count %.0f ms, newest page %.0f ms; first paint %.0f ms; slowest page %.1f ms",
+                count, opened, counted, newest, opened + counted + newest, slowest))
+        try await session.close()
     }
 
     private func printWebSockets(_ store: ProjectStore) async throws {
