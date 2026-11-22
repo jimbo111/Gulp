@@ -32,7 +32,7 @@ Replace this block when the state changes; do not append to it.
      `swift:6.1-noble` (arm64) container; CI is x86_64. `53b5e6f` makes the script print the scan's
      result and VulnLab's log on failure, so a repeat says why. Ruled out: the StoreWriter fold
      (the batch is taken out before it is written), a leftover VulnLab on 8088 (9 s between steps).
-  **To finish it:** read CI for `53b5e6f` (run list: `curl -H "Authorization: Bearer $(gh auth
+  **To finish it:** read the newest CI run on `beta-bundle` (run list: `curl -H "Authorization: Bearer $(gh auth
   token)" https://api.github.com/repos/jimbo111/Gulp/actions/runs?branch=beta-bundle`; `gh` hangs
   on this network). If green, rebuild `Scripts/beta-build.sh`, unzip it and launch it once, then
   fast-forward `main` to `beta-bundle` and push. If `report-dod` fails again, its new output
