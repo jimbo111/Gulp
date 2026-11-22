@@ -374,9 +374,11 @@ struct StoreTests {
                     exchange.id = ExchangeID(id)
                     try ExchangeRows.insert(exchange, in: db)
                 }
-                try db.execute(sql: "INSERT INTO oast_payloads (correlation_id, exchange_id) VALUES ('c1', 9)")
+                try db.execute(
+                    sql: "INSERT INTO oast_payloads (correlation_id, exchange_id) VALUES ('c1', 9)")
                 try db.execute(sql: "INSERT INTO fuzzer_attacks (id, name) VALUES (1, 'a')")
-                try db.execute(sql: "INSERT INTO fuzzer_results (attack_id, seq, exchange_id) VALUES (1, 0, 7)")
+                try db.execute(
+                    sql: "INSERT INTO fuzzer_results (attack_id, seq, exchange_id) VALUES (1, 0, 7)")
                 try db.execute(sql: "INSERT INTO meta (key, value) VALUES ('passive_scan_last_id', '8')")
             }
             try pool.close()
