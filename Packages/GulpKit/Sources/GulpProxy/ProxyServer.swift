@@ -84,7 +84,7 @@ public actor ProxyServer {
                     let upstream = ProxyUpstream(
                         engine: engine, client: client, forceHTTP1: tls?.forceHTTP1ToServer ?? false,
                         intercept: intercept, matchReplace: matchReplace, webSockets: webSockets)
-                    let serving = Task {
+                    let serving = clients.serve(channel) {
                         await ProxyConnection.serve(
                             items, channel: channel, upstream: upstream, pressure: pressure,
                             intercepts: tls != nil)
@@ -108,11 +108,12 @@ public actor ProxyServer {
         return channel.localAddress?.port ?? config.port
     }
 
-    /// Stop a listener and close the client connections it accepted.
+    /// Stop a listener, close the client connections it accepted, and wait until their exchanges
+    /// are recorded.
     public func stop(_ id: UUID) async {
         guard let listener = listeners.removeValue(forKey: id) else { return }
         try? await listener.server.close().get()
-        listener.clients.closeAll()
+        await listener.clients.closeAll()
     }
 
     /// Stop every listener.
@@ -126,23 +127,52 @@ public actor ProxyServer {
     }
 }
 
-/// The open client connections of one listener, so stopping the listener closes them too.
+/// The open client connections of one listener and their serving tasks, so stopping the listener
+/// closes the connections and waits until what they forwarded is recorded.
 final class ClientConnections: Sendable {
-    private let channels = NIOLockedValueBox<[ObjectIdentifier: any Channel]>([:])
+    private struct State {
+        var channels: [ObjectIdentifier: any Channel] = [:]
+        var serving: [ObjectIdentifier: Task<Void, Never>] = [:]
+        /// Serving tasks that ended before `serve` saw them.
+        var ended: Set<ObjectIdentifier> = []
+    }
+
+    private let state = NIOLockedValueBox(State())
 
     func add(_ channel: any Channel) {
         let key = ObjectIdentifier(channel)
-        channels.withLockedValue { $0[key] = channel }
-        channel.closeFuture.whenComplete { [channels] _ in
-            _ = channels.withLockedValue { $0.removeValue(forKey: key) }
+        state.withLockedValue { $0.channels[key] = channel }
+        channel.closeFuture.whenComplete { [state] _ in
+            _ = state.withLockedValue { $0.channels.removeValue(forKey: key) }
         }
     }
 
-    func closeAll() {
-        for channel in channels.withLockedValue({ Array($0.values) }) { channel.close(promise: nil) }
+    /// Run `work` as the serving task of `channel`'s connection.
+    func serve(_ channel: any Channel, _ work: @escaping @Sendable () async -> Void) -> Task<Void, Never> {
+        let key = ObjectIdentifier(channel)
+        let task = Task { [state] in
+            await work()
+            state.withLockedValue { state in
+                if state.serving.removeValue(forKey: key) == nil { state.ended.insert(key) }
+            }
+        }
+        state.withLockedValue { state in
+            if state.ended.remove(key) == nil { state.serving[key] = task }
+        }
+        return task
     }
 
-    var count: Int { channels.withLockedValue { $0.count } }
+    /// Close every connection, then wait for their serving tasks: a response the client already has
+    /// is recorded a moment later, and closing the project right after must not lose it.
+    func closeAll() async {
+        let (channels, tasks) = state.withLockedValue {
+            (Array($0.channels.values), Array($0.serving.values))
+        }
+        for channel in channels { channel.close(promise: nil) }
+        for task in tasks { await task.value }
+    }
+
+    var count: Int { state.withLockedValue { $0.channels.count } }
 }
 
 /// Work for a connection's serving task, in arrival order.
